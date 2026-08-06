@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Noctaxis.Desktop.Controls.LocationSearchControl"
+             x:CompileBindings="False">
+  <StackPanel Spacing="7">
+    <TextBox Text="{Binding Query}" PlaceholderText="Place, town, city, postcode, region or country"/>
+    <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsSearching}"/>
+    <TextBlock Text="{Binding ErrorMessage}" Foreground="#E28B8B" TextWrapping="Wrap"/>
+    <ItemsControl ItemsSource="{Binding Results}">
+      <ItemsControl.ItemTemplate><DataTemplate>
+        <Button Click="ResultClick" Tag="{Binding}" HorizontalContentAlignment="Stretch" Margin="0,0,0,4">
+          <StackPanel>
+            <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding RegionDescription}" Foreground="#8794A7" FontSize="11" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding Country}" Foreground="#748196" FontSize="10"/>
+          </StackPanel>
+        </Button>
+      </DataTemplate></ItemsControl.ItemTemplate>
+    </ItemsControl>
+    <TextBlock Text="{Binding Attribution}" FontSize="10" Foreground="#748196"/>
+  </StackPanel>
+</UserControl>

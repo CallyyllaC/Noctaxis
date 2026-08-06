@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <PackageReference Include="CosineKitty.AstronomyEngine" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="NodaTime" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="Hjg.Pngcs" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\OpenNGC-NGC.csv" />
+    <EmbeddedResource Include="Data\OpenNGC-addendum.csv" />
+    <EmbeddedResource Include="Data\OpenNGC-LICENSE.txt" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<views:NoctaxisDialogWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Noctaxis.Desktop.Views"
+        x:Class="Noctaxis.Desktop.Views.ConfirmationDialog"
+        x:CompileBindings="False"
+        Width="460" Height="230" MinWidth="380" MinHeight="210">
+  <Border Classes="noctaxisDialogSurface">
+  <Grid RowDefinitions="*,Auto" Margin="22" RowSpacing="18">
+    <StackPanel Spacing="10">
+      <TextBlock x:Name="HeadingText" FontSize="23" FontWeight="SemiBold"/>
+      <TextBlock x:Name="MessageText" Foreground="#AAB5C5" TextWrapping="Wrap"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="88"/>
+      <Button x:Name="ConfirmButton" Classes="destructive" Click="ConfirmClick" IsDefault="True" MinWidth="88"/>
+    </StackPanel>
+  </Grid>
+  </Border>
+</views:NoctaxisDialogWindow>

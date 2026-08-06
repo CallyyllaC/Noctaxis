@@ -1,0 +1,17 @@
+<Project>
+  <!-- Noctaxis deliberately opts out of Avalonia's transitive build telemetry and
+       performs no runtime telemetry. The environment variable is Avalonia's documented opt-out. -->
+  <UsingTask TaskName="NoctaxisSetAvaloniaTelemetryOptOut"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Using Namespace="System" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        Environment.SetEnvironmentVariable("AVALONIA_TELEMETRY_OPTOUT", "1");
+      ]]></Code>
+    </Task>
+  </UsingTask>
+  <Target Name="NoctaxisDisableAvaloniaBuildTelemetry" BeforeTargets="AvaloniaStats">
+    <NoctaxisSetAvaloniaTelemetryOptOut />
+  </Target>
+</Project>

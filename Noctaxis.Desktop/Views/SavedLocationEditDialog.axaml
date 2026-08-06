@@ -1,0 +1,25 @@
+<views:NoctaxisDialogWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Noctaxis.Desktop.Views"
+        x:Class="Noctaxis.Desktop.Views.SavedLocationEditDialog"
+        x:CompileBindings="False"
+        Title="Edit location" Width="520" Height="390" MinWidth="420" MinHeight="340">
+  <Border Classes="noctaxisDialogSurface">
+  <Grid RowDefinitions="*,Auto" Margin="22" RowSpacing="16">
+    <StackPanel Spacing="9">
+      <TextBlock Text="Edit location" FontSize="24" FontWeight="SemiBold"/>
+      <TextBlock Text="Location name" Classes="fieldLabel"/>
+      <TextBox Text="{Binding Name}"/>
+      <TextBlock Text="Description (optional)" Classes="fieldLabel"/>
+      <TextBox Text="{Binding Description}" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap"/>
+      <TextBlock Text="Coordinates" Classes="fieldLabel"/>
+      <TextBox Text="{Binding Coordinates}" IsReadOnly="True"/>
+      <TextBlock Text="{Binding ValidationMessage}" Foreground="#E28B8B"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="90"/>
+      <Button x:Name="PrimaryButton" Content="Save changes" Click="SaveClick" IsDefault="True" MinWidth="90"/>
+    </StackPanel>
+  </Grid>
+  </Border>
+</views:NoctaxisDialogWindow>

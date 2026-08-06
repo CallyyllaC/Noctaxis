@@ -1,0 +1,23 @@
+<views:NoctaxisDialogWindow xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
+        xmlns:views="clr-namespace:Noctaxis.Desktop.Views"
+        x:Class="Noctaxis.Desktop.Views.LocationSearchDialog"
+        x:CompileBindings="False"
+        Title="Search for a place" Width="620" Height="560" MinWidth="460" MinHeight="420">
+  <Border Classes="noctaxisDialogSurface">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="20" RowSpacing="12">
+    <StackPanel Spacing="7">
+      <TextBlock Text="Search for a place" FontSize="24" FontWeight="SemiBold"/>
+      <TextBlock Text="Search by place, town, city, postcode, region or country." Foreground="#9AA8BA" TextWrapping="Wrap"/>
+    </StackPanel>
+    <ScrollViewer Grid.Row="1">
+      <controls:LocationSearchControl ResultSelected="SelectResult"/>
+    </ScrollViewer>
+    <Grid Grid.Row="2" ColumnDefinitions="*,Auto">
+      <TextBlock Text="Select a result to open it as the temporary Custom location." FontSize="10" Foreground="#748196" VerticalAlignment="Center"/>
+      <Button Grid.Column="1" Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="90"/>
+    </Grid>
+  </Grid>
+  </Border>
+</views:NoctaxisDialogWindow>

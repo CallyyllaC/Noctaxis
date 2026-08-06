@@ -1,0 +1,190 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
+             xmlns:vm="clr-namespace:Noctaxis.Desktop.ViewModels"
+             x:Class="Noctaxis.Desktop.Views.LocationsPage"
+             x:CompileBindings="False"
+             SizeChanged="OnPageSizeChanged">
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <StackPanel x:Name="PageContent" Margin="32" Spacing="22" HorizontalAlignment="Stretch">
+      <StackPanel Spacing="5">
+        <TextBlock Text="Locations" FontSize="32" FontWeight="SemiBold"/>
+        <TextBlock Text="Keep the places worth returning to close at hand." Foreground="#9AA8BA" TextWrapping="Wrap"/>
+      </StackPanel>
+
+      <Border Classes="currentLocationPanel">
+        <Grid x:Name="CurrentLocationLayout" ColumnDefinitions="*,Auto" ColumnSpacing="22">
+          <StackPanel Spacing="7">
+            <TextBlock Text="CURRENT LOCATION" Classes="eyebrow"/>
+            <TextBlock Text="{Binding LocationName}" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock Text="{Binding PreviewObserver}" Foreground="#9EABC0"/>
+            <TextBlock Text="The active Planner pin is used when this location is saved." Foreground="#7F8B9D" FontSize="11" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding CurrentLocationAttribution}" IsVisible="{Binding HasCurrentLocationAttribution}" Foreground="#748196" FontSize="9"/>
+            <TextBlock Text="{Binding Locations.ResolutionMessage}" Foreground="#A7B5C8" TextWrapping="Wrap"/>
+          </StackPanel>
+          <WrapPanel x:Name="CurrentLocationActions" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+            <Button Content="Search for a place" Command="{Binding Locations.SearchForPlaceCommand}" Margin="0,0,8,8"/>
+            <Button Content="Use device location" Command="{Binding Locations.UseDeviceLocationCommand}" IsVisible="{Binding Locations.CanUseDeviceLocation}" Margin="0,0,8,8"/>
+            <Button Content="Save current location" Command="{Binding SaveCurrentAsNewLocationCommand}" Margin="0,0,0,8"/>
+          </WrapPanel>
+        </Grid>
+      </Border>
+
+      <Border Classes="emptyLocationPanel" IsVisible="{Binding Locations.IsFirstRun}">
+        <StackPanel Spacing="12">
+          <StackPanel Spacing="5">
+            <TextBlock Text="No saved locations yet" FontSize="18" FontWeight="SemiBold"/>
+            <TextBlock Text="Save the current Planner pin to create your first location card." Foreground="#8F9CAF" TextWrapping="Wrap"/>
+          </StackPanel>
+          <Button Content="Save current location" Command="{Binding SaveCurrentAsNewLocationCommand}" HorizontalAlignment="Left"/>
+        </StackPanel>
+      </Border>
+
+      <StackPanel Spacing="12">
+        <Grid x:Name="SavedLocationsHeader" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <StackPanel>
+            <TextBlock Text="Saved locations" FontSize="22" FontWeight="SemiBold"/>
+            <TextBlock Text="Favourites are always kept first." Foreground="#7F8B9D" FontSize="11"/>
+          </StackPanel>
+          <StackPanel x:Name="SavedLocationsSort" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="Sort within groups" Classes="fieldLabel" VerticalAlignment="Center" Margin="0"/>
+            <ComboBox ItemsSource="{Binding Locations.SortOptions}" SelectedItem="{Binding Locations.SelectedSortOption}" MinWidth="150">
+              <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+        </Grid>
+
+        <ItemsControl ItemsSource="{Binding Locations.GridItems}" HorizontalAlignment="Stretch">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <controls:ResponsiveCardGridPanel MinimumCardWidth="530"
+                                                PreferredCardWidth="580"
+                                                MaximumCardWidth="640"
+                                                CardHeight="240"
+                                                HorizontalSpacing="14"
+                                                VerticalSpacing="14"/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.DataTemplates>
+            <DataTemplate DataType="{x:Type vm:LocationCardViewModel}">
+              <Border Classes="editorialLocationCard" Classes.favourite="{Binding IsFavourite}" Classes.selected="{Binding IsSelected}"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                <Grid ClipToBounds="True" ColumnDefinitions="3*,5*">
+                  <Border Grid.Column="1" Background="#101827" ClipToBounds="True" IsHitTestVisible="False">
+                    <Grid>
+                      <Image Source="{Binding MapThumbnail}" Stretch="UniformToFill"/>
+                      <ProgressBar Width="70" IsIndeterminate="True" IsVisible="{Binding IsMapThumbnailLoading}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Grid>
+                  </Border>
+
+                  <Border Grid.ColumnSpan="2" IsHitTestVisible="False">
+                    <Border.Background>
+                      <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                        <GradientStop Color="#FF101827" Offset="0"/>
+                        <GradientStop Color="#F2101827" Offset="0.33"/>
+                        <GradientStop Color="#A8101827" Offset="0.46"/>
+                        <GradientStop Color="#00101827" Offset="0.61"/>
+                        <GradientStop Color="#00101827" Offset="1"/>
+                      </LinearGradientBrush>
+                    </Border.Background>
+                  </Border>
+
+                  <Button Grid.ColumnSpan="2" Classes="locationCardBody" Command="{Binding OpenCommand}"
+                          ToolTip.Tip="Open location in Planner"
+                          AutomationProperties.Name="Open saved location in Planner"/>
+
+                  <Grid Grid.ColumnSpan="2" ColumnDefinitions="1*,1*" IsHitTestVisible="False">
+                    <Border Padding="22,18,12,62" Background="Transparent">
+                      <StackPanel Spacing="7">
+                        <TextBlock Text="{Binding Eyebrow}" Classes="eyebrow"/>
+                        <TextBlock Text="{Binding Name}" FontSize="23" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="58"/>
+                        <TextBlock Text="{Binding Coordinates}" Foreground="#A8B4C7" FontSize="14"/>
+                        <TextBlock Text="{Binding RegionDescription}" IsVisible="{Binding HasRegionDescription}"
+                                   Foreground="#78869A" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding UserDescription}" IsVisible="{Binding HasUserDescription}"
+                                   Foreground="#AAB4C3" TextWrapping="Wrap" MaxHeight="42"
+                                   TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                    </Border>
+                  </Grid>
+
+                  <Border Grid.ColumnSpan="2" Background="#C8141E30" CornerRadius="12" Padding="9,4"
+                          Margin="20,0,0,16" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                          IsVisible="{Binding HasLastUsed}">
+                    <TextBlock Text="{Binding LastUsedText}" FontSize="10" Foreground="#B9C3D1"/>
+                  </Border>
+
+                  <Button Grid.ColumnSpan="2" Classes="cardAction cornerOverflow"
+                          HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                          ToolTip.Tip="{Binding SemanticStatusSummary}" AutomationProperties.Name="More location actions">
+                    <TextBlock Text="•••" FontSize="12" LetterSpacing="1"/>
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="Edit location" Command="{Binding EditCommand}"/>
+                        <MenuItem Header="Regenerate map image" Command="{Binding RefreshMapThumbnailCommand}"/>
+                        <MenuItem Header="Refresh building cache" Command="{Binding RefreshBuildingCacheCommand}"/>
+                        <MenuItem Header="{Binding BuildingStatusSummary}" IsEnabled="False"
+                                  IsVisible="{Binding HasBuildingWarning}" Foreground="#9AA6B8"/>
+                        <Separator/>
+                        <MenuItem Header="Delete location" Command="{Binding DeleteCommand}" Foreground="#E88991"/>
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+
+                  <Button Grid.ColumnSpan="2" Classes="favouriteStar" Command="{Binding ToggleFavouriteCommand}"
+                          HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,14,0"
+                          ToolTip.Tip="{Binding FavouriteAccessibleName}" AutomationProperties.Name="{Binding FavouriteAccessibleName}">
+                    <Grid Width="20" Height="20">
+                      <Path Data="M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z"
+                            Fill="#F3C94F" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsFavourite}"/>
+                      <Path Data="M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z"
+                            Fill="Transparent" Stroke="#A9B3C2" StrokeThickness="1.8" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsNotFavourite}"/>
+                    </Grid>
+                  </Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+
+            <DataTemplate DataType="{x:Type vm:AddLocationCardViewModel}">
+              <Button Classes="addLocationCard" Command="{Binding AddCommand}"
+                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                      HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                      ToolTip.Tip="Save the current Planner pin" AutomationProperties.Name="Add location">
+                <Grid>
+                  <Border Width="250" Height="250" HorizontalAlignment="Center" VerticalAlignment="Center"
+                          CornerRadius="125" IsHitTestVisible="False">
+                    <Border.Background>
+                      <RadialGradientBrush Center="50%,50%" GradientOrigin="50%,50%" RadiusX="50%" RadiusY="50%">
+                        <GradientStop Color="#1F8173C8" Offset="0"/>
+                        <GradientStop Color="#008173C8" Offset="1"/>
+                      </RadialGradientBrush>
+                    </Border.Background>
+                  </Border>
+                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
+                    <Border Width="48" Height="48" CornerRadius="24" Background="#241F2A43"
+                            BorderBrush="#776BC0" BorderThickness="1" HorizontalAlignment="Center">
+                      <TextBlock Text="+" FontSize="29" FontWeight="Light" Foreground="#B6AAFF"
+                                 HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                    </Border>
+                    <StackPanel Spacing="4">
+                      <TextBlock Text="Add location" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                      <TextBlock Text="Save the current Planner pin" Foreground="#7F8B9D" FontSize="11"
+                                 HorizontalAlignment="Center"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.DataTemplates>
+        </ItemsControl>
+
+        <TextBlock Text="{Binding Locations.ThumbnailAttributionSummary}"
+                   IsVisible="{Binding Locations.HasThumbnailAttributions}"
+                   Foreground="#748196" FontSize="9" TextWrapping="Wrap"/>
+
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

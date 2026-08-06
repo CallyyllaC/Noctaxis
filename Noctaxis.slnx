@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Noctaxis.Core/Noctaxis.Core.csproj" />
+  <Project Path="Noctaxis.Desktop/Noctaxis.Desktop.csproj" />
+  <Project Path="Noctaxis.Core.Tests/Noctaxis.Core.Tests.csproj" />
+  <Project Path="Noctaxis.Desktop.Tests/Noctaxis.Desktop.Tests.csproj" />
+</Solution>
