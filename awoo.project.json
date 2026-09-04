@@ -4,10 +4,9 @@
   "status": "active",
   "type": "software",
   "tags": [
-    ".NET",
-    "Avalonia",
-    "Astronomy",
-    "Geospatial"
+    "Desktop App",
+    "Windows",
+    "Linux"
   ],
   "image": "images/awoo-card.webp",
   "content": "docs/awoo.md"
