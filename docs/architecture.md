@@ -18,10 +18,11 @@ starting an Avalonia lifetime.
 ## Data and dependency flow
 
 The UI edits one immutable `PlanningSession` containing the committed observer,
-UTC instant, timezone, primary target, visible target list, and lens. `PlanningService` resolves the enabled catalogue targets
-and coordinates three cancellable operations: daily astral path, terrain
-  profile, weather, and Sun/Moon context. It returns one immutable `PlanningSnapshot` consumed by
-the map, inspector, chart, and exporters.
+UTC instant, timezone, primary target, visible target list, and lens.
+`PlanningService` resolves the enabled catalogue targets and coordinates the
+daily astral paths, observer-scoped environmental snapshot, weather, and
+Sun/Moon context. It returns one immutable `PlanningSnapshot` consumed by the
+map, inspector, chart, and exporters.
 
 Map and date/time interaction use explicit preview state. The planning pin is a
 cached Avalonia overlay projected from its committed WGS84 coordinate. Panning
@@ -55,8 +56,14 @@ Noctaxis never claims to infer a geographic timezone when it has not done so.
   stay behind it. No reusable custom-star slot or permanent Astronomy Engine body
   is used. `OpenNgcTargetCatalogue` parses validated, embedded upstream OpenNGC
   CSV resources; Sun and Moon are the only non-OpenNGC system entries.
-- `ITerrainHorizonProvider` has flat and SRTM implementations. Elevation access
-  is separately replaceable to allow deterministic synthetic tests.
+- `IPlannerEnvironmentService` exposes one observer-scoped snapshot. The sole
+  Mapzen/Tilezen Terrarium terrain provider, ESA WorldCover classification and
+  WSF 3D settlement providers report explicit availability. `IHorizonService` retains a 360-degree adaptive
+  radial sightline profile for angular horizons, pitch-independent plan-view
+  obstruction and separately queried target occultation.
+- `IEnvironmentalTileCache` owns deterministic source/version/layer paths,
+  staged validation, atomic promotion, corrupt-entry recovery, and per-tile
+  request coalescing outside saved-location image caches.
 - `IWeatherProvider` is implemented by an `HttpClientFactory` typed Open-Meteo
   client. Provider DTOs are isolated and mapped into domain records. A separate
   clock-driven geographic cache uses great-circle distance, forecast hour, and
@@ -73,10 +80,35 @@ Noctaxis never claims to infer a geographic timezone when it has not done so.
 The dependency-injection composition root is `Noctaxis.Desktop/App.axaml.cs`.
 Interfaces exist only at external or meaningfully replaceable boundaries.
 
+## Environmental map rendering
+
+Terrain acquisition, radial ray casting, Earth-curvature correction and horizon
+profiles remain in `Noctaxis.Core`. The desktop converts the resulting directional
+profile into one compact, immutable `EnvironmentalOverlayState`; it never asks a
+terrain provider for data while drawing.
+
+`EnvironmentalOverlayRenderer` submits one Avalonia custom draw operation for the
+continuous camera-cone effects. Its cached Skia runtime effect samples a bounded
+one-dimensional obstruction texture, applies the existing Web Mercator inverse
+transform supplied by the Mapsui viewport, and generates terrain hatching and
+weather desaturation per pixel. Hatch spacing and thickness are screen-space
+uniforms, so there are no per-stripe Avalonia controls, paths or lines.
+
+Invalidation is deliberately split into three levels. Observer, camera-height,
+terrain-detail or provider revisions replace the environmental profile. Heading,
+FOV, cone distance and weather replace only compact overlay state. Pan, zoom,
+resize and visual-style changes replace only the viewport transform/uniforms and
+redraw the single operation. Consequently viewport movement cannot acquire DEM
+tiles, ray-cast terrain, rebuild obstruction polygons or generate hatch geometry.
+The runtime effect and native paint resources are reused; the profile texture is
+uploaded only when its compact terrain revision changes.
+
 Settings are staged directly in the main Settings tab. General, Weather, and
 Celestial objects are internal settings sections; no settings window or editable
 map-source configuration exists. Celestial configuration, visible state, order,
 and default primary target are persisted separately from the full catalogue.
+Legacy DEM-folder fields may deserialize for compatibility but are not active
+settings; terrain acquisition is managed by Environmental Intelligence.
 
 ## Persistence and secrets
 
