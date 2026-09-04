@@ -117,6 +117,9 @@
                 <controls:TerrainDebugMiniMap Grid.Row="1" Width="300" Height="300"
                                               HorizontalAlignment="Left"
                                               Profile="{Binding TerrainDebugProfile}"
+                                              Observer="{Binding Observer}"
+                                              Generation="{Binding TerrainDebugGeneration}"
+                                              TargetAltitudeDegrees="{Binding TerrainDebugTargetAltitude}"
                                               CentreBearingDegrees="{Binding TerrainDebugBearing}"
                                               HorizontalFieldOfViewDegrees="{Binding TerrainDebugHorizontalFieldOfView}"/>
                 <ScrollViewer Grid.Row="2" MaxHeight="260" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -140,7 +143,7 @@
                       <StackPanel Grid.Column="1"><TextBlock Text="Longitude" Classes="fieldLabel"/><NumericUpDown Value="{Binding Longitude}" Minimum="-180" Maximum="180" Increment="0.0001" FormatString="0.00000" MinWidth="135"/></StackPanel>
                     </Grid>
                     <TextBlock Text="Ground elevation above sea level" Classes="fieldLabel"/>
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown x:Name="PlannerGroundElevation" Value="{Binding Elevation, Mode=OneWay}" Minimum="-12000" Maximum="9000" Increment="1" FormatString="0.0" MinWidth="150" IsReadOnly="True" ShowButtonSpinner="False" ToolTip.Tip="Terrain-derived local ground elevation relative to mean sea level"/><TextBlock Grid.Column="1" Text="m ASL" VerticalAlignment="Center"/></Grid>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown x:Name="PlannerGroundElevation" Value="{Binding ResolvedGroundElevationMetres, Mode=OneWay}" Minimum="-12000" Maximum="9000" Increment="1" FormatString="0.0" MinWidth="150" IsReadOnly="True" ShowButtonSpinner="False" ToolTip.Tip="Resolved physical surface elevation relative to mean sea level"/><TextBlock Grid.Column="1" Text="m ASL" VerticalAlignment="Center"/></Grid>
                     <TextBlock Text="{Binding GroundElevationSourceText}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding EffectiveObserverAltitudeText}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
                     <Button Classes="secondaryAction" Content="Reset to terrain elevation" Command="{Binding ResetGroundElevationCommand}" IsVisible="{Binding IsElevationManualOverride}" IsEnabled="{Binding CanResetGroundElevation}" HorizontalAlignment="Left"/>

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
@@ -47,6 +48,7 @@ public sealed record TerrainPipelineTimings(
     double DiskReadAndDecodeMilliseconds,
     double NetworkAcquisitionMilliseconds,
     double TilePreparationMilliseconds,
+    double SurfaceClassificationMilliseconds,
     double TerrainSamplingMilliseconds,
     double HorizonMathematicsMilliseconds,
     double ModelConstructionMilliseconds,
@@ -93,10 +95,7 @@ public interface IHorizonService
         GetProfileAsync(observer, request, cancellationToken);
 }
 
-public sealed class HorizonService(
-    ITerrainElevationProvider terrain,
-    ILogger<HorizonService> logger,
-    int? degreeOfParallelism = null) : IHorizonService
+public sealed class HorizonService : IHorizonService
 {
     public const double MeanEarthRadiusMetres = 6_371_008.8;
     public const double StandardRefractionEffectiveRadiusMultiplier = 7d / 6d;
@@ -105,10 +104,25 @@ public sealed class HorizonService(
     public static int DefaultDegreeOfParallelism => Math.Max(1,
         Math.Min(MaximumTerrainWorkers, System.Environment.ProcessorCount - 1));
 
+    private readonly ITerrainSurfaceResolver _surface;
+    private readonly ILogger<HorizonService> _logger;
     private readonly ConcurrentDictionary<string, ProgressiveSession> _active = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TerrainHorizonProfile> _completed = new(StringComparer.Ordinal);
-    private readonly int _degreeOfParallelism = Math.Clamp(
-        degreeOfParallelism ?? DefaultDegreeOfParallelism, 1, MaximumTerrainWorkers);
+    private readonly int _degreeOfParallelism;
+
+    [ActivatorUtilitiesConstructor]
+    public HorizonService(ITerrainSurfaceResolver surface, ILogger<HorizonService> logger,
+        int? degreeOfParallelism = null)
+    {
+        _surface = surface;
+        _logger = logger;
+        _degreeOfParallelism = Math.Clamp(degreeOfParallelism ?? DefaultDegreeOfParallelism,
+            1, MaximumTerrainWorkers);
+    }
+
+    public HorizonService(ITerrainElevationProvider terrain, ILogger<HorizonService> logger,
+        int? degreeOfParallelism = null)
+        : this(new RawTerrainSurfaceResolver(terrain), logger, degreeOfParallelism) { }
 
     public TerrainHorizonWork StartProfile(GeoCoordinate observer, TerrainProfileRequest request,
         CancellationToken cancellationToken)
@@ -120,8 +134,8 @@ public sealed class HorizonService(
             return new TerrainHorizonWork(Task.FromResult(complete), (_, token) =>
                 Task.FromResult(complete), _degreeOfParallelism);
 
-        var session = _active.GetOrAdd(key, _ => new ProgressiveSession(normalised, request, terrain,
-            logger, cancellationToken, _degreeOfParallelism));
+        var session = _active.GetOrAdd(key, _ => new ProgressiveSession(normalised, request, _surface,
+            _logger, cancellationToken, _degreeOfParallelism));
         _ = CompleteAndCacheAsync(key, session);
         return session.Work;
     }
@@ -142,12 +156,13 @@ public sealed class HorizonService(
             _completed.TryAdd(key, result);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex) { logger.LogDebug(ex, "Progressive terrain profile failed"); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Progressive terrain profile failed"); }
         finally { _active.TryRemove(new KeyValuePair<string, ProgressiveSession>(key, session)); }
     }
 
     private static string CacheKey(GeoCoordinate observer, TerrainProfileRequest request) =>
-        $"{observer.Latitude:F5}:{observer.Longitude:F5}:{observer.ElevationMetres:F1}:{request}";
+        string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{observer.Latitude:R}:{observer.Longitude:R}:{observer.ElevationMetres:R}:{request}");
 
     public static double CurvatureDrop(double distanceMetres, bool accountForEarthCurvature = true) =>
         accountForEarthCurvature ? distanceMetres * distanceMetres / (2 * EffectiveEarthRadiusMetres) : 0;
@@ -164,7 +179,7 @@ public sealed class HorizonService(
         private const int BearingChunkSize = 24;
         private readonly GeoCoordinate _observer;
         private readonly TerrainProfileRequest _request;
-        private readonly ITerrainElevationProvider _terrain;
+        private readonly ITerrainSurfaceResolver _surface;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _cancellation;
         private readonly int _degreeOfParallelism;
@@ -175,9 +190,12 @@ public sealed class HorizonService(
         private readonly TaskCompletionSource<bool> _prepared = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TimingAccumulator _timings = new();
         private GeoCoordinate[] _coordinates = [];
+        private TerrainSurfaceClassificationBatch _classifications = new(
+            EnvironmentalDataState.Unavailable, [], [], "Not prepared.");
         private RadialPlan _radial = RadialPlan.Empty;
         private EnvironmentalValue<double> _observerTerrain = EnvironmentalValue<double>.Unavailable(
-            TerrariumTerrainProvider.SourceId, TerrariumTerrainProvider.SourceVersion, "Not prepared.");
+            TerrainSurfaceResolver.SourceId, TerrainSurfaceResolver.SourceVersion, "Not prepared.");
+        private TerrainSurfaceResolution _observerSurfaceResolution;
         private ElevationSampleDiagnostics _observerTerrainDiagnostics = ElevationDiagnostics.FromValue(
             EnvironmentalValue<double>.Unavailable(TerrariumTerrainProvider.SourceId,
                 TerrariumTerrainProvider.SourceVersion, "Not prepared.")).Diagnostics;
@@ -192,12 +210,12 @@ public sealed class HorizonService(
         private int _groundState;
 
         public ProgressiveSession(GeoCoordinate observer, TerrainProfileRequest request,
-            ITerrainElevationProvider terrain, ILogger logger,
+            ITerrainSurfaceResolver surface, ILogger logger,
             CancellationToken cancellationToken, int degreeOfParallelism)
         {
             _observer = observer;
             _request = request;
-            _terrain = terrain;
+            _surface = surface;
             _logger = logger;
             _degreeOfParallelism = degreeOfParallelism;
             _states = new int[request.AzimuthSampleCount];
@@ -277,19 +295,37 @@ public sealed class HorizonService(
             coordinateTimer.Stop();
             _timings.CoordinateGenerationMilliseconds = coordinateTimer.Elapsed.TotalMilliseconds;
 
-            var observerTerrainTask = SafeElevationSampleAsync(
-                () => _terrain.GetElevationSampleAsync(_observer, cancellationToken),
-                TerrariumTerrainProvider.SourceId, TerrariumTerrainProvider.SourceVersion,
-                "Terrarium terrain elevation failed.");
+            var observerTerrainTask = SafeSurfaceSampleAsync(
+                () => _surface.GetSurfaceSampleAsync(_observer, cancellationToken));
+            var classificationsTask = GetTimedClassificationsAsync(cancellationToken);
             var tileTimer = Stopwatch.StartNew();
-            await Task.WhenAll(_terrain.PreloadAsync(_coordinates, cancellationToken), observerTerrainTask)
+            await Task.WhenAll(_surface.PreloadAsync(_coordinates, cancellationToken), observerTerrainTask,
+                    classificationsTask)
                 .ConfigureAwait(false);
             tileTimer.Stop();
             _timings.TilePreparationMilliseconds = tileTimer.Elapsed.TotalMilliseconds;
+            _classifications = await classificationsTask.ConfigureAwait(false);
             var observerTerrain = await observerTerrainTask.ConfigureAwait(false);
-            _observerTerrain = observerTerrain.Value;
-            _observerTerrainDiagnostics = observerTerrain.Diagnostics;
+            _observerTerrain = observerTerrain.SurfaceElevation;
+            _observerTerrainDiagnostics = observerTerrain.RawTerrainDiagnostics;
+            _observerSurfaceResolution = observerTerrain.Resolution;
             ChooseObserverDatum();
+        }
+
+        private async Task<TerrainSurfaceClassificationBatch> GetTimedClassificationsAsync(
+            CancellationToken cancellationToken)
+        {
+            var timer = Stopwatch.StartNew();
+            try
+            {
+                return await _surface.GetClassificationsAsync(_coordinates, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                timer.Stop();
+                _timings.SurfaceClassificationMilliseconds = timer.Elapsed.TotalMilliseconds;
+            }
         }
 
         private async Task RunBackgroundWorkerAsync(Func<int> nextChunk, CancellationToken cancellationToken)
@@ -345,14 +381,28 @@ public sealed class HorizonService(
                 cancellationToken.ThrowIfCancellationRequested();
                 var radialCount = _radial.Distances.Length;
                 var positions = new GeoCoordinate[bearingIndices.Count * radialCount];
+                var classifications = new LandCoverClass?[positions.Length];
+                var waterKinds = new TerrainWaterBodyKind[positions.Length];
                 for (var bearingOffset = 0; bearingOffset < bearingIndices.Count; bearingOffset++)
+                {
                     Array.Copy(_coordinates, bearingIndices[bearingOffset] * radialCount,
                         positions, bearingOffset * radialCount, radialCount);
+                    for (var radialIndex = 0; radialIndex < radialCount; radialIndex++)
+                    {
+                        var sourceIndex = bearingIndices[bearingOffset] * radialCount + radialIndex;
+                        var targetIndex = bearingOffset * radialCount + radialIndex;
+                        classifications[targetIndex] = _classifications.Classifications[sourceIndex];
+                        waterKinds[targetIndex] = _classifications.WaterBodyKinds[sourceIndex];
+                    }
+                }
+
+                var classificationSlice = new TerrainSurfaceClassificationBatch(_classifications.State,
+                    classifications, waterKinds, _classifications.Message);
 
                 var terrainBatch = await TimedBatchAsync(
-                    () => _terrain.GetElevationsAsync(positions, cancellationToken), positions.Length,
-                    TerrariumTerrainProvider.SourceId, TerrariumTerrainProvider.SourceVersion,
-                    "Terrarium terrain horizon failed.").ConfigureAwait(false);
+                    () => _surface.GetSurfaceElevationsAsync(positions, classificationSlice,
+                        cancellationToken), positions.Length,
+                    "Terrain physical-surface resolution failed.").ConfigureAwait(false);
                 MergeState(ref _groundState, terrainBatch.State);
 
                 var mathTimer = Stopwatch.StartNew();
@@ -377,14 +427,16 @@ public sealed class HorizonService(
         }
 
         private TerrainHorizonSample BuildBearing(int bearingIndex, int batchOffset,
-            ElevationBatchResult terrainBatch)
+            TerrainSurfaceBatchResult terrainBatch)
         {
             double? groundMaximumSlope = null;
             double? groundFeatureDistance = null;
+            LandCoverClass? winningClassification = null;
             var sightline = new TerrainSightlineSample[_radial.Distances.Length];
             for (var radialIndex = 0; radialIndex < _radial.Distances.Length; radialIndex++)
             {
-                var groundElevation = terrainBatch.ElevationsMetres[batchOffset + radialIndex];
+                var sampleIndex = batchOffset + radialIndex;
+                var groundElevation = terrainBatch.SurfaceElevationsMetres[sampleIndex];
                 var groundStatus = terrainBatch.StatusAt(batchOffset + radialIndex);
                 double? groundSlope = null;
                 if (groundElevation.HasValue)
@@ -396,15 +448,20 @@ public sealed class HorizonService(
                     {
                         groundMaximumSlope = groundSlope;
                         groundFeatureDistance = _radial.Distances[radialIndex];
+                        winningClassification = terrainBatch.Classifications[sampleIndex];
                     }
                 }
                 sightline[radialIndex] = TerrainSightlineSample.FromSlope(_radial.Distances[radialIndex],
-                    groundElevation, _radial.CurvatureDrops[radialIndex], groundSlope, groundStatus);
+                    groundElevation, _radial.CurvatureDrops[radialIndex], groundSlope, groundStatus,
+                    terrainBatch.RawTerrainElevationsMetres[sampleIndex],
+                    terrainBatch.Classifications[sampleIndex], terrainBatch.AdjustedSamples[sampleIndex],
+                    terrainBatch.ResolutionReasons[sampleIndex]);
             }
             double? groundAngle = groundMaximumSlope is double groundSlopeValue
                 ? SlopeToElevationDegrees(groundSlopeValue) : null;
             return new TerrainHorizonSample(bearingIndex * 360d / _samples.Length,
                 groundAngle, groundFeatureDistance,
+                LandCover: winningClassification,
                 Sightline: sightline);
         }
 
@@ -420,15 +477,24 @@ public sealed class HorizonService(
             modelTimer.Stop();
             _timings.AddModelConstruction(modelTimer.Elapsed.TotalMilliseconds);
             var completed = Volatile.Read(ref _completedBearings);
+            var hasResolvedObserver = _request.ManualGroundElevationOverrideMetres.HasValue ||
+                                      _observerTerrain.HasValue;
             return new TerrainHorizonProfile(_observer, snapshot, groundCoverage, status,
                 SystemClock.Instance.GetCurrentInstant(), _observerTerrain,
                 _request.ObserverHeightAboveGroundMetres, _request.MaximumDistanceMetres,
-                ToDataState(_groundState, groundCoverage), _observerGroundMetres, _observerCameraMetres,
+                ToDataState(_groundState, groundCoverage),
+                hasResolvedObserver ? _observerGroundMetres : null,
+                hasResolvedObserver ? _observerCameraMetres : null,
                 _datumConfidence,
                 _datumMessage, isComplete, completed, _timings.Snapshot(_degreeOfParallelism,
                     _radial.Distances.Length, completed, !isComplete),
                 new TerrainObserverDiagnostics(_observerTerrainDiagnostics,
-                    _observerGroundMetres, _observerResolvedStatus, _observerResolutionPolicy));
+                    hasResolvedObserver ? _observerGroundMetres : null,
+                    _observerResolvedStatus, _observerResolutionPolicy,
+                    _observerSurfaceResolution.Classification,
+                    _observerSurfaceResolution.SurfaceElevationMetres,
+                    _observerSurfaceResolution.WasAdjusted,
+                    _observerSurfaceResolution.Reason));
         }
 
         private void ChooseObserverDatum()
@@ -441,47 +507,56 @@ public sealed class HorizonService(
             _observerResolutionPolicy = manualOverride.HasValue
                 ? "Manual ground override; camera height added once."
                 : _observerTerrain.HasValue
-                    ? "Terrarium terrain elevation selected; camera height added once."
+                    ? $"{TerrainSurfaceResolver.ResolutionMessage(_observerSurfaceResolution)} Camera height added once."
                     : "Terrarium unavailable; supplied observer elevation used; camera height added once.";
             _datumConfidence = manualOverride.HasValue || _observerTerrain.HasValue
                 ? ObserverDatumConfidence.Normal : ObserverDatumConfidence.Unavailable;
             _datumMessage = manualOverride.HasValue
                 ? "Manual ground-elevation override selected; environmental ground data remains available for reset."
                 : _observerTerrain.HasValue
-                    ? "Mapzen/Tilezen Terrarium observer terrain selected."
+                    ? "Resolved Terrarium/WorldCover physical observer surface selected."
                     : "Terrarium observer elevation is unavailable; the supplied observer elevation was used.";
             _observerCameraMetres = _observerGroundMetres + _request.ObserverHeightAboveGroundMetres;
         }
 
-        private async Task<ElevationSampleResult> SafeElevationSampleAsync(
-            Func<Task<ElevationSampleResult>> operation, string sourceId, string sourceVersion,
-            string message)
+        private async Task<TerrainSurfaceSampleResult> SafeSurfaceSampleAsync(
+            Func<Task<TerrainSurfaceSampleResult>> operation)
         {
             try { return await operation().ConfigureAwait(false); }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
+                const string message = "Terrain physical-surface resolution failed.";
                 _logger.LogWarning(ex, "{EnvironmentalFailure}", message);
-                return ElevationDiagnostics.FromValue(new EnvironmentalValue<double>(
-                    EnvironmentalDataState.Error, default, sourceId, sourceVersion, message));
+                var raw = ElevationDiagnostics.FromValue(new EnvironmentalValue<double>(
+                    EnvironmentalDataState.Error, default, TerrariumTerrainProvider.SourceId,
+                    TerrariumTerrainProvider.SourceVersion, message));
+                var unavailable = EnvironmentalValue<LandCoverClass>.Unavailable(
+                    WorldCoverLandCoverProvider.SourceId, WorldCoverLandCoverProvider.SourceVersion, message);
+                return new TerrainSurfaceSampleResult(raw.Value,
+                    EnvironmentalValue<double>.Unavailable(TerrainSurfaceResolver.SourceId,
+                        TerrainSurfaceResolver.SourceVersion, message), unavailable,
+                    TerrainSurfaceResolver.Resolve(null, null), raw.Diagnostics);
             }
         }
 
-        private async Task<ElevationBatchResult> TimedBatchAsync(Func<Task<ElevationBatchResult>> operation,
-            int count, string sourceId, string sourceVersion, string message)
+        private async Task<TerrainSurfaceBatchResult> TimedBatchAsync(
+            Func<Task<TerrainSurfaceBatchResult>> operation, int count, string message)
         {
             var timer = Stopwatch.StartNew();
             try
             {
                 var result = await operation().ConfigureAwait(false);
-                if (result.ElevationsMetres.Count != count)
-                    throw new InvalidDataException("Environmental elevation batch length did not match its request.");
+                if (result.SurfaceElevationsMetres.Count != count)
+                    throw new InvalidDataException("Terrain surface batch length did not match its request.");
                 return result;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "{EnvironmentalFailure}", message);
-                return new ElevationBatchResult(EnvironmentalDataState.Error,
-                    new double?[count], sourceId, sourceVersion, message);
+                return new TerrainSurfaceBatchResult(EnvironmentalDataState.Error,
+                    new double?[count], new double?[count], new LandCoverClass?[count],
+                    Enumerable.Repeat(TerrainSurfaceResolutionReason.TerrainUnavailable, count).ToArray(),
+                    new bool[count], Enumerable.Repeat(TerrainSampleStatus.Error, count).ToArray(), message);
             }
             finally
             {
@@ -502,6 +577,7 @@ public sealed class HorizonService(
         private long _networkTicks;
         public double CoordinateGenerationMilliseconds;
         public double TilePreparationMilliseconds;
+        public double SurfaceClassificationMilliseconds;
         public double TotalMilliseconds;
         public double TerrainSamplingMilliseconds => TicksToMilliseconds(Volatile.Read(ref _terrainTicks));
         public double HorizonMathematicsMilliseconds => TicksToMilliseconds(Volatile.Read(ref _horizonTicks));
@@ -522,7 +598,7 @@ public sealed class HorizonService(
             TicksToMilliseconds(Volatile.Read(ref _cacheLookupTicks)),
             TicksToMilliseconds(Volatile.Read(ref _diskReadDecodeTicks)),
             TicksToMilliseconds(Volatile.Read(ref _networkTicks)),
-            TilePreparationMilliseconds, TerrainSamplingMilliseconds,
+            TilePreparationMilliseconds, SurfaceClassificationMilliseconds, TerrainSamplingMilliseconds,
             HorizonMathematicsMilliseconds,
             TicksToMilliseconds(Volatile.Read(ref _modelTicks)), TotalMilliseconds,
             workers, radial, completed, partial);

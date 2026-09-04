@@ -30,11 +30,15 @@ public static class TerrainProfileDiagnostics
     public static string ExportRadialCsv(TerrainHorizonProfile profile, double bearingDegrees)
     {
         var text = new StringBuilder();
-        text.AppendLine("DistanceMeters,TerrainElevationMeters,CurvatureDropMeters,TerrainApparentAngleDegrees,TerrainSampleStatus");
+        text.AppendLine("DistanceMeters,RawTerrariumMeters,ResolvedSurfaceMeters,WorldCover,Adjusted,Resolution,CurvatureDropMeters,TerrainApparentAngleDegrees,TerrainSampleStatus");
         foreach (var point in profile.SightlineAt(bearingDegrees))
         {
             Append(text, point.DistanceMetres);
+            Append(text, point.RawTerrainElevationMetres);
             Append(text, point.GroundElevationMetres);
+            text.Append(point.Classification?.ToString() ?? "Unknown").Append(',');
+            text.Append(point.SurfaceWasAdjusted).Append(',');
+            text.Append(point.SurfaceResolutionReason?.ToString() ?? "Unknown").Append(',');
             Append(text, point.CurvatureDropMetres);
             Append(text, point.GroundElevationAngleDegrees);
             text.Append(point.GroundStatus).AppendLine();
@@ -45,10 +49,14 @@ public static class TerrainProfileDiagnostics
     public static string CreateObserverSummary(TerrainHorizonProfile profile)
     {
         var ground = profile.GroundElevationAtObserver;
+        var diagnostics = profile.ObserverDiagnostics;
         var radial = profile.Samples.FirstOrDefault().Sightline;
         return string.Create(Invariant,
             $"Observer={profile.Observer.Latitude:F5},{profile.Observer.Longitude:F5}; " +
-            $"TerrainObserver={Value(ground?.HasValue == true ? ground.Value : null)}m; " +
+            $"RawTerrarium={Value(diagnostics?.TerrainSample.InterpolatedElevationMetres)}m; " +
+            $"ResolvedSurface={Value(ground?.HasValue == true ? ground.Value : null)}m; " +
+            $"Classification={diagnostics?.Classification?.ToString() ?? "Unknown"}; " +
+            $"SurfaceAdjusted={diagnostics?.SurfaceWasAdjusted ?? false}; " +
             $"ChosenGround={Value(profile.ChosenObserverGroundElevationMetres)}m; " +
             $"CameraHeight={profile.ObserverHeightAboveGroundMetres:F1}m; " +
             $"ObserverAbsolute={Value(profile.ObserverAbsoluteElevationMetres)}m; " +
@@ -95,7 +103,8 @@ public static class TerrainProfileDiagnostics
         return text.ToString();
     }
 
-    public static string CreateDebugSnapshot(TerrainHorizonProfile profile, double bearingDegrees)
+    public static string CreateDebugSnapshot(TerrainHorizonProfile profile, double bearingDegrees,
+        double? targetAltitudeDegrees = null, long? generation = null)
     {
         var bearing = NearestBearingSample(profile, bearingDegrees);
         var line = bearing?.Sightline ?? [];
@@ -122,6 +131,8 @@ public static class TerrainProfileDiagnostics
         text.AppendLine("Observer");
         text.AppendFormat(Invariant, "Latitude: {0:F6}\nLongitude: {1:F6}\n\n",
             profile.Observer.Latitude, profile.Observer.Longitude);
+        text.AppendLine($"Profile generation: {(generation.HasValue ? generation.Value.ToString(Invariant) : "Unavailable")}");
+        text.AppendLine($"Profile generated: {profile.GeneratedAt}");
         text.AppendLine($"DEM provider: {ground?.Provider ?? profile.GroundElevationAtObserver?.SourceId ?? "Unavailable"}");
         text.AppendLine($"DEM tile: {ground?.Tile ?? "Unavailable"}");
         text.AppendLine($"DEM cell: {ground?.Cell ?? "Unavailable"}");
@@ -137,7 +148,11 @@ public static class TerrainProfileDiagnostics
                     Value(sample.RawElevationMetres), sample.Status, sample.Weight);
         }
         else text.AppendLine("  Unavailable");
-        text.AppendLine($"Interpolated terrain ASL: {Value(ground?.InterpolatedElevationMetres)} m");
+        text.AppendLine($"Raw Terrarium ASL: {Value(ground?.InterpolatedElevationMetres)} m");
+        text.AppendLine($"WorldCover classification: {diagnostics?.Classification?.ToString() ?? "Unavailable"}");
+        text.AppendLine($"Resolved physical surface ASL: {Value(diagnostics?.ResolvedSurfaceElevationMetres)} m");
+        text.AppendLine($"Surface adjusted: {diagnostics?.SurfaceWasAdjusted ?? false}");
+        text.AppendLine($"Surface resolution: {diagnostics?.SurfaceResolutionReason?.ToString() ?? "Unavailable"}");
         text.AppendLine($"Sample status: {ground?.Status.ToString() ?? "Unavailable"}");
         text.AppendLine($"Resolved status: {resolvedStatus}");
         text.AppendLine($"Resolution policy: {diagnostics?.ResolutionPolicy ?? profile.ObserverDatumMessage ?? "Unavailable"}");
@@ -154,12 +169,21 @@ public static class TerrainProfileDiagnostics
         text.AppendLine($"Latitude: {(winningCoordinate.HasValue ? winningCoordinate.Value.Latitude.ToString("F6", Invariant) : "Unavailable")}");
         text.AppendLine($"Longitude: {(winningCoordinate.HasValue ? winningCoordinate.Value.Longitude.ToString("F6", Invariant) : "Unavailable")}");
         text.AppendLine($"Distance: {Value(winningDistance)} m");
-        text.AppendLine($"Terrain ASL: {Value(winning.GroundElevationMetres)} m [{winning.GroundStatus}]");
+        text.AppendLine($"Raw Terrarium ASL: {Value(winning.RawTerrainElevationMetres)} m");
+        text.AppendLine($"Resolved surface ASL: {Value(winning.GroundElevationMetres)} m [{winning.GroundStatus}]");
+        text.AppendLine($"WorldCover: {winning.Classification?.ToString() ?? "Unavailable"}; adjusted={winning.SurfaceWasAdjusted}; resolution={winning.SurfaceResolutionReason?.ToString() ?? "Unavailable"}");
         text.AppendLine($"Height relative to observer: {Value(winning.GroundElevationMetres - profile.ObserverAbsoluteElevationMetres)} m");
         text.AppendLine($"Elevation angle: {Value(bearing?.EffectiveHorizonElevationDegrees)} degrees");
         text.AppendLine($"Curvature correction: -{Value(curvature)} m");
         text.AppendLine($"Refraction correction: +{Value(refraction)} m (7/6 effective Earth radius)");
         text.AppendLine($"Final horizon angle: {Value(bearing?.EffectiveHorizonElevationDegrees)} degrees");
+        var planObstruction = profile.TerrainObstructionAt(bearingDegrees);
+        var targetOccultation = targetAltitudeDegrees.HasValue
+            ? profile.OccultationAt(bearingDegrees, targetAltitudeDegrees.Value)
+            : default;
+        text.AppendLine($"Plan-view terrain obstruction distance (horizontal 0 degree altitude ray): {Value(planObstruction.EffectiveFirstObstructionDistanceMetres)} m");
+        text.AppendLine($"Target/view altitude: {Value(targetAltitudeDegrees)} degrees");
+        text.AppendLine($"Target occulted: {(targetAltitudeDegrees.HasValue ? targetOccultation.EffectiveFirstObstructionDistanceMetres.HasValue.ToString() : "Unavailable")}");
         return text.ToString().TrimEnd();
     }
 

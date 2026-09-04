@@ -463,6 +463,63 @@ public sealed class EnvironmentalOverlayTests
         window.Close();
     }
 
+    [AvaloniaFact]
+    public void TerrainDebugMiniMapReactivelyReplacesProfileIdentity()
+    {
+        var first = new TerrainHorizonProfile(new GeoCoordinate(51, -1), [], false,
+            "First", Instant.FromUtc(2026, 1, 1, 0, 0));
+        var second = new TerrainHorizonProfile(new GeoCoordinate(53, 1), [], false,
+            "Second", Instant.FromUtc(2026, 1, 1, 0, 1));
+        var observed = new List<TerrainHorizonProfile?>();
+        var control = new TerrainDebugMiniMap();
+        using var subscription = control.GetObservable(TerrainDebugMiniMap.ProfileProperty)
+            .Subscribe(new ProfileObserver(observed));
+
+        control.Observer = first.Observer;
+        control.Generation = 1;
+        control.Profile = first;
+        control.Observer = second.Observer;
+        control.Generation = 2;
+        control.Profile = null;
+        control.Profile = second;
+
+        Assert.Same(second, control.Profile);
+        Assert.Equal(second.Observer, control.Observer);
+        Assert.Equal(2, control.Generation);
+        Assert.Contains(first, observed);
+        Assert.Contains(null, observed);
+        Assert.Same(second, observed[^1]);
+    }
+
+    [Fact]
+    public void NegativeCoastalHorizonDoesNotCreateMapHatchingForVisibleTarget()
+    {
+        var line = new[] { new TerrainSightlineSample(9_300, 0, 5.818, -0.072) };
+        var terrain = new TerrainHorizonProfile(Observer,
+            Enumerable.Range(0, 8).Select(index => new TerrainHorizonSample(
+                index * 45d, -0.072, 9_300, Sightline: line)).ToArray(),
+            true, "Synthetic coastal horizon", Instant.FromUtc(2026, 1, 1, 0, 0));
+        var visibility = new FramingVisibilityCalculator().Calculate(
+            new WeatherResult(DataState.Loading, null, "Unavailable"), terrain,
+            targetAltitudeDegrees: 5, cameraBearingDegrees: 5,
+            horizontalFovDegrees: 40, terrainCastAngularDetailDegrees: 5,
+            verticalFovDegrees: 30);
+        var overlay = new GeographicOverlayGeometryBuilder().BuildCameraOverlay(
+            new GeoSector(Observer, 5, 40, MapOverlayGeometry.MaximumRangeMetres), visibility);
+
+        Assert.False(visibility.IsTargetTerrainObstructed);
+        Assert.All(visibility.EffectiveTerrainObstructions, sample => Assert.False(sample.IsObstructed));
+        Assert.Empty(overlay.TerrainHatchRegions);
+    }
+
+    private sealed class ProfileObserver(List<TerrainHorizonProfile?> values)
+        : IObserver<TerrainHorizonProfile?>
+    {
+        public void OnCompleted() { }
+        public void OnError(Exception error) => throw error;
+        public void OnNext(TerrainHorizonProfile? value) => values.Add(value);
+    }
+
     private static PlanningSnapshot Snapshot(GeoCoordinate observer)
     {
         var instant = Instant.FromUtc(2026, 8, 9, 0, 0);

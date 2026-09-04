@@ -176,7 +176,7 @@ public sealed class WorldCoverLandCoverProvider(
 {
     public const string SourceId = "esa-worldcover";
     public const string SourceVersion = "2021-v200";
-    private readonly ConcurrentDictionary<string, Lazy<Task<string?>>> _tiles = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, Lazy<Task<WorldCoverTileResult>>> _tiles = new(StringComparer.Ordinal);
 
     public async Task<EnvironmentalValue<LandCoverClass>> GetLandCoverAsync(GeoCoordinate coordinate,
         CancellationToken cancellationToken)
@@ -186,7 +186,9 @@ public sealed class WorldCoverLandCoverProvider(
         if (!value.HasValue)
             return EnvironmentalValue<LandCoverClass>.Unavailable(SourceId, SourceVersion,
                 "ESA WorldCover classification is unavailable at this coordinate.");
-        return new EnvironmentalValue<LandCoverClass>(EnvironmentalDataState.Available,
+        var state = batch.WaterBodyKindAt(0) == TerrainWaterBodyKind.Ocean
+            ? EnvironmentalDataState.Water : EnvironmentalDataState.Available;
+        return new EnvironmentalValue<LandCoverClass>(state,
             value.Value, SourceId, SourceVersion, "ESA WorldCover classification.");
     }
 
@@ -194,22 +196,38 @@ public sealed class WorldCoverLandCoverProvider(
         CancellationToken cancellationToken)
     {
         var values = new LandCoverClass?[coordinates.Count];
+        var waterKinds = new TerrainWaterBodyKind[coordinates.Count];
         foreach (var group in coordinates.Select((coordinate, index) =>
                      (coordinate, index, tile: DescribeTile(coordinate))).GroupBy(item => item.tile.Tile))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var path = await GetTilePathAsync(group.Key, cancellationToken).ConfigureAwait(false);
-            if (path is null) continue;
             var items = group.ToArray();
+            var tileResult = await GetTileAsync(group.Key, cancellationToken).ConfigureAwait(false);
+            if (tileResult.State == EnvironmentalDataState.TileAbsent)
+            {
+                foreach (var item in items)
+                {
+                    if (!IsWithinMappedExtent(item.coordinate)) continue;
+                    values[item.index] = LandCoverClass.PermanentWater;
+                    waterKinds[item.index] = TerrainWaterBodyKind.Ocean;
+                }
+                continue;
+            }
+            if (tileResult.Path is null) continue;
             try
             {
-                var sampled = GeoTiffRaster.ReadNearestBatch(path, items[0].tile.Bounds,
+                var sampled = GeoTiffRaster.ReadNearestBatch(tileResult.Path, items[0].tile.Bounds,
                     items.Select(item => item.coordinate).ToArray(), sample => sample <= 0);
                 for (var index = 0; index < items.Length; index++)
                 {
                     var sample = sampled[index];
                     if (sample.HasValue && Enum.IsDefined(typeof(LandCoverClass), (int)sample.Value))
+                    {
                         values[items[index].index] = (LandCoverClass)(int)sample.Value;
+                        waterKinds[items[index].index] = sample.Value == (int)LandCoverClass.PermanentWater
+                            ? TerrainWaterBodyKind.PermanentWaterUnspecified
+                            : TerrainWaterBodyKind.NotWater;
+                    }
                 }
             }
             catch (Exception ex) when (ex is IOException or InvalidDataException)
@@ -223,28 +241,32 @@ public sealed class WorldCoverLandCoverProvider(
         return new LandCoverBatchResult(state, values, SourceId, SourceVersion,
             available == 0 ? "ESA WorldCover classification is unavailable." :
             available == values.Length ? "ESA WorldCover classification batch." :
-            "ESA WorldCover classification has partial coverage.");
+            "ESA WorldCover classification has partial coverage.", waterKinds);
     }
 
-    private async Task<string?> GetTilePathAsync(string tile, CancellationToken cancellationToken)
+    private async Task<WorldCoverTileResult> GetTileAsync(string tile, CancellationToken cancellationToken)
     {
         var lazy = _tiles.GetOrAdd(tile,
-            _ => new Lazy<Task<string?>>(() => LoadTilePathAsync(tile, CancellationToken.None)));
-        var path = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
-        if (path is null) _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<string?>>>(tile, lazy));
-        return path;
+            _ => new Lazy<Task<WorldCoverTileResult>>(() => LoadTileAsync(tile, CancellationToken.None)));
+        var result = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (result.State != EnvironmentalDataState.TileAbsent && result.Path is null)
+            _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<WorldCoverTileResult>>>(tile, lazy));
+        return result;
     }
 
-    private async Task<string?> LoadTilePathAsync(string tile, CancellationToken cancellationToken)
+    private async Task<WorldCoverTileResult> LoadTileAsync(string tile, CancellationToken cancellationToken)
     {
         var name = $"ESA_WorldCover_10m_2021_v200_{tile}_Map";
-        var result = await cache.GetOrCreateAsync(
+        var result = await cache.GetOrCreateDetailedAsync(
             new EnvironmentalTileDescriptor(SourceId, SourceVersion, "land-cover", tile, "tif"),
-            token => EnvironmentalHttpDownloader.DownloadAsync(http,
+            token => EnvironmentalHttpDownloader.DownloadDetailedAsync(http,
                 new Uri($"https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/{name}.tif"),
-                100 * 1024 * 1024, token), GeoTiffRaster.IsValid, cancellationToken).ConfigureAwait(false);
-        return result.IsAvailable ? result.Path : null;
+                160 * 1024 * 1024, token), GeoTiffRaster.IsValid, cancellationToken).ConfigureAwait(false);
+        return new WorldCoverTileResult(result.State, result.IsAvailable ? result.Path : null);
     }
+
+    private static bool IsWithinMappedExtent(GeoCoordinate coordinate) =>
+        coordinate.Latitude >= -60 && coordinate.Latitude <= 82.75;
 
     private static (string Tile, GeoBounds Bounds) DescribeTile(GeoCoordinate coordinate)
     {
@@ -253,6 +275,7 @@ public sealed class WorldCoverLandCoverProvider(
         return ($"{(south >= 0 ? 'N' : 'S')}{Math.Abs(south):00}{(west >= 0 ? 'E' : 'W')}{Math.Abs(west):000}",
             new GeoBounds(south, west, south + 3, west + 3));
     }
-}
 
+    private sealed record WorldCoverTileResult(EnvironmentalDataState State, string? Path);
+}
 

@@ -35,17 +35,18 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         double terrainCastAngularDetailDegrees = CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees,
         double verticalFovDegrees = 0)
     {
+        // Retained in the public calculation contract for callers that report optical framing,
+        // but plan-view terrain geometry is deliberately independent of camera pitch/FOV height.
+        _ = verticalFovDegrees;
         var terrainAvailable = terrain.HasTerrainCoverage && terrain.Samples.Count > 0;
         double? terrainHorizon = terrainAvailable ? terrain.EffectiveAltitudeAt(cameraBearingDegrees) : null;
         double? clearance = terrainHorizon.HasValue ? targetAltitudeDegrees - terrainHorizon.Value : null;
-        var terrainObstructed = clearance is < 0;
-        var verticalFov = double.IsFinite(verticalFovDegrees)
-            ? Math.Clamp(verticalFovDegrees, 0, 179)
-            : 0;
-        var lowerFrameElevationDegrees = targetAltitudeDegrees - verticalFov / 2;
+        // Equality is treated as occulted: a sightline tangent to the resolved terrain surface
+        // has no positive angular clearance.
+        var terrainObstructed = clearance is <= 0;
         var terrainObstructions = terrainAvailable
             ? SampleTerrainObstructions(terrain, cameraBearingDegrees, horizontalFovDegrees,
-                terrainCastAngularDetailDegrees, lowerFrameElevationDegrees)
+                terrainCastAngularDetailDegrees)
             : [];
 
         var visibility = weather.State == DataState.Ready && weather.Conditions is { IsStale: false }
@@ -56,7 +57,9 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
             : null;
 
         var status = terrainObstructed
-            ? $"Below terrain horizon by {Math.Abs(clearance!.Value):F1}°"
+            ? Math.Abs(clearance!.Value) <= 1e-12
+                ? "At terrain horizon"
+                : $"Below terrain horizon by {Math.Abs(clearance.Value):F1}°"
             : weatherVisibilityDistanceMetres.HasValue
                 ? $"Weather visibility: {visibility!.Value:F1} km"
                 : "Visibility data unavailable";
@@ -74,8 +77,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         TerrainHorizonProfile terrain,
         double centreBearingDegrees,
         double horizontalFovDegrees,
-        double angularDetailDegrees,
-        double sightlineElevationDegrees)
+        double angularDetailDegrees)
     {
         var fov = double.IsFinite(horizontalFovDegrees) ? Math.Clamp(horizontalFovDegrees, 0, 179) : 0;
         var profiles = fov > 0
@@ -84,7 +86,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         var coarseSamples = new FramingTerrainObstructionSample[profiles.Count];
         for (var index = 0; index < profiles.Count; index++)
             coarseSamples[index] = TerrainConeSampleAt(
-                terrain, profiles[index].BearingDegrees, sightlineElevationDegrees);
+                terrain, profiles[index].BearingDegrees);
         if (coarseSamples.Length < 2) return coarseSamples;
 
         var samples = new List<FramingTerrainObstructionSample>(coarseSamples.Length + 8)
@@ -93,7 +95,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         };
         for (var index = 0; index < coarseSamples.Length - 1; index++)
         {
-            AddRefinedTransitions(terrain, sightlineElevationDegrees,
+            AddRefinedTransitions(terrain,
                 coarseSamples[index], coarseSamples[index + 1], samples);
             AddIfDistinct(samples, coarseSamples[index + 1]);
         }
@@ -102,11 +104,10 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
 
     private static FramingTerrainObstructionSample TerrainConeSampleAt(
         TerrainHorizonProfile terrain,
-        double bearingDegrees,
-        double sightlineElevationDegrees)
+        double bearingDegrees)
     {
         var bearing = Angles.NormaliseDegrees(bearingDegrees);
-        var obstruction = terrain.OccultationAt(bearing, sightlineElevationDegrees);
+        var obstruction = terrain.TerrainObstructionAt(bearing);
         var effective = obstruction.EffectiveFirstObstructionDistanceMetres;
         var obstructed = effective is double distance && double.IsFinite(distance) && distance > 0 &&
                          distance < LocalHorizonCalculator.MaximumTerrainCastDistanceMetres;
@@ -118,7 +119,6 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
 
     private static void AddRefinedTransitions(
         TerrainHorizonProfile terrain,
-        double sightlineElevationDegrees,
         FramingTerrainObstructionSample left,
         FramingTerrainObstructionSample right,
         ICollection<FramingTerrainObstructionSample> destination)
@@ -133,7 +133,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
             var currentBearing = left.BearingDegrees + sweep * probeIndex / probeCount;
             var current = probeIndex == probeCount
                 ? right
-                : TerrainConeSampleAt(terrain, currentBearing, sightlineElevationDegrees);
+                : TerrainConeSampleAt(terrain, currentBearing);
             if (previous.IsObstructed != current.IsObstructed)
             {
                 var lowBearing = previousBearing;
@@ -143,8 +143,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
                 while (highBearing - lowBearing > TransitionRefinementDegrees)
                 {
                     var middleBearing = (lowBearing + highBearing) / 2;
-                    var middle = TerrainConeSampleAt(
-                        terrain, middleBearing, sightlineElevationDegrees);
+                    var middle = TerrainConeSampleAt(terrain, middleBearing);
                     if (middle.IsObstructed == low.IsObstructed)
                     {
                         lowBearing = middleBearing;

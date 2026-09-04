@@ -30,8 +30,12 @@ using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 http.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis-TerrainProbe/1.0");
 var provider = new TerrariumTerrainProvider(http, cache,
     loggerFactory.CreateLogger<TerrariumTerrainProvider>(), new TerrariumTerrainOptions());
-var observer = await provider.GetElevationSampleAsync(coordinate, CancellationToken.None);
-var horizonService = new HorizonService(provider, loggerFactory.CreateLogger<HorizonService>());
+var worldCover = new WorldCoverLandCoverProvider(http, cache,
+    loggerFactory.CreateLogger<WorldCoverLandCoverProvider>());
+var surfaceResolver = new TerrainSurfaceResolver(provider, worldCover,
+    loggerFactory.CreateLogger<TerrainSurfaceResolver>());
+var observer = await surfaceResolver.GetSurfaceSampleAsync(coordinate, CancellationToken.None);
+var horizonService = new HorizonService(surfaceResolver, loggerFactory.CreateLogger<HorizonService>());
 var request = new TerrainProfileRequest(MaximumDistanceMetres: horizonDistance,
     ObserverHeightAboveGroundMetres: cameraHeight);
 var profile = await horizonService.GetProfileAsync(coordinate, request, CancellationToken.None);
@@ -47,7 +51,11 @@ var rows = profile.Samples.Select(sample =>
         bearingDegrees = sample.BearingDegrees,
         horizonAltitudeDegrees = sample.EffectiveHorizonElevationDegrees,
         winningDistanceMetres = sample.EffectiveHorizonFeatureDistanceMetres,
-        winningElevationMetres = winning.GroundElevationMetres,
+        winningRawTerrariumElevationMetres = winning.RawTerrainElevationMetres,
+        winningResolvedSurfaceElevationMetres = winning.GroundElevationMetres,
+        winningClassification = winning.Classification?.ToString() ?? "Unavailable",
+        winningSurfaceAdjusted = winning.SurfaceWasAdjusted,
+        winningResolution = winning.SurfaceResolutionReason?.ToString() ?? "Unavailable",
         winningStatus = winning.GroundStatus.ToString(),
         samples = line.Count,
         noDataSamples = line.Count(point => !point.GroundElevationMetres.HasValue)
@@ -59,18 +67,23 @@ var report = new
     requestedCoordinate = coordinate,
     observer = new
     {
-        providerElevationMetres = observer.Value.HasValue ? observer.Value.Value : (double?)null,
+        classification = observer.Resolution.Classification?.ToString() ?? "Unavailable",
+        waterBodyKind = observer.Resolution.WaterBodyKind.ToString(),
+        rawTerrariumElevationMetres = observer.Resolution.RawTerrainElevationMetres,
+        resolvedSurfaceElevationMetres = observer.Resolution.SurfaceElevationMetres,
+        surfaceWasAdjusted = observer.Resolution.WasAdjusted,
+        surfaceResolution = observer.Resolution.Reason.ToString(),
         resolvedGroundElevationMetres = profile.ChosenObserverGroundElevationMetres,
         cameraHeightMetres = cameraHeight,
         effectiveCameraElevationMetres = profile.ObserverAbsoluteElevationMetres,
-        provider = observer.Diagnostics.Provider,
-        version = observer.Diagnostics.Version,
-        tile = observer.Diagnostics.Tile,
-        cell = observer.Diagnostics.Cell,
-        resolution = observer.Diagnostics.Resolution,
-        rawSamples = observer.Diagnostics.RawSamples,
-        status = observer.Diagnostics.Status.ToString(),
-        message = observer.Diagnostics.Message
+        provider = observer.RawTerrainDiagnostics.Provider,
+        version = observer.RawTerrainDiagnostics.Version,
+        tile = observer.RawTerrainDiagnostics.Tile,
+        cell = observer.RawTerrainDiagnostics.Cell,
+        resolution = observer.RawTerrainDiagnostics.Resolution,
+        rawSamples = observer.RawTerrainDiagnostics.RawSamples,
+        status = observer.SurfaceElevation.State.ToString(),
+        message = TerrainSurfaceResolver.ResolutionMessage(observer.Resolution)
     },
     horizon = new
     {

@@ -30,7 +30,7 @@ public sealed class TerrariumPlannerIntegrationTests
         {
             collection.AddSingleton<ITerrainElevationProvider>(provider);
             collection.AddSingleton<IUserDataStore>(store);
-            collection.AddSingleton<ILandCoverProvider, MissingLandCover>();
+            collection.AddSingleton<ILandCoverProvider, FixtureLandCover>();
             collection.AddSingleton<ISettlementDataProvider, MissingSettlement>();
             collection.AddSingleton<IWeatherProvider, OfflineWeatherProvider>();
             collection.AddSingleton<IReverseGeocodingProvider, MissingReverseGeocoder>();
@@ -45,11 +45,14 @@ public sealed class TerrariumPlannerIntegrationTests
         await MoveAndAssert(viewModel, new GeoCoordinate(53.00563, -3.95192), 250);
 
         viewModel.CommitUnresolvedObserverLocation(new GeoCoordinate(53.02135, -4.64836, 999));
-        Assert.Equal(0, viewModel.Elevation);
+        Assert.Equal(TerrainElevationResolutionState.Unresolved, viewModel.TerrainElevationResolutionState);
+        Assert.Null(viewModel.ResolvedGroundElevationMetres);
         Assert.False(viewModel.IsElevationManualOverride);
         await viewModel.WaitForPlannerRefreshAsync().WaitAsync(TimeSpan.FromSeconds(30));
-        Assert.Equal(-35, viewModel.Elevation, 6);
-        Assert.Equal(-33.3, viewModel.Snapshot!.Terrain.ObserverAbsoluteElevationMetres!.Value, 6);
+        Assert.Equal(0, viewModel.ResolvedGroundElevationMetres!.Value, 6);
+        Assert.Equal(1.7, viewModel.Snapshot!.Terrain.ObserverAbsoluteElevationMetres!.Value, 6);
+        Assert.Equal(-35, viewModel.Snapshot.Terrain.ObserverDiagnostics!.TerrainSample.InterpolatedElevationMetres!.Value, 6);
+        Assert.True(viewModel.Snapshot.Terrain.ObserverDiagnostics.SurfaceWasAdjusted);
         Assert.Same(viewModel.Snapshot.Terrain, viewModel.Snapshot.Environment!.HorizonProfile);
         Assert.All(viewModel.Snapshot.Terrain.Samples,
             sample => Assert.Equal(sample.GroundHorizonElevationDegrees,
@@ -59,12 +62,21 @@ public sealed class TerrariumPlannerIntegrationTests
     private static async Task MoveAndAssert(MainViewModel viewModel, GeoCoordinate coordinate,
         double expectedElevation)
     {
+        var previousProfile = viewModel.TerrainDebugProfile;
         viewModel.CommitUnresolvedObserverLocation(coordinate with { ElevationMetres = 999 });
-        Assert.Equal(0, viewModel.Elevation);
+        Assert.Equal(TerrainElevationResolutionState.Unresolved, viewModel.TerrainElevationResolutionState);
+        Assert.Null(viewModel.ResolvedGroundElevationMetres);
+        Assert.Null(viewModel.TerrainDebugProfile);
+        if (previousProfile is not null) Assert.NotEqual(previousProfile.Observer, coordinate);
         await viewModel.WaitForPlannerRefreshAsync().WaitAsync(TimeSpan.FromSeconds(30));
 
         var terrain = viewModel.Snapshot!.Terrain;
-        Assert.Equal(TerrariumTerrainProvider.SourceId, terrain.GroundElevationAtObserver!.SourceId);
+        Assert.Same(terrain, viewModel.TerrainDebugProfile);
+        Assert.Equal(coordinate.Latitude, terrain.Observer.Latitude, 10);
+        Assert.Equal(coordinate.Longitude, terrain.Observer.Longitude, 10);
+        Assert.Equal(TerrainSurfaceResolver.SourceId, terrain.GroundElevationAtObserver!.SourceId);
+        Assert.Equal(TerrariumTerrainProvider.SourceId,
+            terrain.ObserverDiagnostics!.TerrainSample.Provider);
         Assert.Equal(expectedElevation, terrain.GroundElevationAtObserver.Value, 6);
         Assert.Equal(expectedElevation, terrain.ChosenObserverGroundElevationMetres!.Value, 6);
         Assert.Equal(expectedElevation, viewModel.Elevation, 6);
@@ -79,11 +91,20 @@ public sealed class TerrariumPlannerIntegrationTests
         public Task SaveAsync(PersistedState value, CancellationToken token) => Task.CompletedTask;
     }
 
-    private sealed class MissingLandCover : ILandCoverProvider
+    private sealed class FixtureLandCover : ILandCoverProvider
     {
         public Task<EnvironmentalValue<LandCoverClass>> GetLandCoverAsync(GeoCoordinate coordinate,
-            CancellationToken token) => Task.FromResult(EnvironmentalValue<LandCoverClass>.Unavailable(
-                "test-cover", "1", "Unavailable"));
+            CancellationToken token) => Task.FromResult(new EnvironmentalValue<LandCoverClass>(
+                EnvironmentalDataState.Available, Classify(coordinate), "test-cover", "1", "Fixture"));
+
+        public Task<LandCoverBatchResult> GetLandCoversAsync(IReadOnlyList<GeoCoordinate> coordinates,
+            CancellationToken token) => Task.FromResult(new LandCoverBatchResult(
+                EnvironmentalDataState.Available,
+                coordinates.Select(coordinate => (LandCoverClass?)Classify(coordinate)).ToArray(),
+                "test-cover", "1", "Fixture"));
+
+        private static LandCoverClass Classify(GeoCoordinate coordinate) =>
+            coordinate.Longitude < -4.2 ? LandCoverClass.PermanentWater : LandCoverClass.Grassland;
     }
 
     private sealed class MissingSettlement : ISettlementDataProvider

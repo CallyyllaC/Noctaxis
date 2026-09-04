@@ -175,26 +175,37 @@ public partial class MainViewModel : ObservableObject
     public PlannerPinActivity PlannerPinActivity => PlannerRefresh.PinActivity;
     public bool CelestialOverlaysReady => PlannerRefresh.CelestialOverlayState == PlannerRefreshWorkState.Ready;
     public bool CameraOverlayReady => PlannerRefresh.CameraGeometryState == PlannerRefreshWorkState.Ready;
-    public bool ShowTerrainDebugOverlay => Settings.TerrainDebugOverlay && CurrentTerrain is not null;
+    public bool ShowTerrainDebugOverlay => Settings.TerrainDebugOverlay;
     public TerrainHorizonProfile? TerrainDebugProfile => CurrentTerrain;
+    public long TerrainDebugGeneration => PlannerRefresh.Generation;
+    public double? TerrainDebugTargetAltitude => CurrentTerrain is not null
+        ? CurrentSnapshot?.Position.Horizontal.AltitudeDegrees
+        : null;
     public double TerrainDebugBearing => CurrentCameraBearing ?? 0;
     public double TerrainDebugHorizontalFieldOfView => CameraFramingGuide?.HorizontalFieldOfViewDegrees ?? 60;
     public string TerrainDebugText => CurrentTerrain is { } terrain
         ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
-            CurrentCameraBearing ?? Snapshot?.Position.Horizontal.AzimuthDegrees ?? 0)
-        : "Terrain diagnostics are waiting for a production horizon profile.";
+            CurrentCameraBearing ?? CurrentSnapshot?.Position.Horizontal.AzimuthDegrees ?? 0,
+            TerrainDebugTargetAltitude, TerrainDebugGeneration)
+        : $"TERRAIN DEBUG\nObserver\nLatitude: {_session.Observer.Latitude:F6}\n" +
+          $"Longitude: {_session.Observer.Longitude:F6}\nGeneration: {TerrainDebugGeneration}\n" +
+          "State: Resolving terrain profile";
     public bool IsElevationManualOverride => _session.EffectiveObserverElevation.IsManualOverride;
+    public TerrainElevationResolutionState TerrainElevationResolutionState =>
+        _session.EffectiveObserverElevation.ResolutionState;
+    public double? ResolvedGroundElevationMetres =>
+        _session.EffectiveObserverElevation.ResolvedGroundElevationAslMetres;
     public bool CanResetGroundElevation => IsElevationManualOverride &&
         _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue;
     public string GroundElevationSourceText => IsElevationManualOverride
         ? "Manual ground-elevation override"
         : _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue
             ? "Terrain-derived ground elevation"
-            : "Terrain ground elevation pending; using the saved fallback";
-    public string EffectiveObserverAltitudeText =>
-        $"Effective camera altitude: {_session.EffectiveObserverElevation.EffectiveObserverAltitudeAsl(
-            _session.Observer.ElevationMetres, Settings.EffectiveCameraHeightAboveGroundMetres):F1} m ASL " +
-        $"(ground + {Settings.EffectiveCameraHeightAboveGroundMetres:F1} m camera height)";
+            : "Resolving terrain surface elevation…";
+    public string EffectiveObserverAltitudeText => ResolvedGroundElevationMetres is double ground
+        ? $"Effective camera altitude: {ground + Settings.EffectiveCameraHeightAboveGroundMetres:F1} m ASL " +
+          $"(ground + {Settings.EffectiveCameraHeightAboveGroundMetres:F1} m camera height)"
+        : "Effective camera altitude: resolving terrain surface…";
     public bool IsFocalLengthEditable => SelectedLens is { IsPrime: false };
     public double FocalLengthMinimum => SelectedLens?.MinimumFocalLengthMillimetres ?? 1;
     public double FocalLengthMaximum => SelectedLens?.MaximumFocalLengthMillimetres ?? 2_000;
@@ -338,23 +349,24 @@ public partial class MainViewModel : ObservableObject
         }
     }
     public string FieldOfViewText => Snapshot is null ? "—" : $"{Snapshot.FieldOfView.HorizontalDegrees:F1}° × {Snapshot.FieldOfView.VerticalDegrees:F1}°";
-    public CameraFramingGuide? CameraFramingGuide => Snapshot is null || !IsCameraFramingOverlayVisible
+    public CameraFramingGuide? CameraFramingGuide => CurrentSnapshot is not { } snapshot || !IsCameraFramingOverlayVisible
         ? null
         : _cameraFramingGuideCalculator.Calculate(
-            Snapshot.FieldOfView,
-            Snapshot.Position.Horizontal.AzimuthDegrees,
+            snapshot.FieldOfView,
+            snapshot.Position.Horizontal.AzimuthDegrees,
             Settings.EffectiveCameraFraming with { IsOverlayVisible = IsCameraFramingOverlayVisible });
     public FramingVisibilityAssessment? CameraFramingVisibility =>
-        Snapshot is null || CameraFramingGuide is null || !ShowFramingVisibilityLimits
+        CurrentSnapshot is not { } snapshot || CurrentTerrain is not { } terrain ||
+        CameraFramingGuide is not { } guide || !ShowFramingVisibilityLimits
             ? null
             : _framingVisibilityCalculator.Calculate(
-                Snapshot.Weather,
-                Snapshot.Terrain,
-                Snapshot.Position.Horizontal.AltitudeDegrees,
-                CameraFramingGuide.CentreBearingDegrees,
-                CameraFramingGuide.HorizontalFieldOfViewDegrees,
+                snapshot.Weather,
+                terrain,
+                snapshot.Position.Horizontal.AltitudeDegrees,
+                guide.CentreBearingDegrees,
+                guide.HorizontalFieldOfViewDegrees,
                 Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees,
-                Snapshot.FieldOfView.VerticalDegrees);
+                snapshot.FieldOfView.VerticalDegrees);
     public string FramingVisibilityStatus => !IsCameraFramingOverlayVisible
         ? string.Empty
         : !ShowFramingVisibilityLimits
@@ -363,13 +375,16 @@ public partial class MainViewModel : ObservableObject
     public CameraFramingSettings CameraFramingMapSettings =>
         (Settings.EffectiveCameraFraming with { LineThickness = SettingsFramingLineThickness }).Normalised();
 
+    private PlanningSnapshot? CurrentSnapshot =>
+        Snapshot is { } snapshot && IsCurrentObserver(snapshot.Session.Observer) ? snapshot : null;
+
     private PlannerEnvironmentSnapshot? CurrentEnvironment =>
-        Snapshot?.Environment is { } environment && IsCurrentObserver(environment.ObserverCoordinate)
+        CurrentSnapshot?.Environment is { } environment && IsCurrentObserver(environment.ObserverCoordinate)
             ? environment
             : null;
 
     private TerrainHorizonProfile? CurrentTerrain =>
-        Snapshot is { } snapshot && IsCurrentObserver(snapshot.Session.Observer)
+        CurrentSnapshot is { } snapshot && IsCurrentObserver(snapshot.Terrain.Observer)
             ? snapshot.Terrain
             : null;
 
@@ -468,7 +483,7 @@ public partial class MainViewModel : ObservableObject
     private void CommitObserverLocation(GeoCoordinate coordinate, string? resolvedName, bool resolvePlaceName)
     {
         var normalised = coordinate.Normalised();
-        var locationChanged = Angles.GreatCircleDistanceMetres(normalised, _session.Observer) > 2;
+        var locationChanged = !SameObserverPosition(normalised, _session.Observer);
         var elevationState = locationChanged ? new ObserverElevationState() :
             _session.EffectiveObserverElevation;
         normalised = normalised with
@@ -2106,18 +2121,26 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(GroundHorizonAngleText));
         OnPropertyChanged(nameof(TerrainDatumText));
         OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
+        OnPropertyChanged(nameof(TerrainDebugProfile));
+        OnPropertyChanged(nameof(TerrainDebugGeneration));
+        OnPropertyChanged(nameof(TerrainDebugTargetAltitude));
+        OnPropertyChanged(nameof(TerrainDebugBearing));
+        OnPropertyChanged(nameof(TerrainDebugHorizontalFieldOfView));
         OnPropertyChanged(nameof(TerrainDebugText));
         OnPropertyChanged(nameof(GroundObstructionText));
+        OnPropertyChanged(nameof(CameraFramingGuide));
+        OnPropertyChanged(nameof(CameraFramingVisibility));
+        OnPropertyChanged(nameof(FramingVisibilityStatus));
     }
 
     private void ApplyResolvedTerrainGround(TerrainHorizonProfile horizon)
     {
-        double? rawTerrainGround = horizon.GroundElevationAtObserver is { HasValue: true } ground
+        double? resolvedSurface = horizon.GroundElevationAtObserver is { HasValue: true } ground
             ? ground.Value : null;
+        if (!resolvedSurface.HasValue) return;
         var terrainGround = _session.EffectiveObserverElevation.IsManualOverride
-            ? rawTerrainGround
-            : horizon.ChosenObserverGroundElevationMetres ?? rawTerrainGround;
-        if (!terrainGround.HasValue) return;
+            ? resolvedSurface
+            : horizon.ChosenObserverGroundElevationMetres ?? resolvedSurface;
 
         var state = _session.EffectiveObserverElevation.WithTerrainGroundElevation(terrainGround.Value);
         var resolvedGround = state.ResolveGroundElevationAsl(_session.Observer.ElevationMetres);
@@ -2137,6 +2160,8 @@ public partial class MainViewModel : ObservableObject
     private void NotifyObserverElevationProperties()
     {
         OnPropertyChanged(nameof(IsElevationManualOverride));
+        OnPropertyChanged(nameof(TerrainElevationResolutionState));
+        OnPropertyChanged(nameof(ResolvedGroundElevationMetres));
         OnPropertyChanged(nameof(CanResetGroundElevation));
         OnPropertyChanged(nameof(GroundElevationSourceText));
         OnPropertyChanged(nameof(EffectiveObserverAltitudeText));
@@ -2151,7 +2176,11 @@ public partial class MainViewModel : ObservableObject
     }
 
     private bool IsCurrentObserver(GeoCoordinate coordinate) =>
-        Angles.GreatCircleDistanceMetres(coordinate, _session.Observer) <= 2;
+        SameObserverPosition(coordinate, _session.Observer);
+
+    private static bool SameObserverPosition(GeoCoordinate left, GeoCoordinate right) =>
+        Math.Abs(left.Latitude - right.Latitude) <= 1e-10 &&
+        Math.Abs(Angles.NormaliseSignedDegrees(left.Longitude - right.Longitude)) <= 1e-10;
 
     private static bool IsRefreshWorkLoading(PlannerRefreshWorkState state) => state is
         PlannerRefreshWorkState.Pending or PlannerRefreshWorkState.Running;

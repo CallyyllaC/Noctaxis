@@ -337,19 +337,73 @@ public sealed class MainViewModelTests
         await viewModel.InitializeAsync();
         var oldObserver = new GeoCoordinate(50, 1);
         var currentObserver = new GeoCoordinate(52, 3);
+        var changedProperties = new List<string?>();
+        viewModel.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName);
 
         viewModel.CommitObserverLocation(oldObserver);
         await WaitUntilAsync(() => planning.RequestCount == 1, TimeSpan.FromSeconds(2));
+        var oldRefresh = viewModel.WaitForPlannerRefreshAsync();
+        var oldGeneration = viewModel.TerrainDebugGeneration;
         viewModel.CommitObserverLocation(currentObserver);
+        Assert.Contains(nameof(MainViewModel.TerrainDebugProfile), changedProperties);
+        Assert.Contains(nameof(MainViewModel.TerrainDebugText), changedProperties);
+        Assert.Contains(nameof(MainViewModel.CameraFramingVisibility), changedProperties);
+        Assert.Null(viewModel.TerrainDebugProfile);
+        Assert.Null(viewModel.CameraFramingVisibility);
+        Assert.Contains($"Latitude: {currentObserver.Latitude:F6}", viewModel.TerrainDebugText);
+        Assert.Contains("State: Resolving", viewModel.TerrainDebugText);
+        Assert.True(viewModel.TerrainDebugGeneration > oldGeneration);
         await WaitUntilAsync(() => planning.RequestCount == 2, TimeSpan.FromSeconds(2));
         planning.Complete(1);
         await WaitUntilAsync(() => viewModel.Snapshot?.Session.Observer == currentObserver,
             TimeSpan.FromSeconds(1));
+        Assert.Equal(currentObserver, viewModel.TerrainDebugProfile!.Observer);
         planning.Complete(0);
-        await Task.Delay(50);
+        await oldRefresh;
 
         Assert.Equal(currentObserver, viewModel.Snapshot!.Session.Observer);
         Assert.Equal(currentObserver, viewModel.Observer);
+        Assert.Equal(currentObserver, viewModel.TerrainDebugProfile!.Observer);
+        Assert.Contains($"Latitude: {currentObserver.Latitude:F6}", viewModel.TerrainDebugText);
+    }
+
+    [Fact]
+    public async Task RepeatedObserverMovementOnlyExposesFinalDebugProfile()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new ControllablePlanning(catalogue);
+        var viewModel = CreateViewModel(planning, catalogue,
+            new FakeStore(new PersistedState(3, new AppSettings(), [],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
+            new FakeExporter());
+        await viewModel.InitializeAsync();
+        var observers = new[]
+        {
+            new GeoCoordinate(50, 1), new GeoCoordinate(51, 2),
+            new GeoCoordinate(52, 3), new GeoCoordinate(53, 4)
+        };
+
+        var obsoleteRefreshes = new List<Task>();
+        foreach (var observer in observers)
+        {
+            viewModel.CommitObserverLocation(observer);
+            await WaitUntilAsync(() => planning.RequestCount == Array.IndexOf(observers, observer) + 1,
+                TimeSpan.FromSeconds(2));
+            Assert.Null(viewModel.TerrainDebugProfile);
+            if (observer != observers[^1]) obsoleteRefreshes.Add(viewModel.WaitForPlannerRefreshAsync());
+        }
+
+        planning.Complete(3);
+        await WaitUntilAsync(() => viewModel.TerrainDebugProfile?.Observer == observers[3],
+            TimeSpan.FromSeconds(1));
+        planning.Complete(2);
+        planning.Complete(0);
+        planning.Complete(1);
+        await Task.WhenAll(obsoleteRefreshes);
+
+        Assert.Equal(observers[3], viewModel.Observer);
+        Assert.Equal(observers[3], viewModel.TerrainDebugProfile!.Observer);
+        Assert.Equal(observers[3], viewModel.Snapshot!.Terrain.Observer);
     }
 
     [Fact]

@@ -6,14 +6,14 @@ Environmental Intelligence is a shared `Noctaxis.Core.Environment` subsystem. Co
 
 | Source | Noctaxis role | Initial provider |
 | --- | --- | --- |
-| Mapzen/Tilezen Terrain Tiles / Terrarium PNG | Canonical terrain elevation | `ITerrainElevationProvider` |
-| ESA WorldCover 2021 v200 | Land-cover classification | `ILandCoverProvider` |
+| Mapzen/Tilezen Terrain Tiles / Terrarium PNG | Canonical raw terrain elevation | `ITerrainElevationProvider` |
+| ESA WorldCover 2021 v200 | Surface classification and land-cover context | `ILandCoverProvider` |
 | WSF 3D v02 | Building fraction and average building height | `ISettlementDataProvider` |
 | VIIRS night lights | Artificial-light radiance | `ILightPollutionProvider` |
 | NOAA SWPC OVATION and planetary Kp | Global aurora intensity and geomagnetic activity | `IAuroraProvider` |
 | OSM / Overpass | Lightweight road and waterway vectors only | existing `IMapFeatureDataService` |
 
-Terrarium is sampled once on its Web-Mercator grid and is shared by observer resolution and every horizon consumer. Missing data remains unavailable and is not converted to zero. Negative terrain, including bathymetry and below-sea-level land, remains valid. WSF height is building-specific context and has only a bounded, mild influence on settlement light mass and synthetic-star appearance; it is not added to terrain elevation.
+Terrarium is sampled once on its Web-Mercator grid and remains the sole elevation source. `TerrainSurfaceResolver` combines raw Terrarium values with WorldCover classification before observer and horizon calculations. Negative non-water land remains negative. Positive permanent-water elevation is retained; negative permanent-water bathymetry is resolved to approximate mean sea level while its raw value remains diagnostic. Missing classification retains raw Terrarium rather than fabricating a water surface. WSF height is building-specific context and is not added to terrain elevation.
 
 WSF 3D is acquired through DLR's catalogued WCS coverages
 `land__WSF3D_V02_BUILDINGFRACTION` and `land__WSF3D_V02_BUILDINGHEIGHT`.
@@ -27,14 +27,15 @@ sample type, bounds, nodata value and numeric range. Building Fraction is conver
 ## Horizons
 
 `IHorizonService` uses a progressive fixed-slot profile and samples the sole Terrarium
-provider on one shared geographic coordinate grid. The default reusable profile contains 360 bearings
+provider through the central surface resolver on one shared geographic coordinate grid. WorldCover
+classifies the complete grid in one grouped batch. The default reusable profile contains 360 bearings
 with 437 adaptive radial samples: 15 m through 1 km, 40 m through 5 km, 100 m
 through 20 km and 250 m thereafter to 50 km. Each `TerrainHorizonSample` carries
 the terrain angular-horizon value, feature distance, optional WorldCover classification,
 and the retained radial sightline needed to calculate base terrain obstruction and optional
 target occultation.
 
-Observer sightlines start at the Terrarium elevation plus 1.7 m camera height,
+Observer sightlines start at the resolved physical surface elevation plus 1.7 m camera height,
 added exactly once. A manual ground override remains supported. If Terrarium is
 unavailable, the caller-supplied unresolved fallback is explicit. Earth curvature subtracts `distance² / (2R)`
 using the standard 7/6 effective-Earth-radius refraction model.
@@ -122,9 +123,11 @@ without fabricated settlement light or an OSM-building fallback.
 
 ## Current foundation status
 
-- WorldCover: functional tile acquisition, shared caching and selective internal
-  GeoTIFF-block sampling. Full 3-degree 10 m rasters are not expanded into
-  application memory. Relevant horizon-feature samples carry classifications.
+- WorldCover: functional tile acquisition, shared caching and one grouped
+  selective GeoTIFF-block classification pass per terrain profile. Full 3-degree
+  10 m rasters are not expanded into application memory. An explicitly absent
+  tile inside the mapped latitude extent identifies open ocean; service failures
+  remain unavailable.
 - Planner: current-coordinate terrain state and directional terrain obstruction
   feed the compact sidebar. Thirteen
   bearings across the horizontal FOV feed a bounded radial lookup texture used by

@@ -166,11 +166,12 @@ models are added.
    elevation angle. Use 360 bearings, a 50 km analysis radius, 250 m radial
    sampling, Earth-curvature correction, and a 1.7 m default observer height
    above sampled ground. Keep these values centralised in the terrain request.
-3. Calculate one terrain horizon from the canonical source. Missing samples
-   remain missing and never become fabricated zero-elevation data.
-4. Batch-classify relevant horizon feature coordinates through WorldCover using
-   selective GeoTIFF point reads, avoiding full in-memory expansion of 3-degree
-   10 m rasters. Associate a bounded WSF sample with the current observer for
+3. Calculate one terrain horizon from resolved physical-surface values. Terrarium
+   remains the sole elevation source; WorldCover permanent-water classification
+   corrects negative bathymetry without changing negative land or positive water.
+4. Batch-classify the complete shared horizon coordinate grid through WorldCover
+   using selective GeoTIFF point reads, avoiding per-sample downloads and full
+   in-memory expansion of 3-degree 10 m rasters. Associate a bounded WSF sample with the current observer for
    availability and future building hooks; do not add WSF height to terrain.
 5. Keep static environmental snapshots keyed by observer location and source
    configuration. Coalesce concurrent tile requests, remove failed in-memory
@@ -203,7 +204,7 @@ models are added.
    through 20 km and 250 m through 50 km. Keep a small 15 m observer-cell
    exclusion radius and retain explicit uniform sampling only for deterministic
    tests and specialised callers.
-3. Use the same Terrarium observer value in Planner and horizon calculation,
+3. Use the same centrally resolved Terrarium/WorldCover physical-surface value in Planner and horizon calculation,
    with camera height added once and an explicit manual override when requested.
 4. Separate base plan-view terrain obstruction from astronomical target
    occultation. Horizon angles remain angular maxima; cone/sidebar obstruction

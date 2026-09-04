@@ -57,7 +57,7 @@ Noctaxis never claims to infer a geographic timezone when it has not done so.
   is used. `OpenNgcTargetCatalogue` parses validated, embedded upstream OpenNGC
   CSV resources; Sun and Moon are the only non-OpenNGC system entries.
 - `IPlannerEnvironmentService` exposes one observer-scoped snapshot. The sole
-  Mapzen/Tilezen Terrarium terrain provider, ESA WorldCover classification and
+  Mapzen/Tilezen Terrarium terrain provider, a central WorldCover-backed physical-surface resolver, and
   WSF 3D settlement providers report explicit availability. `IHorizonService` retains a 360-degree adaptive
   radial sightline profile for angular horizons, pitch-independent plan-view
   obstruction and separately queried target occultation.

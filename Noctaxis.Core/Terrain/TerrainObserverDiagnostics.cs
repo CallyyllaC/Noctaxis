@@ -5,6 +5,10 @@ namespace Noctaxis.Core.Terrain;
 
 public sealed record TerrainObserverDiagnostics(
     ElevationSampleDiagnostics TerrainSample,
-    double ResolvedGroundElevationMetres,
+    double? ResolvedGroundElevationMetres,
     TerrainSampleStatus ResolvedStatus,
-    string ResolutionPolicy);
+    string ResolutionPolicy,
+    LandCoverClass? Classification = null,
+    double? ResolvedSurfaceElevationMetres = null,
+    bool SurfaceWasAdjusted = false,
+    TerrainSurfaceResolutionReason? SurfaceResolutionReason = null);

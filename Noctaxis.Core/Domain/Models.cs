@@ -17,12 +17,30 @@ public readonly record struct GeoCoordinate(double Latitude, double Longitude, d
     public override string ToString() => $"{Latitude:F5}°, {Longitude:F5}°";
 }
 
+public enum TerrainElevationResolutionState
+{
+    Unresolved,
+    TerrainResolved,
+    ManualOverride
+}
+
 public sealed record ObserverElevationState(
     double? TerrainGroundElevationAslMetres = null,
     double? ManualGroundElevationOverrideAslMetres = null)
 {
     [JsonIgnore]
     public bool IsManualOverride => ManualGroundElevationOverrideAslMetres.HasValue;
+
+    [JsonIgnore]
+    public TerrainElevationResolutionState ResolutionState => ManualGroundElevationOverrideAslMetres.HasValue
+        ? TerrainElevationResolutionState.ManualOverride
+        : TerrainGroundElevationAslMetres.HasValue
+            ? TerrainElevationResolutionState.TerrainResolved
+            : TerrainElevationResolutionState.Unresolved;
+
+    [JsonIgnore]
+    public double? ResolvedGroundElevationAslMetres =>
+        ManualGroundElevationOverrideAslMetres ?? TerrainGroundElevationAslMetres;
 
     public double ResolveGroundElevationAsl(double fallbackGroundElevationAslMetres) =>
         ManualGroundElevationOverrideAslMetres ?? TerrainGroundElevationAslMetres ??
@@ -352,6 +370,7 @@ public readonly record struct TerrainSightlineSample
     {
         DistanceMetres = distanceMetres;
         TerrainElevationMetres = terrainElevationMetres;
+        RawTerrainElevationMetres = terrainElevationMetres;
         CurvatureDropMetres = curvatureDropMetres;
         _terrainElevationAngleDegrees = terrainElevationAngleDegrees;
         TerrainElevationSlope = terrainElevationAngleDegrees is double angle
@@ -360,12 +379,19 @@ public readonly record struct TerrainSightlineSample
     }
 
     private TerrainSightlineSample(double distanceMetres, double? terrainElevationMetres,
-        double curvatureDropMetres, double? terrainElevationSlope, TerrainSampleStatus status, bool slope)
+        double curvatureDropMetres, double? terrainElevationSlope, TerrainSampleStatus status, bool slope,
+        double? rawTerrainElevationMetres, Noctaxis.Core.Environment.LandCoverClass? classification,
+        bool surfaceWasAdjusted,
+        Noctaxis.Core.Environment.TerrainSurfaceResolutionReason? surfaceResolutionReason)
     {
         DistanceMetres = distanceMetres;
         TerrainElevationMetres = terrainElevationMetres;
         CurvatureDropMetres = curvatureDropMetres;
         TerrainElevationSlope = terrainElevationSlope;
+        RawTerrainElevationMetres = rawTerrainElevationMetres ?? terrainElevationMetres;
+        Classification = classification;
+        SurfaceWasAdjusted = surfaceWasAdjusted;
+        SurfaceResolutionReason = surfaceResolutionReason;
         _terrainElevationAngleDegrees = null;
         Status = terrainElevationMetres.HasValue ? status : TerrainSampleStatus.Unavailable;
     }
@@ -375,6 +401,10 @@ public readonly record struct TerrainSightlineSample
     public double CurvatureDropMetres { get; }
     public double? TerrainElevationSlope { get; }
     public TerrainSampleStatus Status { get; }
+    public double? RawTerrainElevationMetres { get; }
+    public Noctaxis.Core.Environment.LandCoverClass? Classification { get; }
+    public bool SurfaceWasAdjusted { get; }
+    public Noctaxis.Core.Environment.TerrainSurfaceResolutionReason? SurfaceResolutionReason { get; }
     public double? TerrainElevationAngleDegrees => _terrainElevationAngleDegrees ??
         (TerrainElevationSlope is double slope ? Math.Atan(slope) * Angles.RadiansToDegrees : null);
     public double? GroundElevationMetres => TerrainElevationMetres;
@@ -384,8 +414,13 @@ public readonly record struct TerrainSightlineSample
 
     public static TerrainSightlineSample FromSlope(double distanceMetres, double? terrainElevationMetres,
         double curvatureDropMetres, double? terrainElevationSlope,
-        TerrainSampleStatus status = TerrainSampleStatus.Valid) =>
-        new(distanceMetres, terrainElevationMetres, curvatureDropMetres, terrainElevationSlope, status, true);
+        TerrainSampleStatus status = TerrainSampleStatus.Valid,
+        double? rawTerrainElevationMetres = null,
+        Noctaxis.Core.Environment.LandCoverClass? classification = null,
+        bool surfaceWasAdjusted = false,
+        Noctaxis.Core.Environment.TerrainSurfaceResolutionReason? surfaceResolutionReason = null) =>
+        new(distanceMetres, terrainElevationMetres, curvatureDropMetres, terrainElevationSlope, status, true,
+            rawTerrainElevationMetres, classification, surfaceWasAdjusted, surfaceResolutionReason);
 }
 
 public enum ObserverDatumConfidence
@@ -482,6 +517,7 @@ public sealed record TerrainHorizonProfile(
         var upperSightline = Samples[upper].Sightline;
         if (lowerSightline is null || upperSightline is null ||
             lowerSightline.Count == 0 || lowerSightline.Count != upperSightline.Count) return [];
+        if (fraction <= 1e-12) return lowerSightline;
         var result = new TerrainSightlineSample[lowerSightline.Count];
         for (var index = 0; index < result.Length; index++)
         {
@@ -491,7 +527,13 @@ public sealed record TerrainHorizonProfile(
                 left.DistanceMetres + (right.DistanceMetres - left.DistanceMetres) * fraction,
                 InterpolateNullable(left.TerrainElevationMetres, right.TerrainElevationMetres, fraction),
                 left.CurvatureDropMetres + (right.CurvatureDropMetres - left.CurvatureDropMetres) * fraction,
-                InterpolateNullable(left.TerrainElevationSlope, right.TerrainElevationSlope, fraction));
+                InterpolateNullable(left.TerrainElevationSlope, right.TerrainElevationSlope, fraction),
+                left.Status == right.Status ? left.Status : TerrainSampleStatus.Valid,
+                InterpolateNullable(left.RawTerrainElevationMetres, right.RawTerrainElevationMetres, fraction),
+                left.Classification == right.Classification ? left.Classification : null,
+                left.SurfaceWasAdjusted || right.SurfaceWasAdjusted,
+                left.SurfaceResolutionReason == right.SurfaceResolutionReason
+                    ? left.SurfaceResolutionReason : null);
         }
         return result;
     }

@@ -15,19 +15,43 @@ public sealed class TerrainDebugMiniMap : Control
 {
     public static readonly StyledProperty<TerrainHorizonProfile?> ProfileProperty =
         AvaloniaProperty.Register<TerrainDebugMiniMap, TerrainHorizonProfile?>(nameof(Profile));
+    public static readonly StyledProperty<GeoCoordinate> ObserverProperty =
+        AvaloniaProperty.Register<TerrainDebugMiniMap, GeoCoordinate>(nameof(Observer));
+    public static readonly StyledProperty<long> GenerationProperty =
+        AvaloniaProperty.Register<TerrainDebugMiniMap, long>(nameof(Generation));
+    public static readonly StyledProperty<double?> TargetAltitudeDegreesProperty =
+        AvaloniaProperty.Register<TerrainDebugMiniMap, double?>(nameof(TargetAltitudeDegrees));
     public static readonly StyledProperty<double> CentreBearingDegreesProperty =
         AvaloniaProperty.Register<TerrainDebugMiniMap, double>(nameof(CentreBearingDegrees));
     public static readonly StyledProperty<double> HorizontalFieldOfViewDegreesProperty =
         AvaloniaProperty.Register<TerrainDebugMiniMap, double>(nameof(HorizontalFieldOfViewDegrees), 60);
 
     static TerrainDebugMiniMap() =>
-        AffectsRender<TerrainDebugMiniMap>(ProfileProperty, CentreBearingDegreesProperty,
-            HorizontalFieldOfViewDegreesProperty);
+        AffectsRender<TerrainDebugMiniMap>(ProfileProperty, ObserverProperty, GenerationProperty,
+            TargetAltitudeDegreesProperty, CentreBearingDegreesProperty, HorizontalFieldOfViewDegreesProperty);
 
     public TerrainHorizonProfile? Profile
     {
         get => GetValue(ProfileProperty);
         set => SetValue(ProfileProperty, value);
+    }
+
+    public GeoCoordinate Observer
+    {
+        get => GetValue(ObserverProperty);
+        set => SetValue(ObserverProperty, value);
+    }
+
+    public long Generation
+    {
+        get => GetValue(GenerationProperty);
+        set => SetValue(GenerationProperty, value);
+    }
+
+    public double? TargetAltitudeDegrees
+    {
+        get => GetValue(TargetAltitudeDegreesProperty);
+        set => SetValue(TargetAltitudeDegreesProperty, value);
     }
 
     public double CentreBearingDegrees
@@ -48,7 +72,15 @@ public sealed class TerrainDebugMiniMap : Control
         var bounds = new Rect(Bounds.Size);
         context.FillRectangle(new SolidColorBrush(Color.Parse("#0A1018")), bounds);
         var profile = Profile;
-        if (profile is null || bounds.Width < 40 || bounds.Height < 40) return;
+        if (bounds.Width < 40 || bounds.Height < 40) return;
+        if (profile is null)
+        {
+            DrawLabel(context, $"observer {Observer.Latitude:F5}, {Observer.Longitude:F5}",
+                new Point(7, 7), Color.Parse("#D9E5F2"));
+            DrawLabel(context, $"generation {Generation}  resolving…",
+                new Point(7, 20), Color.Parse("#91A4B8"));
+            return;
+        }
 
         var centre = bounds.Center;
         var radius = Math.Max(1, Math.Min(bounds.Width, bounds.Height) * .43);
@@ -69,9 +101,28 @@ public sealed class TerrainDebugMiniMap : Control
             centre, 4, 4);
         DrawLabel(context, $"Terrarium z12  {minimum:F0}..{maximum:F0} m", new Point(7, 6),
             Color.Parse("#D9E5F2"));
+        var observerDiagnostics = profile.ObserverDiagnostics;
+        DrawLabel(context,
+            $"raw {observerDiagnostics?.TerrainSample.InterpolatedElevationMetres:0.0}  surface {observerDiagnostics?.ResolvedSurfaceElevationMetres:0.0}  {observerDiagnostics?.Classification?.ToString() ?? "unknown"}{(observerDiagnostics?.SurfaceWasAdjusted == true ? " adjusted" : string.Empty)}",
+            new Point(7, 18), Color.Parse("#91CFE8"));
         var tile = TerrariumTerrainProvider.LocatePixel(profile.Observer, 12).Tile;
-        DrawLabel(context, $"observer {tile.Id}  range {displayDistance / 1000:F0} km",
-            new Point(7, bounds.Height - 20), Color.Parse("#91A4B8"));
+        var horizon = profile.EffectiveAltitudeAt(CentreBearingDegrees);
+        var geometry = profile.TerrainObstructionAt(CentreBearingDegrees);
+        var occultation = TargetAltitudeDegrees is double targetAltitude
+            ? profile.OccultationAt(CentreBearingDegrees, targetAltitude)
+            : default;
+        var occulted = TargetAltitudeDegrees.HasValue
+            ? occultation.EffectiveFirstObstructionDistanceMetres.HasValue.ToString()
+            : "n/a";
+        DrawLabel(context,
+            $"az {Angles.NormaliseDegrees(CentreBearingDegrees):F1}°  horizon {Angle(horizon)}  geometry {Distance(geometry.EffectiveFirstObstructionDistanceMetres)}",
+            new Point(7, bounds.Height - 33), Color.Parse("#B7C7D9"));
+        DrawLabel(context,
+            $"target {Angle(TargetAltitudeDegrees)}  occulted {occulted}",
+            new Point(7, bounds.Height - 20), Color.Parse("#B7C7D9"));
+        DrawLabel(context,
+            $"{profile.Observer.Latitude:F5},{profile.Observer.Longitude:F5}  g{Generation}  {tile.Id}",
+            new Point(7, bounds.Height - 7), Color.Parse("#91A4B8"));
     }
 
     private static void DrawTerrainSamples(DrawingContext context, TerrainHorizonProfile profile,
@@ -92,6 +143,13 @@ public sealed class TerrainDebugMiniMap : Control
                 {
                     context.DrawRectangle(null, new Pen(new SolidColorBrush(Color.Parse("#D05C8D")), .8),
                         new Rect(screen.X - 1.5, screen.Y - 1.5, 3, 3));
+                    continue;
+                }
+                if (point.Classification == LandCoverClass.PermanentWater)
+                {
+                    var waterColour = point.SurfaceWasAdjusted ? Color.Parse("#238EC2") : Color.Parse("#326A89");
+                    context.FillRectangle(new SolidColorBrush(waterColour),
+                        new Rect(screen.X - 1.3, screen.Y - 1.3, 2.6, 2.6));
                     continue;
                 }
                 var fraction = Math.Clamp((point.GroundElevationMetres.Value - minimum) / span, 0, 1);
@@ -196,6 +254,9 @@ public sealed class TerrainDebugMiniMap : Control
         if (value < .75) return Color.Parse("#918052");
         return Color.Parse("#D7D0B8");
     }
+
+    private static string Angle(double? value) => value is double angle ? $"{angle:F2}°" : "n/a";
+    private static string Distance(double? value) => value is double distance ? $"{distance:F0}m" : "clear";
 
     private static void DrawLabel(DrawingContext context, string label, Point point, Color colour)
     {

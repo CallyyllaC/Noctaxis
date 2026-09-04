@@ -62,8 +62,11 @@ public partial class App : Application
             client.DefaultRequestHeaders.UserAgent.ParseAdd(
                 "Noctaxis/1.0 (photographic planning; Mapzen-Tilezen terrain client)");
         });
-        services.AddSingleton<IHorizonService, HorizonService>();
         services.AddHttpClient<ILandCoverProvider, WorldCoverLandCoverProvider>();
+        services.AddSingleton<ITerrainSurfaceResolver, TerrainSurfaceResolver>();
+        services.AddSingleton<IHorizonService>(provider => new HorizonService(
+            provider.GetRequiredService<ITerrainSurfaceResolver>(),
+            provider.GetRequiredService<ILogger<HorizonService>>()));
         services.AddHttpClient<IWsfCoverageSource, DlrWsfCoverageSource>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);

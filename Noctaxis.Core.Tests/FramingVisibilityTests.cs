@@ -60,6 +60,22 @@ public sealed class FramingVisibilityTests
         Assert.Equal(5.6, result.TerrainClearanceDegrees!.Value, 6);
     }
 
+    [Theory]
+    [InlineData(-0.1, 5, false)]
+    [InlineData(3, 1, true)]
+    [InlineData(1, 3, false)]
+    [InlineData(2, 2, true)]
+    public void AstronomicalOccultationComparesTargetAltitudeWithTerrainHorizon(
+        double terrainHorizon, double targetAltitude, bool expectedObstructed)
+    {
+        var result = _calculator.Calculate(Weather(null), Terrain(terrainHorizon, true),
+            targetAltitude, 90);
+
+        Assert.Equal(expectedObstructed, result.IsTargetTerrainObstructed);
+        Assert.Equal(targetAltitude - terrainHorizon, result.TerrainClearanceDegrees!.Value, 10);
+        if (targetAltitude == terrainHorizon) Assert.Equal("At terrain horizon", result.Status);
+    }
+
     [Fact]
     public void TerrainObstructionTakesStatusPriorityButRetainsIndependentWeatherLimit()
     {
@@ -122,7 +138,7 @@ public sealed class FramingVisibilityTests
     }
 
     [Fact]
-    public void ConeSamplesUseTargetSightlineFirstHitAndDoNotExposeMultiIntervalVisibility()
+    public void ConeSamplesUsePitchIndependentPlanViewTerrainGeometry()
     {
         var terrain = AsymmetricSightlineTerrain();
         const double targetAltitude = 3;
@@ -130,7 +146,7 @@ public sealed class FramingVisibilityTests
 
         Assert.All(result.EffectiveTerrainObstructions, sample =>
         {
-            var expected = terrain.OccultationAt(sample.BearingDegrees, targetAltitude)
+            var expected = terrain.TerrainObstructionAt(sample.BearingDegrees)
                 .EffectiveFirstObstructionDistanceMetres;
             Assert.Equal(expected, sample.FirstObstructionDistanceMetres);
             Assert.Empty(sample.EffectiveVisibilitySegments);
@@ -138,7 +154,7 @@ public sealed class FramingVisibilityTests
     }
 
     [Fact]
-    public void QuarryWallsBelowEntireCameraFrameDoNotHatchCameraCone()
+    public void PlanViewHatchingDoesNotDependOnTargetOrCameraPitch()
     {
         var terrain = QuarrySightlineTerrain();
         var horizontal = _calculator.Calculate(Weather(null), terrain, 0, 90, 40, 10);
@@ -146,28 +162,33 @@ public sealed class FramingVisibilityTests
             verticalFovDegrees: 10);
 
         Assert.All(horizontal.EffectiveTerrainObstructions, sample => Assert.True(sample.IsObstructed));
-        Assert.All(aboveWalls.EffectiveTerrainObstructions, sample =>
-        {
-            Assert.False(sample.IsObstructed);
-            Assert.Null(sample.FirstObstructionDistanceMetres);
-        });
+        Assert.All(aboveWalls.EffectiveTerrainObstructions, sample => Assert.True(sample.IsObstructed));
+        Assert.Equal(horizontal.EffectiveTerrainObstructions, aboveWalls.EffectiveTerrainObstructions);
         Assert.False(aboveWalls.IsTargetTerrainObstructed);
     }
 
     [Fact]
-    public void QuarryWallsBelowTargetCentreButInsideCameraFrameAreHatched()
+    public void NegativeHorizonDoesNotCreatePlanViewHatchingOrTargetOccultation()
     {
-        var terrain = QuarrySightlineTerrain();
+        var distances = new[] { 1_000d, 9_300d };
+        var line = distances.Select(distance =>
+            new TerrainSightlineSample(distance, 0, 0, -0.1)).ToArray();
+        var terrain = new TerrainHorizonProfile(new GeoCoordinate(53.615275, .140637),
+            Enumerable.Range(0, 8).Select(index => new TerrainHorizonSample(
+                index * 45d, -0.1, 9_300, Sightline: line)).ToArray(),
+            true, "Synthetic coastal water", Now);
 
-        var result = _calculator.Calculate(Weather(null), terrain, 20, 90, 40, 10,
-            verticalFovDegrees: 20);
+        var result = _calculator.Calculate(Weather(null), terrain, 5, 90, 40, 10,
+            verticalFovDegrees: 40);
 
         Assert.All(result.EffectiveTerrainObstructions, sample =>
         {
-            Assert.True(sample.IsObstructed);
-            Assert.NotNull(sample.FirstObstructionDistanceMetres);
+            Assert.False(sample.IsObstructed);
+            Assert.Null(sample.FirstObstructionDistanceMetres);
         });
         Assert.False(result.IsTargetTerrainObstructed);
+        Assert.Null(terrain.TerrainObstructionAt(90).EffectiveFirstObstructionDistanceMetres);
+        Assert.Null(terrain.OccultationAt(90, 5).EffectiveFirstObstructionDistanceMetres);
     }
 
     [Fact]

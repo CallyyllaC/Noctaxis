@@ -13,7 +13,6 @@ namespace Noctaxis.Core.Environment;
 /// </summary>
 public sealed class PlannerEnvironmentService(
     IHorizonService horizons,
-    ILandCoverProvider landCover,
     ISettlementDataProvider settlement,
     ILogger<PlannerEnvironmentService> logger) : IPlannerEnvironmentService
 {
@@ -64,64 +63,20 @@ public sealed class PlannerEnvironmentService(
         var settlementTask = TimedSettlementAsync(observer, cancellationToken);
         var horizon = await horizonTask.ConfigureAwait(false);
 
-        var classifications = new List<(int SampleIndex, GeoCoordinate Coordinate)>
-        {
-            (-1, observer)
-        };
-        for (var index = 0; index < horizon.Samples.Count; index++)
-        {
-            var sample = horizon.Samples[index];
-            if (sample.EffectiveHorizonFeatureDistanceMetres is not double distance || distance <= 0) continue;
-            classifications.Add((index, Angles.Destination(observer, sample.BearingDegrees, distance)));
-        }
-
-        var coverTimer = Stopwatch.StartNew();
-        var cover = await SafeLandCoverAsync(classifications.Select(item => item.Coordinate).ToArray(),
-            cancellationToken).ConfigureAwait(false);
-        coverTimer.Stop();
-        logger.LogDebug("WorldCover selective classification: points={Points}, elapsed={Elapsed:F1}ms",
-            classifications.Count, coverTimer.Elapsed.TotalMilliseconds);
-        if (cover.Classifications.Count == classifications.Count)
-        {
-            var samples = horizon.Samples.ToArray();
-            for (var index = 1; index < classifications.Count; index++)
-            {
-                var sampleIndex = classifications[index].SampleIndex;
-                samples[sampleIndex] = samples[sampleIndex] with { LandCover = cover.Classifications[index] };
-            }
-            horizon = horizon with { Samples = samples };
-        }
-
-        var currentCover = cover.Classifications.Count > 0 && cover.Classifications[0].HasValue
-            ? new EnvironmentalValue<LandCoverClass>(cover.State, cover.Classifications[0]!.Value, cover.SourceId,
-                cover.SourceVersion, cover.Message, RetrievedAt: SystemClock.Instance.GetCurrentInstant())
-            : new EnvironmentalValue<LandCoverClass>(cover.State, default, cover.SourceId, cover.SourceVersion,
-                cover.Message);
+        var classification = horizon.ObserverDiagnostics?.Classification;
+        var currentCover = classification.HasValue
+            ? new EnvironmentalValue<LandCoverClass>(EnvironmentalDataState.Available, classification.Value,
+                WorldCoverLandCoverProvider.SourceId, WorldCoverLandCoverProvider.SourceVersion,
+                "WorldCover classification used by terrain surface resolution.",
+                RetrievedAt: SystemClock.Instance.GetCurrentInstant())
+            : EnvironmentalValue<LandCoverClass>.Unavailable(WorldCoverLandCoverProvider.SourceId,
+                WorldCoverLandCoverProvider.SourceVersion,
+                "WorldCover classification is unavailable at this coordinate.");
         var ground = horizon.GroundElevationAtObserver ?? EnvironmentalValue<double>.Unavailable(
             TerrariumTerrainProvider.SourceId, TerrariumTerrainProvider.SourceVersion,
             "Terrarium terrain elevation is unavailable at this coordinate.");
         return new PlannerEnvironmentSnapshot(observer, ground, currentCover,
             await settlementTask.ConfigureAwait(false), horizon, SystemClock.Instance.GetCurrentInstant());
-    }
-
-    private async Task<LandCoverBatchResult> SafeLandCoverAsync(IReadOnlyList<GeoCoordinate> coordinates,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var result = await landCover.GetLandCoversAsync(coordinates, cancellationToken).ConfigureAwait(false);
-            if (result.Classifications.Count != coordinates.Count)
-                throw new InvalidDataException("Land-cover batch length did not match its request.");
-            return result;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "WorldCover classification failed for Planner environment");
-            return new LandCoverBatchResult(EnvironmentalDataState.Error,
-                Enumerable.Repeat<LandCoverClass?>(null, coordinates.Count).ToArray(),
-                WorldCoverLandCoverProvider.SourceId, WorldCoverLandCoverProvider.SourceVersion,
-                "ESA WorldCover classification failed.");
-        }
     }
 
     private async Task<EnvironmentalValue<SettlementRaster>> SafeSettlementAsync(GeoCoordinate observer,

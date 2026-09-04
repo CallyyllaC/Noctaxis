@@ -194,10 +194,11 @@ public sealed class EnvironmentalIntelligenceTests
     public async Task PlannerEnvironment_AttachesWorldCoverAndIsolatesSettlementFailure()
     {
         var origin = new GeoCoordinate(51, 0);
-        var horizons = new HorizonService(new DirectionalElevation(origin, 0, 500),
-            NullLogger<HorizonService>.Instance);
         var landCover = new BuiltUpLandCover();
-        var service = new PlannerEnvironmentService(horizons, landCover,
+        var surfaces = new TerrainSurfaceResolver(new DirectionalElevation(origin, 0, 500), landCover,
+            NullLogger<TerrainSurfaceResolver>.Instance);
+        var horizons = new HorizonService(surfaces, NullLogger<HorizonService>.Instance);
+        var service = new PlannerEnvironmentService(horizons,
             new ThrowingSettlement(), NullLogger<PlannerEnvironmentService>.Instance);
 
         var snapshot = await service.GetSnapshotAsync(origin, default);
@@ -208,7 +209,7 @@ public sealed class EnvironmentalIntelligenceTests
         Assert.True(snapshot.HorizonProfile.HasTerrainCoverage);
         Assert.Contains(snapshot.HorizonProfile.Samples,
             sample => sample.LandCover == LandCoverClass.BuiltUp);
-        Assert.InRange(landCover.RequestedCoordinates, 1, snapshot.HorizonProfile.Samples.Count + 1);
+        Assert.True(landCover.RequestedCoordinates > snapshot.HorizonProfile.Samples.Count);
     }
 
     [Fact]

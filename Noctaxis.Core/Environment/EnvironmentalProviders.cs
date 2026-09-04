@@ -47,7 +47,16 @@ public sealed record LandCoverBatchResult(
     IReadOnlyList<LandCoverClass?> Classifications,
     string SourceId,
     string SourceVersion,
-    string Message);
+    string Message,
+    IReadOnlyList<TerrainWaterBodyKind>? WaterBodyKinds = null)
+{
+    public TerrainWaterBodyKind WaterBodyKindAt(int index) =>
+        WaterBodyKinds is { } kinds && index < kinds.Count
+            ? kinds[index]
+            : Classifications[index] == LandCoverClass.PermanentWater
+                ? TerrainWaterBodyKind.PermanentWaterUnspecified
+                : TerrainWaterBodyKind.NotWater;
+}
 
 public interface ITerrainElevationProvider
 {

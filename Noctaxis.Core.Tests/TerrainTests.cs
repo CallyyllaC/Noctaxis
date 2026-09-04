@@ -29,6 +29,8 @@ public sealed class TerrainTests
             new TerrainProfileRequest(8, 2_000, 500), default);
 
         Assert.False(profile.HasTerrainCoverage);
+        Assert.Null(profile.ChosenObserverGroundElevationMetres);
+        Assert.Null(profile.ObserverAbsoluteElevationMetres);
         Assert.Equal(EnvironmentalDataState.Unavailable, profile.GroundHorizonState);
         Assert.Contains("unavailable", profile.Status, StringComparison.OrdinalIgnoreCase);
     }
@@ -61,10 +63,11 @@ public sealed class TerrainTests
         var first = await service.GetProfileAsync(new GeoCoordinate(51, 0), request, default);
         var requests = terrain.BatchRequests;
         var second = await service.GetProfileAsync(new GeoCoordinate(51, 0), request, default);
-        await service.GetProfileAsync(new GeoCoordinate(52, 0), request, default);
+        var moved = await service.GetProfileAsync(new GeoCoordinate(51.000001, 0), request, default);
 
         Assert.Same(first, second);
         Assert.Equal(requests + 1, terrain.BatchRequests);
+        Assert.Equal(51.000001, moved.Observer.Latitude, 10);
     }
 
     [Fact]
