@@ -1,0 +1,12 @@
+{
+  "name": "Noctaxis",
+  "summary": "A planning workspace for observing, imaging, and understanding the night sky.",
+  "status": "active",
+  "type": "software",
+  "tags": [
+    ".NET",
+    "Avalonia",
+    "Astronomy",
+    "Geospatial"
+  ]
+}
