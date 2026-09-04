@@ -5,6 +5,7 @@ using Noctaxis.Core.Astronomy;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Catalogues;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Environment;
 using Noctaxis.Core.Locations;
 using Noctaxis.Core.Planning;
 using Noctaxis.Core.Terrain;
@@ -115,7 +116,7 @@ public sealed class LocationAndCatalogueTests
         Assert.Equal("openngc:NGC0224", andromeda.Id);
         Assert.Contains("Andromeda", andromeda.DisplayName, StringComparison.OrdinalIgnoreCase);
         Assert.InRange(andromeda.RightAscensionHours!.Value, 0.70, 0.72);
-        Assert.Equal(andromeda.Id, catalogue.ResolveId("andromeda"));
+        Assert.Null(catalogue.ResolveId("andromeda"));
         Assert.Equal("openngc:Mel022", catalogue.Get("M45").Id); // OpenNGC addendum.
     }
 
@@ -126,10 +127,100 @@ public sealed class LocationAndCatalogueTests
         var service = new LocalTargetSearchService(catalogue);
         var nebulae = await service.SearchAsync(new CatalogueSearchQuery("Orion Nebula", AstralTargetCategory.Nebula, "Orion"), 20, CancellationToken.None);
         Assert.Contains(nebulae, target => target.Id == "openngc:NGC1976");
-        var ngc = await service.SearchAsync(new CatalogueSearchQuery("Galaxy", AstralTargetCategory.Galaxy, CatalogueFamily: "NGC"), 20, CancellationToken.None);
+        var ngc = await service.SearchAsync(new CatalogueSearchQuery("Galaxy", AstralTargetCategory.Galaxy, DesignationFamily: "NGC"), 20, CancellationToken.None);
         Assert.Contains(ngc, target => target.Id == "openngc:NGC0224");
         Assert.All(ngc, target => Assert.Equal(AstralTargetCategory.Galaxy, target.Category));
     }
+
+    [Fact]
+    public void OpenNgc_IsTheOnlyBundledExternalCatalogue_AndLegacyWrapperIsRemoved()
+    {
+        var assembly = typeof(OpenNgcTargetCatalogue).Assembly;
+        var catalogueResources = assembly.GetManifestResourceNames()
+            .Where(name => name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)).ToArray();
+
+        Assert.Equal(["Noctaxis.Core.Data.OpenNGC-NGC.csv", "Noctaxis.Core.Data.OpenNGC-addendum.csv"], catalogueResources);
+        Assert.Null(assembly.GetType("Noctaxis.Core.Catalogues.EmbeddedTargetCatalogue"));
+    }
+
+    [Fact]
+    public void DesignationFamilies_AreDiscoveredFromLoadedOpenNgcIdentifiers()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        Assert.Equal(["Barnard", "Caldwell", "HIP", "IC", "Messier", "NGC"], catalogue.DesignationFamilies);
+    }
+
+    [Theory]
+    [InlineData("Caldwell 14", "openngc:C014")]
+    [InlineData("C 14", "openngc:C014")]
+    [InlineData("C14", "openngc:C014")]
+    [InlineData("C014", "openngc:C014")]
+    [InlineData("HIP 17465", "openngc:IC0348")]
+    [InlineData("HIP 017465", "openngc:IC0348")]
+    [InlineData("Barnard 33", "openngc:B033")]
+    [InlineData("B33", "openngc:B033")]
+    [InlineData("B033", "openngc:B033")]
+    public async Task Search_NormalizesRecognizedDesignationFamilies(string query, string expectedId)
+    {
+        var results = await new LocalTargetSearchService(new OpenNgcTargetCatalogue())
+            .SearchAsync(query, 12, CancellationToken.None);
+        Assert.Equal(expectedId, results[0].Id);
+    }
+
+    [Theory]
+    [InlineData("IC 434", "openngc:IC0434")]
+    [InlineData("NGC 224", "openngc:NGC0224")]
+    [InlineData("M31", "openngc:NGC0224")]
+    public async Task Search_RanksExactDesignationsAheadOfSubstringCollisions(string query, string expectedId)
+    {
+        var results = await new LocalTargetSearchService(new OpenNgcTargetCatalogue())
+            .SearchAsync(query, 12, CancellationToken.None);
+        Assert.Equal(expectedId, results[0].Id);
+    }
+
+    [Fact]
+    public async Task CstarNames_AreSearchableAndContributeHipDesignations()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var target = Assert.Single(await new LocalTargetSearchService(catalogue)
+            .SearchAsync("HIP 1041", 12, CancellationToken.None), item => item.Id == "openngc:NGC0040");
+        Assert.Contains(target.CatalogueIdentifiers!, value => value.Equals("HIP 001041", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("HIP", catalogue.DesignationFamilies);
+    }
+
+    [Fact]
+    public void SerpensSections_AreMappedToUserFacingNames()
+    {
+        var constellations = new OpenNgcTargetCatalogue().Constellations;
+        Assert.Contains("Serpens Caput", constellations);
+        Assert.Contains("Serpens Cauda", constellations);
+        Assert.DoesNotContain("Se1", constellations);
+        Assert.DoesNotContain("Se2", constellations);
+    }
+
+    [Fact]
+    public void ConfiguredTargetRecovery_IsUniqueOnlyAndHasNoBespokeSlugTable()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        Assert.Equal("openngc:IC0348", catalogue.ResolveConfiguredTargetId("HIP 17465"));
+        Assert.Equal("openngc:NGC0224", catalogue.ResolveConfiguredTargetId("Andromeda Galaxy"));
+        Assert.Equal("openngc:Mel022", catalogue.ResolveConfiguredTargetId("Pleiades"));
+        Assert.Null(catalogue.ResolveConfiguredTargetId("andromeda"));
+        Assert.Null(catalogue.ResolveConfiguredTargetId("not-a-real-target"));
+        Assert.Null(catalogue.ResolveConfiguredTargetId(null!));
+
+        var ambiguous = catalogue.Targets.Where(target => !target.IsSun && !target.IsMoon)
+            .SelectMany(target => new[] { target.DisplayName }.Concat(target.Aliases ?? []),
+                (target, value) => (target.Id, Value: value, Normalized: Normalize(value)))
+            .Where(item => item.Normalized.Length > 1 &&
+                           !System.Text.RegularExpressions.Regex.IsMatch(item.Normalized, "^(NGC|IC|HIP|M|C|B)\\d"))
+            .GroupBy(item => item.Normalized, StringComparer.Ordinal)
+            .First(group => group.Select(item => item.Id).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1);
+        Assert.Null(catalogue.ResolveConfiguredTargetId(ambiguous.Key));
+    }
+
+    private static string Normalize(string value) =>
+        new(value.Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
 
     [Fact]
     public void VisibilityPolicy_AllowsEightAndRetainsButHidesAdditionalObjects()
@@ -158,7 +249,8 @@ public sealed class LocationAndCatalogueTests
     {
         var catalogue = new OpenNgcTargetCatalogue();
         var astronomy = new CountingAstronomy();
-        var service = new PlanningService(catalogue, astronomy, new LensCalculator(), new FlatTerrainHorizonProvider(), new FakeWeather(), new TimeZoneResolver());
+        var service = new PlanningService(catalogue, astronomy, new LensCalculator(),
+            new FakePlannerEnvironment(new UnavailableHorizon()), new FakeWeather(), new TimeZoneResolver());
         var session = PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 12, 0), "UTC") with
         {
             TargetId = "sun",
@@ -173,7 +265,27 @@ public sealed class LocationAndCatalogueTests
     public void ObserverElevation_IsClampedToSupportedRange()
     {
         Assert.Equal(9_000, new GeoCoordinate(0, 0, 20_000).Normalised().ElevationMetres);
-        Assert.Equal(-500, new GeoCoordinate(0, 0, -1_000).Normalised().ElevationMetres);
+        Assert.Equal(-1_000, new GeoCoordinate(0, 0, -1_000).Normalised().ElevationMetres);
+        Assert.Equal(GeoCoordinate.MinimumRepresentableElevationMetres,
+            new GeoCoordinate(0, 0, -20_000).Normalised().ElevationMetres);
+    }
+
+    [Fact]
+    public async Task PlanningEnvironmentRequest_ReceivesCameraHeightAndManualGroundOverride()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var environment = new FakePlannerEnvironment(new UnavailableHorizon());
+        var service = new PlanningService(catalogue, new CountingAstronomy(), new LensCalculator(),
+            environment, new FakeWeather(), new TimeZoneResolver());
+        var session = PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 12, 0), "UTC") with
+        {
+            ObserverElevation = new ObserverElevationState(120, 250)
+        };
+
+        await service.LoadEnvironmentAsync(session, 3.2, CancellationToken.None);
+
+        Assert.Equal(3.2, environment.LastRequest!.ObserverHeightAboveGroundMetres);
+        Assert.Equal(250, environment.LastRequest.ManualGroundElevationOverrideMetres);
     }
 
     private sealed record FakeDevice(LocationResolution? Result) : IDeviceLocationProvider
@@ -197,6 +309,32 @@ public sealed class LocationAndCatalogueTests
     {
         public Task<WeatherResult> GetWeatherAsync(WeatherRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new WeatherResult(DataState.Error, null, "Offline"));
+    }
+    private sealed class FakePlannerEnvironment(IHorizonService horizons) : IPlannerEnvironmentService
+    {
+        public TerrainProfileRequest? LastRequest { get; private set; }
+        public async Task<PlannerEnvironmentSnapshot> GetSnapshotAsync(GeoCoordinate observer,
+            CancellationToken cancellationToken) =>
+            await GetSnapshotAsync(observer, new TerrainProfileRequest(), cancellationToken);
+
+        public async Task<PlannerEnvironmentSnapshot> GetSnapshotAsync(GeoCoordinate observer,
+            TerrainProfileRequest terrainRequest, CancellationToken cancellationToken)
+        {
+            LastRequest = terrainRequest;
+            var horizon = await horizons.GetProfileAsync(observer, terrainRequest, cancellationToken);
+            return new PlannerEnvironmentSnapshot(observer,
+                EnvironmentalValue<double>.Unavailable("ground", "test", "Unavailable"),
+                EnvironmentalValue<LandCoverClass>.Unavailable("cover", "test", "Unavailable"),
+                EnvironmentalValue<SettlementRaster>.Unavailable("settlement", "test", "Unavailable"),
+                horizon, SystemClock.Instance.GetCurrentInstant());
+        }
+    }
+    private sealed class UnavailableHorizon : IHorizonService
+    {
+        public Task<TerrainHorizonProfile> GetProfileAsync(GeoCoordinate observer,
+            TerrainProfileRequest request, CancellationToken cancellationToken) => Task.FromResult(
+            new TerrainHorizonProfile(observer, [], false, "Environmental elevation unavailable",
+                SystemClock.Instance.GetCurrentInstant()));
     }
     private sealed class CountingAstronomy : IAstronomyService
     {

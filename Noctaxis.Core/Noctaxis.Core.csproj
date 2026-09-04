@@ -6,6 +6,7 @@
     <PackageReference Include="NodaTime" />
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="Hjg.Pngcs" />
+    <PackageReference Include="BitMiracle.LibTiff.NET" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Data\OpenNGC-NGC.csv" />

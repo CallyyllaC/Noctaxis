@@ -37,11 +37,12 @@
                 WindowDecorationProperties.ElementRole="MaximizeButton"
                 ToolTip.Tip="Maximize"
                 AutomationProperties.Name="Maximize or restore window" />
-        <Button Grid.Column="3"
+        <Button x:Name="CloseWindowButton"
+                Grid.Column="3"
                 Classes="titleBarButton titleBarClose"
                 Content="×"
                 Click="CloseWindowClick"
-                WindowDecorationProperties.ElementRole="CloseButton"
+                WindowDecorationProperties.ElementRole="User"
                 ToolTip.Tip="Close"
                 AutomationProperties.Name="Close window" />
       </Grid>
@@ -74,7 +75,30 @@
                                       Snapshot="{Binding Snapshot}"
                                       FramingGuide="{Binding CameraFramingGuide}"
                                       FramingVisibility="{Binding CameraFramingVisibility}"
-                                      FramingSettings="{Binding CameraFramingMapSettings}" />
+                                      FramingSettings="{Binding CameraFramingMapSettings}"
+                                       PinActivity="{Binding PlannerPinActivity}"
+                                       ShowCelestialOverlays="{Binding CelestialOverlaysReady}"
+                                       ShowCameraOverlay="{Binding CameraOverlayReady}"
+                                       ShowTerrainDebug="{Binding ShowTerrainDebugOverlay}" />
+            <Border x:Name="PlannerRefreshStrip"
+                    Background="#E6101722"
+                    BorderBrush="#34465B"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10,7"
+                    Margin="12,12,72,0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Top"
+                    IsHitTestVisible="False"
+                    IsVisible="{Binding IsPlannerRefreshing}">
+              <Grid RowDefinitions="Auto,3" RowSpacing="5">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+                  <TextBlock Text="PLANNER" FontSize="10" FontWeight="SemiBold" LetterSpacing="1.1" Foreground="#8F80D8" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding PlannerRefreshStatusText}" FontSize="11" Foreground="#D4DCE8" TextTrimming="CharacterEllipsis" />
+                </Grid>
+                <ProgressBar x:Name="PlannerRefreshProgressBar" Grid.Row="1" Minimum="0" Maximum="1" Value="{Binding PlannerRefreshProgress}" Height="3" />
+              </Grid>
+            </Border>
             <Border Background="#D90F151F" CornerRadius="7" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12">
               <StackPanel>
                 <TextBlock Text="Planning pin preview" Foreground="#91A0B4" FontSize="11" />
@@ -82,6 +106,24 @@
               </StackPanel>
             </Border>
             <Button Content="Toggle inspector" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" Command="{Binding ToggleInspectorCommand}" />
+            <Border Background="#F00B111A" BorderBrush="#6A91A6C0" BorderThickness="1" CornerRadius="6"
+                    Padding="10" Margin="12,52,12,12" HorizontalAlignment="Left" VerticalAlignment="Top"
+                    MaxWidth="520" IsVisible="{Binding ShowTerrainDebugOverlay}">
+              <Grid RowDefinitions="Auto,300,*" RowSpacing="7">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                  <TextBlock Text="Terrain diagnostics" FontWeight="SemiBold" Foreground="#E5EDF7"/>
+                  <Button Grid.Column="1" Content="Copy terrain debug snapshot" Click="CopyTerrainDebugClick" Padding="8,3"/>
+                </Grid>
+                <controls:TerrainDebugMiniMap Grid.Row="1" Width="300" Height="300"
+                                              HorizontalAlignment="Left"
+                                              Profile="{Binding TerrainDebugProfile}"
+                                              CentreBearingDegrees="{Binding TerrainDebugBearing}"
+                                              HorizontalFieldOfViewDegrees="{Binding TerrainDebugHorizontalFieldOfView}"/>
+                <ScrollViewer Grid.Row="2" MaxHeight="260" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                  <TextBlock Text="{Binding TerrainDebugText}" FontFamily="Consolas" FontSize="10" Foreground="#D3DFEC" TextWrapping="Wrap"/>
+                </ScrollViewer>
+              </Grid>
+            </Border>
           </Grid>
 
           <Border Grid.Column="1" MinWidth="360" MaxWidth="460" Background="#101620" BorderBrush="#273142" BorderThickness="1,0,0,0" IsVisible="{Binding IsInspectorOpen}">
@@ -97,35 +139,17 @@
                       <StackPanel><TextBlock Text="Latitude" Classes="fieldLabel"/><NumericUpDown Value="{Binding Latitude}" Minimum="-90" Maximum="90" Increment="0.0001" FormatString="0.00000" MinWidth="135"/></StackPanel>
                       <StackPanel Grid.Column="1"><TextBlock Text="Longitude" Classes="fieldLabel"/><NumericUpDown Value="{Binding Longitude}" Minimum="-180" Maximum="180" Increment="0.0001" FormatString="0.00000" MinWidth="135"/></StackPanel>
                     </Grid>
-                    <TextBlock Text="Observer elevation" Classes="fieldLabel"/>
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding Elevation}" Minimum="-500" Maximum="9000" Increment="1" FormatString="0" MinWidth="150" ToolTip.Tip="Observer elevation relative to mean sea level"/><TextBlock Grid.Column="1" Text="m above sea level" VerticalAlignment="Center"/></Grid>
-                    <TextBlock Text="Time zone" Classes="fieldLabel"/><TextBox Text="{Binding TimeZoneId}" IsReadOnly="True" />
+                    <TextBlock Text="Ground elevation above sea level" Classes="fieldLabel"/>
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown x:Name="PlannerGroundElevation" Value="{Binding Elevation, Mode=OneWay}" Minimum="-12000" Maximum="9000" Increment="1" FormatString="0.0" MinWidth="150" IsReadOnly="True" ShowButtonSpinner="False" ToolTip.Tip="Terrain-derived local ground elevation relative to mean sea level"/><TextBlock Grid.Column="1" Text="m ASL" VerticalAlignment="Center"/></Grid>
+                    <TextBlock Text="{Binding GroundElevationSourceText}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+                    <TextBlock Text="{Binding EffectiveObserverAltitudeText}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+                    <Button Classes="secondaryAction" Content="Reset to terrain elevation" Command="{Binding ResetGroundElevationCommand}" IsVisible="{Binding IsElevationManualOverride}" IsEnabled="{Binding CanResetGroundElevation}" HorizontalAlignment="Left"/>
                     <WrapPanel><Button Content="Save or update location" Command="{Binding SaveLocationCommand}" Margin="0,0,6,6"/><Button Classes="destructive" Content="Delete saved location" Command="{Binding DeleteLocationCommand}" Margin="0,0,6,6"/></WrapPanel>
                   </StackPanel>
                 </Expander>
 
-                <Expander Header="Planning target" IsExpanded="True">
+                <Expander Header="Selected targets" IsExpanded="True">
                   <StackPanel Spacing="8" Margin="0,10,0,0">
-                    <TextBlock Text="Add a catalogue object" Classes="fieldLabel"/><TextBox Text="{Binding CelestialSearch.Query}" PlaceholderText="Search local catalogue, M31, NGC…" />
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                      <ComboBox ItemsSource="{Binding CelestialSearch.ObjectTypes}" SelectedItem="{Binding CelestialSearch.SelectedObjectType}">
-                        <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
-                      </ComboBox>
-                      <Button Grid.Column="1" Classes="secondaryAction" Content="Reset filters" Command="{Binding CelestialSearch.ResetFiltersCommand}" IsEnabled="{Binding CelestialSearch.HasActiveFilters}"/>
-                    </Grid>
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-                      <ComboBox ItemsSource="{Binding CelestialSearch.Constellations}" SelectedItem="{Binding CelestialSearch.SelectedConstellation}"/>
-                      <ComboBox Grid.Column="1" ItemsSource="{Binding CelestialSearch.CatalogueFamilies}" SelectedItem="{Binding CelestialSearch.SelectedCatalogueFamily}"/>
-                    </Grid>
-                    <ProgressBar IsIndeterminate="True" IsVisible="{Binding CelestialSearch.IsSearching}"/>
-                    <TextBlock Text="{Binding CelestialSearch.EmptyStateMessage}" IsVisible="{Binding CelestialSearch.ShowEmptyState}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
-                    <ItemsControl ItemsSource="{Binding CelestialSearch.Results}">
-                      <ItemsControl.ItemTemplate><DataTemplate>
-                        <Button Command="{Binding DataContext.AddCelestialObjectCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" HorizontalContentAlignment="Left" Margin="0,0,0,4">
-                          <StackPanel><TextBlock Text="{Binding DisplayName}" /><TextBlock Text="{Binding PrimaryIdentifier}" Foreground="#8794A7" FontSize="11" /></StackPanel>
-                        </Button>
-                      </DataTemplate></ItemsControl.ItemTemplate>
-                    </ItemsControl>
                     <ItemsControl ItemsSource="{Binding CelestialObjects}">
                       <ItemsControl.ItemTemplate><DataTemplate>
                         <Border BorderBrush="#2C3748" BorderThickness="0,0,0,1" Padding="0,7">
@@ -141,7 +165,6 @@
                     </ItemsControl>
                     <TextBlock Text="{Binding VisibleCelestialCountText}" FontWeight="SemiBold" />
                     <TextBlock Text="{Binding CelestialLimitMessage}" Foreground="#E28B8B" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding CelestialSearch.Attribution}" FontSize="10" Foreground="#748196" />
                     <TextBlock Text="Solid line: primary target · dashed lines: visible secondary objects" FontSize="10" Foreground="#7F8B9D" TextWrapping="Wrap" />
                   </StackPanel>
                 </Expander>
@@ -152,7 +175,14 @@
                       <StackPanel><TextBlock Text="Azimuth" Classes="fieldLabel"/><TextBlock Classes="metric" Text="{Binding AzimuthText}" /></StackPanel>
                       <StackPanel Grid.Column="1"><TextBlock Text="Altitude" Classes="fieldLabel"/><TextBlock Classes="metric" Text="{Binding AltitudeText}" /></StackPanel>
                     </Grid>
-                    <TextBlock Text="{Binding HorizonStatus}" TextWrapping="Wrap" />
+                    <StackPanel Spacing="3">
+                      <TextBlock Text="Visibility" Classes="fieldLabel"/>
+                      <TextBlock Text="{Binding HorizonStatus}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="5" IsVisible="{Binding HasTargetLocalHorizonDetails}">
+                      <TextBlock Text="Local horizon"/><TextBlock Grid.Column="1" Text="{Binding TargetLocalHorizonText}"/>
+                      <TextBlock Grid.Row="1" Text="{Binding TargetTerrainMarginLabel}"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TargetTerrainMarginText}"/>
+                    </Grid>
                     <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
                       <TextBlock Text="Rise"/><TextBlock Grid.Column="1" Text="{Binding RiseText}"/><TextBlock Grid.Row="1" Text="Transit"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TransitText}"/><TextBlock Grid.Row="2" Text="Set"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SetText}"/>
                     </Grid>
@@ -163,35 +193,47 @@
 
                 <Expander Header="Camera and framing" IsExpanded="True">
                   <StackPanel Spacing="8" Margin="0,10,0,0">
-                    <TextBlock Text="Camera format" Classes="fieldLabel"/><ComboBox ItemsSource="{Binding SensorPresets}" SelectedItem="{Binding SelectedSensor}" MinWidth="190" />
+                    <TextBlock Text="Camera" Classes="fieldLabel"/>
+                    <ComboBox ItemsSource="{Binding Cameras}" SelectedItem="{Binding SelectedCamera}" MinWidth="190"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding DisplayName}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+                    <TextBlock Text="Lens" Classes="fieldLabel"/>
+                    <ComboBox ItemsSource="{Binding Lenses}" SelectedItem="{Binding SelectedLens}" MinWidth="190"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding DisplayName}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+                    <TextBlock Text="{Binding LensFocalRangeText}" Foreground="#8F9CAF" FontSize="11"/>
                     <TextBlock Text="Focal length" Classes="fieldLabel"/>
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding FocalLength}" Minimum="1" Maximum="2000" Increment="1" FormatString="0.0" MinWidth="150"/><TextBlock Grid.Column="1" Text="mm" VerticalAlignment="Center"/></Grid>
-                    <ItemsControl ItemsSource="{Binding FocalLengthPresets}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><Button Content="{Binding StringFormat='{}{0:0} mm'}" Command="{Binding DataContext.SelectFocalLengthCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Margin="0,0,5,5" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-                    <TextBlock Text="Orientation" Classes="fieldLabel"/><ComboBox ItemsSource="{Binding Orientations}" SelectedItem="{Binding SelectedOrientation}" MinWidth="190" />
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                      <Slider x:Name="FocalLengthSlider" Value="{Binding FocalLength}" Minimum="{Binding FocalLengthMinimum}" Maximum="{Binding FocalLengthMaximum}" IsEnabled="{Binding IsFocalLengthEditable}" TickFrequency="1" IsSnapToTickEnabled="True" MinWidth="150" AutomationProperties.Name="Focal length"/>
+                      <TextBlock Grid.Column="1" Text="{Binding FocalLength, StringFormat='{}{0:0.#} mm'}" VerticalAlignment="Center" MinWidth="52" TextAlignment="Right"/>
+                    </Grid>
+                    <TextBlock Text="Orientation" Classes="fieldLabel"/>
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                      <RadioButton x:Name="LandscapeOrientationRadioButton" Content="Landscape" GroupName="CameraOrientation" IsChecked="{Binding IsLandscapeOrientation}"/>
+                      <RadioButton x:Name="PortraitOrientationRadioButton" Content="Portrait" GroupName="CameraOrientation" IsChecked="{Binding IsPortraitOrientation}"/>
+                    </StackPanel>
                     <TextBlock Text="Field of view" Classes="fieldLabel"/><TextBlock Text="{Binding FieldOfViewText}" FontSize="22" FontWeight="SemiBold" />
-                    <TextBlock Text="Map overlay" Classes="section" Margin="0,5,0,0"/>
-                    <CheckBox Content="Show camera framing on map" IsChecked="{Binding IsCameraFramingOverlayVisible}" />
-                    <CheckBox Content="Show visibility limits on map" IsChecked="{Binding ShowFramingVisibilityLimits}" IsEnabled="{Binding IsCameraFramingOverlayVisible}" />
-                    <TextBlock Text="{Binding FramingVisibilityStatus}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap" />
-                    <Expander Header="Advanced sensor dimensions">
-                      <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,8,0,0">
-                        <StackPanel><TextBlock Text="Sensor width" Classes="fieldLabel"/><Grid ColumnDefinitions="*,Auto"><NumericUpDown Value="{Binding SensorWidth}" Minimum="1" Maximum="100" Increment="0.1" MinWidth="120"/><TextBlock Grid.Column="1" Text="mm" Margin="6,0,0,0" VerticalAlignment="Center"/></Grid></StackPanel>
-                        <StackPanel Grid.Column="1"><TextBlock Text="Sensor height" Classes="fieldLabel"/><Grid ColumnDefinitions="*,Auto"><NumericUpDown Value="{Binding SensorHeight}" Minimum="1" Maximum="100" Increment="0.1" MinWidth="120"/><TextBlock Grid.Column="1" Text="mm" Margin="6,0,0,0" VerticalAlignment="Center"/></Grid></StackPanel>
-                      </Grid>
-                    </Expander>
                     <TextBlock Text="Angular composition guide; not a simulation of terrain perspective." Foreground="#7F8B9D" FontSize="11" TextWrapping="Wrap" />
                   </StackPanel>
                 </Expander>
 
-                <Expander Header="Conditions" IsExpanded="False">
+                <Expander Header="Weather conditions" IsExpanded="False">
                   <StackPanel Spacing="8" Margin="0,10,0,0">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><TextBlock Text="Weather" Classes="section" VerticalAlignment="Center"/><Button Grid.Column="1" Classes="secondaryAction" Content="Refresh" Command="{Binding RefreshWeatherCommand}"/></Grid>
                     <TextBlock Text="{Binding WeatherSummary}" FontWeight="SemiBold" TextWrapping="Wrap"/>
                     <TextBlock Text="{Binding ConfiguredWeatherDetails}" Foreground="#A8B4C7" TextWrapping="Wrap"/>
-                    <Border Height="1" Background="#2C3748" Margin="0,5"/>
-                    <TextBlock Text="Terrain horizon" Classes="section"/>
-                    <TextBlock Text="{Binding TerrainStatus}" TextWrapping="Wrap"/>
-                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="5"><TextBlock Text="Terrain-clear estimate"/><TextBlock Grid.Column="1" Text="{Binding TerrainClearText}"/><TextBlock Grid.Row="1" Text="Terrain-set estimate"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding TerrainDropText}"/></Grid>
+                  </StackPanel>
+                </Expander>
+
+                <Expander Header="Terrain horizon" IsExpanded="False">
+                  <StackPanel Spacing="8" Margin="0,10,0,0">
+                    <TextBlock Text="{Binding TerrainStatus}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+                      <TextBlock Text="Current location"/><TextBlock Grid.Column="1" Text="{Binding TerrainCurrentLocationText}"/>
+                      <TextBlock Grid.Row="1" Text="Terrain data"/><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding GroundHorizonState}"/>
+                      <TextBlock Grid.Row="2" Text="Terrain horizon"/><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding GroundHorizonAngleText}"/>
+                    </Grid>
+                    <TextBlock Text="{Binding TerrainDatumText}" Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+                    <Border Height="1" Background="#273142" Margin="0,2"/>
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto" RowSpacing="5">
+                      <TextBlock Text="Terrain obstruction" FontWeight="SemiBold"/><TextBlock Grid.Column="1" Text="{Binding GroundObstructionText}" FontWeight="SemiBold"/>
+                    </Grid>
                   </StackPanel>
                 </Expander>
 
@@ -209,7 +251,6 @@
               <TextBlock Text="00:00" VerticalAlignment="Center"/><Slider Grid.Column="1" Minimum="0" Maximum="1439" TickFrequency="5" Value="{Binding PreviewMinutesOfDay}" PointerReleased="TimeSliderReleased"/><TextBlock Grid.Column="2" Text="{Binding TimeText}" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" MinWidth="55"/>
             </Grid>
             <controls:HorizonGraph Grid.Row="2" Snapshot="{Binding Snapshot}" />
-            <Border Grid.RowSpan="3" Background="#B30F151F" HorizontalAlignment="Center" VerticalAlignment="Top" CornerRadius="0,0,7,7" Padding="12,4"><StackPanel Orientation="Horizontal" Spacing="8"><ProgressBar Width="70" IsIndeterminate="True" IsVisible="{Binding IsBusy}"/><TextBlock Text="{Binding StatusMessage}" FontSize="11" Foreground="#A6B1C1" TextWrapping="Wrap"/></StackPanel></Border>
           </Grid>
         </Border>
       </Grid>
@@ -221,9 +262,57 @@
           <TabItem Header="General">
             <ScrollViewer><StackPanel Margin="16" Spacing="12" MaxWidth="760">
               <TextBlock Text="General settings" FontSize="28" FontWeight="SemiBold"/>
-              <TextBlock Text="Display units" Classes="section"/>
+              <TextBlock Text="Units" Classes="section"/>
               <TextBlock Text="Measurement system" Classes="fieldLabel"/><ComboBox ItemsSource="{Binding UnitsOptions}" SelectedItem="{Binding SettingsUnits}"/>
               <TextBlock Text="Metric uses °C, m/s, kilometres and millimetres. Imperial uses °F, mph, miles and inches. UK uses °C, mph, miles and millimetres." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+              <TextBlock Text="Support" Classes="section" Margin="0,12,0,0"/>
+              <!-- TODO: Implement Awoo / Ko-fi supporter flow and Foxfire cosmetic theme. -->
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Support on Ko-fi" IsEnabled="False" HorizontalAlignment="Left"/>
+                <TextBlock Text="Supporter features coming later." Foreground="#8F9CAF" FontSize="11" VerticalAlignment="Center"/>
+              </StackPanel>
+            </StackPanel></ScrollViewer>
+          </TabItem>
+          <TabItem Header="Equipment">
+            <ScrollViewer><StackPanel Margin="16" Spacing="12" MaxWidth="900">
+              <TextBlock Text="Equipment" FontSize="28" FontWeight="SemiBold"/>
+              <TextBlock Text="Observer" Classes="section"/>
+              <TextBlock Text="Camera height above ground" Classes="fieldLabel"/>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding SettingsCameraHeightAboveGroundMetres}" Minimum="0" Maximum="100" Increment="0.1" FormatString="0.0"/><TextBlock Grid.Column="1" Text="m AGL" VerticalAlignment="Center"/></Grid>
+              <TextBlock Text="This is the physical camera height above local ground. Noctaxis adds it once to the resolved ground elevation for terrain and horizon calculations." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+
+              <Grid ColumnDefinitions="*,Auto" Margin="0,12,0,0"><TextBlock Text="Cameras" Classes="section"/><Button Grid.Column="1" Content="Add camera" Command="{Binding AddCameraProfileCommand}"/></Grid>
+              <TextBlock Text="Sensor width and height are the canonical values used by field-of-view calculations." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+              <ItemsControl ItemsSource="{Binding EquipmentCameraEditors}"><ItemsControl.ItemTemplate><DataTemplate>
+                <Border BorderBrush="#2C3748" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                  <Grid ColumnDefinitions="*,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
+                    <StackPanel><TextBlock Text="Name" Classes="fieldLabel"/><TextBox Text="{Binding DisplayName}"/></StackPanel>
+                    <Button Grid.Column="2" Classes="compactDelete" Content="×" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove camera"/>
+                    <StackPanel Grid.Row="1"><TextBlock Text="Sensor width" Classes="fieldLabel"/><NumericUpDown Value="{Binding SensorWidthMillimetres}" Minimum="0.1" Maximum="100" Increment="0.1" FormatString="0.0"/></StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Text="Sensor height" Classes="fieldLabel"/><NumericUpDown Value="{Binding SensorHeightMillimetres}" Minimum="0.1" Maximum="100" Increment="0.1" FormatString="0.0"/></StackPanel>
+                    <StackPanel Grid.Row="2"><TextBlock Text="Manufacturer (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Manufacturer}"/></StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1"><TextBlock Text="Model (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Model}"/></StackPanel>
+                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="{Binding ValidationMessage}" Foreground="#E28B8B" TextWrapping="Wrap"/>
+                  </Grid>
+                </Border>
+              </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+
+              <Grid ColumnDefinitions="*,Auto" Margin="0,12,0,0"><TextBlock Text="Lenses" Classes="section"/><Button Grid.Column="1" Content="Add lens" Command="{Binding AddLensProfileCommand}"/></Grid>
+              <TextBlock Text="A prime uses the same minimum and maximum focal length. A zoom exposes the configured range in Planner." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+              <ItemsControl ItemsSource="{Binding EquipmentLensEditors}"><ItemsControl.ItemTemplate><DataTemplate>
+                <Border BorderBrush="#2C3748" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                  <Grid ColumnDefinitions="*,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="7">
+                    <StackPanel><TextBlock Text="Name" Classes="fieldLabel"/><TextBox Text="{Binding DisplayName}"/></StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding TypeText}" Foreground="#8F9CAF" VerticalAlignment="Center"/>
+                    <Button Grid.Column="2" Classes="compactDelete" Content="×" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove lens"/>
+                    <StackPanel Grid.Row="1"><TextBlock Text="Minimum focal length" Classes="fieldLabel"/><NumericUpDown Value="{Binding MinimumFocalLengthMillimetres}" Minimum="0.1" Maximum="2000" Increment="1" FormatString="0.0"/></StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Text="Maximum focal length" Classes="fieldLabel"/><NumericUpDown Value="{Binding MaximumFocalLengthMillimetres}" Minimum="0.1" Maximum="2000" Increment="1" FormatString="0.0"/></StackPanel>
+                    <StackPanel Grid.Row="2"><TextBlock Text="Manufacturer (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Manufacturer}"/></StackPanel>
+                    <StackPanel Grid.Row="2" Grid.Column="1"><TextBlock Text="Model (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Model}"/></StackPanel>
+                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="{Binding ValidationMessage}" Foreground="#E28B8B" TextWrapping="Wrap"/>
+                  </Grid>
+                </Border>
+              </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
             </StackPanel></ScrollViewer>
           </TabItem>
           <TabItem Header="Time">
@@ -240,15 +329,13 @@
           <TabItem Header="Data">
             <ScrollViewer><StackPanel Margin="16" Spacing="12" MaxWidth="760">
               <TextBlock Text="Cache and local data" FontSize="28" FontWeight="SemiBold"/>
-              <TextBlock Text="Terrain elevation data" Classes="section"/>
-              <TextBlock Text="SRTM .hgt directory" Classes="fieldLabel"/>
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><TextBox Text="{Binding SettingsDemDirectory}" PlaceholderText="Folder containing .hgt tiles"/><Button Grid.Column="1" Content="Choose..." Command="{Binding ChooseDemDirectoryCommand}"/></Grid>
-              <TextBlock Text="Noctaxis reads user-supplied 1201 × 1201 or 3601 × 3601 HGT files locally. Leaving this blank uses the flat-horizon fallback." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
+              <TextBlock Text="Environmental source data" Classes="section"/>
+              <TextBlock Text="Mapzen/Tilezen Terrarium terrain, ESA WorldCover and WSF settlement tiles are downloaded on demand and shared between nearby locations. Noctaxis remains usable when a layer is unavailable." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
               <TextBlock Text="Saved location map images" Classes="section" Margin="0,16,0,0"/>
               <TextBlock Text="Each location keeps a clean source image and processed card artwork with its original map attribution." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button Content="Reapply map image style" Command="{Binding ReapplySavedLocationMapStylesCommand}"/>
-                <Button Content="Refresh all building caches" Command="{Binding RefreshSavedLocationBuildingCachesCommand}"/>
+                <Button Content="Refresh WSF settlement layers" Command="{Binding RefreshSavedLocationSettlementCachesCommand}"/>
                 <Button Content="Regenerate all map images" Command="{Binding RefreshSavedLocationThumbnailsCommand}"/>
                 <ProgressBar Width="90" IsIndeterminate="True" IsVisible="{Binding IsRefreshingLocationThumbnails}" VerticalAlignment="Center"/>
               </StackPanel>
@@ -259,6 +346,8 @@
             <ScrollViewer><StackPanel Margin="16" Spacing="12" MaxWidth="760">
               <TextBlock Text="Map overlay appearance" FontSize="28" FontWeight="SemiBold"/>
               <TextBlock Text="Camera framing overlay" Classes="section"/>
+              <CheckBox Content="Terrain debug overlay" IsChecked="{Binding SettingsTerrainDebugOverlay}"/>
+              <TextBlock Text="Developer diagnostics showing the production DEM samples, water/no-data policy and winning horizon obstruction. Default: off." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
               <CheckBox Content="Show camera framing on map" IsChecked="{Binding SettingsCameraFramingOverlayVisible}"/>
               <CheckBox Content="Show weather and terrain visibility limits" IsChecked="{Binding SettingsShowFramingVisibilityLimits}" IsEnabled="{Binding SettingsCameraFramingOverlayVisible}"/>
               <StackPanel Spacing="8" IsEnabled="{Binding SettingsCameraFramingOverlayVisible}">
@@ -267,6 +356,9 @@
                 <TextBlock Text="Use 0% for transparent boundaries only. Higher values shade the visible camera frame while retaining map detail." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
                 <TextBlock Text="Boundary line thickness" Classes="fieldLabel"/>
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding SettingsFramingLineThickness}" Minimum="0.5" Maximum="5" Increment="0.25" FormatString="0.00"/><TextBlock Grid.Column="1" Text="display units" VerticalAlignment="Center"/></Grid>
+                <TextBlock Text="Terrain cast angular detail" Classes="fieldLabel"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding SettingsTerrainCastAngularDetailDegrees}" Minimum="1" Maximum="45" Increment="1" FormatString="0"/><TextBlock Grid.Column="1" Text="degrees" VerticalAlignment="Center"/></Grid>
+                <TextBlock Text="Controls the maximum angular spacing between terrain line-of-sight samples across the camera cone. Lower values improve terrain accuracy but require more processing." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
               </StackPanel>
             </StackPanel></ScrollViewer>
           </TabItem>
@@ -277,24 +369,36 @@
               <TextBlock Text="Cache distance" Classes="fieldLabel"/><Grid ColumnDefinitions="*,Auto" ColumnSpacing="8"><NumericUpDown Value="{Binding SettingsWeatherCacheDistance}" Minimum="0" Maximum="100" Increment="0.5"/><TextBlock Grid.Column="1" Text="kilometres" VerticalAlignment="Center"/></Grid>
               <TextBlock Text="Forecasts are reused only within this radius and for less than ten minutes. Manual and export refreshes bypass the cache." Foreground="#8F9CAF" FontSize="11" TextWrapping="Wrap"/>
               <TextBlock Text="Requested, displayed and exported fields" Classes="section" Margin="0,12,0,0"/>
-              <ItemsControl ItemsSource="{Binding WeatherFieldOptions}"><ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="290"/></ItemsPanelTemplate></ItemsControl.ItemsPanel><ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Label}" IsChecked="{Binding IsEnabled}" Margin="0,0,8,8"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+              <ItemsControl ItemsSource="{Binding WeatherFieldGroups}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <StackPanel Spacing="6" Margin="0,0,0,8">
+                      <TextBlock Text="{Binding Label}" FontWeight="SemiBold" FontSize="15"/>
+                      <ItemsControl ItemsSource="{Binding Fields}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel ItemWidth="260"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate><DataTemplate><CheckBox Content="{Binding Label}" IsChecked="{Binding IsEnabled}" Margin="0,0,8,6"/></DataTemplate></ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel></ScrollViewer>
           </TabItem>
           <TabItem Header="Celestial objects">
             <ScrollViewer><StackPanel Margin="16" Spacing="10" MaxWidth="900">
               <TextBlock Text="Configured celestial objects" FontSize="28" FontWeight="SemiBold"/>
               <TextBlock Text="Search the bundled OpenNGC catalogue, then manage the smaller list available in Planner." Foreground="#9AA8BA" TextWrapping="Wrap"/>
-              <TextBox Text="{Binding CelestialSearch.Query}" PlaceholderText="Search name, alias, M31, NGC 224..."/>
+              <TextBox Text="{Binding SettingsCelestialSearch.Query}" PlaceholderText="Search name, alias, M31, NGC 224..."/>
               <Grid ColumnDefinitions="*,*,*,Auto" ColumnSpacing="7">
-                <ComboBox ItemsSource="{Binding CelestialSearch.ObjectTypes}" SelectedItem="{Binding CelestialSearch.SelectedObjectType}"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
-                <ComboBox Grid.Column="1" ItemsSource="{Binding CelestialSearch.Constellations}" SelectedItem="{Binding CelestialSearch.SelectedConstellation}"/>
-                <ComboBox Grid.Column="2" ItemsSource="{Binding CelestialSearch.CatalogueFamilies}" SelectedItem="{Binding CelestialSearch.SelectedCatalogueFamily}"/>
-                <Button Grid.Column="3" Classes="secondaryAction" Content="Reset filters" Command="{Binding CelestialSearch.ResetFiltersCommand}" IsEnabled="{Binding CelestialSearch.HasActiveFilters}"/>
+                <ComboBox ItemsSource="{Binding SettingsCelestialSearch.ObjectTypes}" SelectedItem="{Binding SettingsCelestialSearch.SelectedObjectType}"><ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate></ComboBox>
+                <ComboBox Grid.Column="1" ItemsSource="{Binding SettingsCelestialSearch.Constellations}" SelectedItem="{Binding SettingsCelestialSearch.SelectedConstellation}"/>
+                <ComboBox Grid.Column="2" ItemsSource="{Binding SettingsCelestialSearch.DesignationFamilies}" SelectedItem="{Binding SettingsCelestialSearch.SelectedDesignationFamily}"/>
+                <Button Grid.Column="3" Classes="secondaryAction" Content="Reset filters" Command="{Binding SettingsCelestialSearch.ResetFiltersCommand}" IsEnabled="{Binding SettingsCelestialSearch.HasActiveFilters}"/>
               </Grid>
-              <ProgressBar IsIndeterminate="True" IsVisible="{Binding CelestialSearch.IsSearching}"/>
-              <TextBlock Text="{Binding CelestialSearch.EmptyStateMessage}" IsVisible="{Binding CelestialSearch.ShowEmptyState}" Foreground="#8F9CAF" TextWrapping="Wrap"/>
-              <ItemsControl ItemsSource="{Binding CelestialSearch.Results}"><ItemsControl.ItemTemplate><DataTemplate><Button Command="{Binding DataContext.AddCelestialObjectCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" HorizontalContentAlignment="Stretch" Margin="0,0,0,4"><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/><TextBlock Text="{Binding PrimaryIdentifier}" Foreground="#8794A7"/></StackPanel><TextBlock Grid.Column="1" Text="Add" VerticalAlignment="Center"/></Grid></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
-              <TextBlock Text="{Binding CelestialSearch.Attribution}" FontSize="10" Foreground="#748196"/>
+              <ProgressBar IsIndeterminate="True" IsVisible="{Binding SettingsCelestialSearch.IsSearching}"/>
+              <TextBlock Text="{Binding SettingsCelestialSearch.EmptyStateMessage}" IsVisible="{Binding SettingsCelestialSearch.ShowEmptyState}" Foreground="#8F9CAF" TextWrapping="Wrap"/>
+              <ItemsControl ItemsSource="{Binding SettingsCelestialSearch.Results}"><ItemsControl.ItemTemplate><DataTemplate><Button Command="{Binding DataContext.AddSettingsCelestialObjectCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" HorizontalContentAlignment="Stretch" Margin="0,0,0,4"><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold"/><TextBlock Text="{Binding PrimaryIdentifier}" Foreground="#8794A7"/></StackPanel><TextBlock Grid.Column="1" Text="Add" VerticalAlignment="Center"/></Grid></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+              <TextBlock Text="{Binding SettingsCelestialSearch.Attribution}" FontSize="10" Foreground="#748196"/>
               <TextBlock Text="{Binding VisibleCelestialCountText}" FontWeight="SemiBold"/>
               <TextBlock Text="{Binding CelestialLimitMessage}" Foreground="#E28B8B" TextWrapping="Wrap"/>
               <ItemsControl ItemsSource="{Binding CelestialObjects}"><ItemsControl.ItemTemplate><DataTemplate>

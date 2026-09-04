@@ -2,13 +2,12 @@ namespace Noctaxis.Desktop.Services;
 
 public enum MapRoadClassification { Motorway, ARoad, BRoad, OtherMajorRoad }
 public enum MapWaterwayClassification { River, Canal, Stream }
-public enum MapFeatureFetchStatus { Complete, CachedPrevious, PartialWithoutBuildings, Unavailable }
+public enum MapFeatureFetchStatus { Complete, CachedPrevious, Unavailable }
 
 public sealed record MapFeatureFetchOutcome(
     MapFeatureFetchStatus Status,
     int RoadCount,
     int WaterwayCount,
-    int BuildingCount,
     string? FailureCode,
     string? FailureReason,
     int? HttpStatusCode,
@@ -23,13 +22,13 @@ public sealed record MapFeatureFetchOutcome(
         int attemptCount = 1, string? failureCode = null, string? failureReason = null,
         int? httpStatusCode = null, bool timedOut = false, bool responseTooLarge = false,
         bool fallbackAttempted = false) => new(
-        status, data.Roads.Length, data.Waterways.Length, data.Buildings.Length, failureCode, failureReason,
+        status, data.Roads.Length, data.Waterways.Length, failureCode, failureReason,
         httpStatusCode, timedOut, responseTooLarge, false, attemptCount, DateTimeOffset.UtcNow, fallbackAttempted);
 
     public static MapFeatureFetchOutcome Failure(string code, string reason, int attemptCount = 1,
         int? httpStatusCode = null, bool timedOut = false, bool responseTooLarge = false,
         bool parseFailed = false, bool fallbackAttempted = false) => new(
-        MapFeatureFetchStatus.Unavailable, 0, 0, 0, code, reason, httpStatusCode, timedOut,
+        MapFeatureFetchStatus.Unavailable, 0, 0, code, reason, httpStatusCode, timedOut,
         responseTooLarge, parseFailed, attemptCount, DateTimeOffset.UtcNow, fallbackAttempted);
 }
 
@@ -58,16 +57,6 @@ public sealed record MapWaterwayFeature(
     string? Tunnel,
     string? Layer);
 
-public sealed record MapFeatureRing(MapFeatureCoordinate[] Geometry, bool IsInner = false);
-
-public sealed record MapBuildingFeature(
-    long Id,
-    string ElementType,
-    MapFeatureRing[] Rings,
-    string? Building,
-    string? Name,
-    MapFeatureCoordinate Centroid);
-
 public sealed record MapFeatureSourceMetadata(
     string ProviderId,
     string ProviderName,
@@ -86,10 +75,9 @@ public sealed record MapFeatureDataDocument(
     MapFeatureSourceMetadata Source,
     MapRoadFeature[] Roads,
     MapWaterwayFeature[] Waterways,
-    MapBuildingFeature[] Buildings,
     int IgnoredGeometryCount = 0)
 {
-    public int FeatureCount => Roads.Length + Waterways.Length + Buildings.Length;
+    public int FeatureCount => Roads.Length + Waterways.Length;
 }
 
 public sealed record MapFeatureFetchResult(MapFeatureDataDocument? Data, MapFeatureFetchOutcome Outcome)

@@ -12,7 +12,10 @@ licence texts remain available from the linked projects and NuGet packages.
 | NodaTime | 3.3.3 | UTC, timezone, local date, and DST correctness | Apache-2.0 |
 | CommunityToolkit.Mvvm | 8.4.0 | Observable MVVM state and commands | MIT |
 | SkiaSharp | 3.119.4 | PNG scouting-card and saved-location thumbnail rendering (also used by Mapsui) | MIT |
+| OpenCvSharp4 | 4.13.0.20260627 | .NET bindings for accelerated settlement-image kernels | Apache-2.0 |
+| OpenCV native runtime | 4.13.0.20260627 | Optimised CPU image filtering for settlement thumbnails | Apache-2.0 |
 | Hjg.Pngcs | 1.1.5 | Standards-compliant PNG text metadata read/write | Apache-2.0 |
+| BitMiracle.LibTiff.NET | 2.4.660 | GeoTIFF validation and environmental raster sampling | BSD-style libtiff licence |
 | Microsoft.Extensions.Configuration.Json | 10.0.0 | Desktop configuration primitives | MIT |
 | Microsoft.Extensions.DependencyInjection | 10.0.0 | Composition root | MIT |
 | Microsoft.Extensions.Http | 10.0.0 | `HttpClientFactory` weather, geocoding, and map-thumbnail clients | MIT |
@@ -32,13 +35,12 @@ bundled with Noctaxis. The required visible attribution is:
 `© OpenStreetMap contributors`. The application does not expose tile URL or
 attribution editing.
 
-Explicit saved-location map refreshes may also retrieve road and waterway
-geometry plus separately cached building centres from an OpenStreetMap Overpass
-API endpoint. This semantic data is cached with the exact saved-location artwork
-and its own `© OpenStreetMap contributors` provenance under the Open Database
-License (ODbL). No Overpass
-request is made during startup, ordinary navigation, cached image loading, or
-local style reapplication.
+Explicit saved-location map refreshes may also retrieve lightweight road and
+waterway geometry from an OpenStreetMap Overpass API endpoint. This semantic
+data is cached with the saved-location artwork and its own
+`© OpenStreetMap contributors` provenance under the Open Database License
+(ODbL). Bulk building requests are not part of normal Planner or saved-map
+operation. No Overpass request is made for terrain/environment acquisition.
 
 Weather forecasts are obtained from Open-Meteo and identified as such in the
 application. No Open-Meteo response data or credential is bundled in Noctaxis.
@@ -54,5 +56,17 @@ as `Noctaxis.Core/Data/OpenNGC-LICENSE.txt`, and attribution is visible beside
 catalogue search results. OpenNGC documents its contributing astronomical data
 sources in its upstream README and per-row `Sources` field.
 
-Noctaxis does not bundle SRTM data. Users are responsible for the provenance
-and terms of any `.hgt` files they configure.
+Environmental source tiles are not bundled. They are downloaded on demand into
+the application environmental-data cache:
+
+- Mapzen/Tilezen Terrain Tiles in Terrarium PNG format are accessed from the
+  public `elevation-tiles-prod` dataset. Tilezen's upstream attribution document
+  lists the regional source acknowledgements that apply to derived terrain use.
+- ESA WorldCover 2021 v200 is provided under CC BY 4.0. Required map/data
+  acknowledgement: `© ESA WorldCover project / Contains modified Copernicus
+  Sentinel data (2021) processed by ESA WorldCover consortium`.
+- World Settlement Footprint (WSF®) 3D v02 is provided by DLR/EOC under
+  CC BY 4.0 and supplies building fraction and average-height context.
+
+Noctaxis caches these source files locally but does not claim ownership,
+endorsement, or redistribution rights beyond the applicable source terms.

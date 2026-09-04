@@ -33,7 +33,6 @@ public sealed class OverpassMapFeatureDataService(
     public const int MaximumResponseBytes = 8 * 1024 * 1024;
     public const int MaximumElements = 60_000;
     public const int MaximumGeometryPoints = 500_000;
-    public const int MaximumBuildings = 20_000;
 
     public async Task<MapFeatureFetchResult> FetchAsync(Guid locationId, WebMercatorViewport viewport,
         CancellationToken cancellationToken)
@@ -45,7 +44,7 @@ public sealed class OverpassMapFeatureDataService(
             locationId, viewport.Bounds.South, viewport.Bounds.West, viewport.Bounds.North, viewport.Bounds.East);
         try
         {
-            var complete = await FetchCoreAsync(locationId, viewport, includeBuildings: false, attempt: 1,
+            var complete = await FetchCoreAsync(locationId, viewport, attempt: 1,
                 cancellationToken).ConfigureAwait(false);
             return new MapFeatureFetchResult(complete,
                 MapFeatureFetchOutcome.Success(complete, MapFeatureFetchStatus.Complete));
@@ -61,7 +60,7 @@ public sealed class OverpassMapFeatureDataService(
         }
     }
 
-    public static string BuildQuery(MapGeographicBounds bounds, bool includeBuildings)
+    public static string BuildQuery(MapGeographicBounds bounds)
     {
         var bbox = string.Join(',',
             Format(bounds.South), Format(bounds.West), Format(bounds.North), Format(bounds.East));
@@ -86,8 +85,7 @@ public sealed class OverpassMapFeatureDataService(
             throw new InvalidDataException("Overpass response did not contain an elements array.");
         if (elements.GetArrayLength() > MaximumElements)
             throw new MapFeatureRequestException("response_too_large",
-                "the Overpass response contained too many elements", responseTooLarge: true,
-                densityRelated: true);
+                "the Overpass response contained too many elements", responseTooLarge: true);
 
         var roads = new List<MapRoadFeature>();
         var waterways = new List<MapWaterwayFeature>();
@@ -126,13 +124,13 @@ public sealed class OverpassMapFeatureDataService(
             "https://opendatacommons.org/licenses/odbl/", endpointId, FeatureQueryVersion,
             fetchedAtUtc, viewport.Bounds);
         return new MapFeatureDataDocument(FeatureSchemaVersion, locationId, source,
-            roads.ToArray(), waterways.ToArray(), [], malformed);
+            roads.ToArray(), waterways.ToArray(), malformed);
     }
 
     private async Task<MapFeatureDataDocument> FetchCoreAsync(Guid locationId, WebMercatorViewport viewport,
-        bool includeBuildings, int attempt, CancellationToken cancellationToken)
+        int attempt, CancellationToken cancellationToken)
     {
-        var query = BuildQuery(viewport.Bounds, includeBuildings);
+        var query = BuildQuery(viewport.Bounds);
         using var request = new HttpRequestMessage(HttpMethod.Post, options.Endpoint)
         {
             Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["data"] = query })
@@ -147,20 +145,20 @@ public sealed class OverpassMapFeatureDataService(
         catch (TaskCanceledException ex) when (!cancellationToken.IsCancellationRequested)
         {
             throw new MapFeatureRequestException("timeout", "the Overpass request timed out", ex,
-                timedOut: true, densityRelated: true);
+                timedOut: true);
         }
         using (response)
         {
         logger.LogInformation(
-            "OSM feature query {QueryType} attempt {Attempt} returned {StatusCode} from {EndpointId} in {ElapsedMilliseconds} ms",
-            includeBuildings ? "full" : "without-buildings", attempt, (int)response.StatusCode,
+            "OSM road/water query attempt {Attempt} returned {StatusCode} from {EndpointId} in {ElapsedMilliseconds} ms",
+            attempt, (int)response.StatusCode,
             options.EndpointId, stopwatch.ElapsedMilliseconds);
         if (response.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.GatewayTimeout)
             throw new MapFeatureRequestException("timeout", $"Overpass returned {(int)response.StatusCode}",
-                httpStatusCode: (int)response.StatusCode, timedOut: true, densityRelated: true);
+                httpStatusCode: (int)response.StatusCode, timedOut: true);
         if (response.StatusCode == HttpStatusCode.RequestEntityTooLarge)
             throw new MapFeatureRequestException("response_too_large", "the Overpass response exceeded its size limit",
-                httpStatusCode: (int)response.StatusCode, responseTooLarge: true, densityRelated: true);
+                httpStatusCode: (int)response.StatusCode, responseTooLarge: true);
         if (!response.IsSuccessStatusCode)
             throw new MapFeatureRequestException("http_error", $"Overpass returned HTTP {(int)response.StatusCode}",
                 httpStatusCode: (int)response.StatusCode);
@@ -183,8 +181,8 @@ public sealed class OverpassMapFeatureDataService(
         if (parsed.FeatureCount == 0)
             throw new MapFeatureRequestException("no_usable_features", "no usable map features were returned");
         logger.LogInformation(
-            "OSM features parsed for {LocationId}: {RoadCount} roads, {WaterwayCount} waterways, {BuildingCount} buildings, {IgnoredGeometryCount} malformed; {ResponseBytes} bytes",
-            locationId, parsed.Roads.Length, parsed.Waterways.Length, parsed.Buildings.Length,
+            "OSM features parsed for {LocationId}: {RoadCount} roads, {WaterwayCount} waterways, {IgnoredGeometryCount} malformed; {ResponseBytes} bytes",
+            locationId, parsed.Roads.Length, parsed.Waterways.Length,
             parsed.IgnoredGeometryCount, bytes.Length);
         return parsed;
         }
@@ -194,8 +192,7 @@ public sealed class OverpassMapFeatureDataService(
     {
         if (content.Headers.ContentLength > MaximumResponseBytes)
             throw new MapFeatureRequestException("response_too_large",
-                "the Overpass response exceeded the configured byte limit", responseTooLarge: true,
-                densityRelated: true);
+                "the Overpass response exceeded the configured byte limit", responseTooLarge: true);
         await using var stream = await content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
         using var output = new MemoryStream();
         var buffer = new byte[16 * 1024];
@@ -205,8 +202,7 @@ public sealed class OverpassMapFeatureDataService(
             if (read == 0) break;
             if (output.Length + read > MaximumResponseBytes)
                 throw new MapFeatureRequestException("response_too_large",
-                    "the Overpass response exceeded the configured byte limit", responseTooLarge: true,
-                    densityRelated: true);
+                    "the Overpass response exceeded the configured byte limit", responseTooLarge: true);
             output.Write(buffer, 0, read);
         }
         return output.ToArray();
@@ -271,8 +267,7 @@ public sealed class OverpassMapFeatureDataService(
                 continue;
             if (++totalPoints > MaximumGeometryPoints)
                 throw new MapFeatureRequestException("response_too_large",
-                    "the Overpass response contained too many geometry points", responseTooLarge: true,
-                    densityRelated: true);
+                    "the Overpass response contained too many geometry points", responseTooLarge: true);
             values.Add(new MapFeatureCoordinate(lat, lon));
         }
         return values.ToArray();
@@ -315,7 +310,7 @@ public sealed class MapFeatureRequestException : IOException
 {
     public MapFeatureRequestException(string code, string safeReason, Exception? inner = null,
         int? httpStatusCode = null, bool timedOut = false, bool responseTooLarge = false,
-        bool parseFailed = false, bool densityRelated = false)
+        bool parseFailed = false)
         : base(safeReason, inner)
     {
         Code = code;
@@ -324,7 +319,6 @@ public sealed class MapFeatureRequestException : IOException
         TimedOut = timedOut;
         ResponseTooLarge = responseTooLarge;
         ParseFailed = parseFailed;
-        DensityRelated = densityRelated;
     }
 
     public string Code { get; }
@@ -333,5 +327,4 @@ public sealed class MapFeatureRequestException : IOException
     public bool TimedOut { get; }
     public bool ResponseTooLarge { get; }
     public bool ParseFailed { get; }
-    public bool DensityRelated { get; }
 }

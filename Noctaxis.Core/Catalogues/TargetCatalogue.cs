@@ -7,15 +7,16 @@ using Noctaxis.Core.Domain;
 namespace Noctaxis.Core.Catalogues;
 
 public sealed record CatalogueSearchQuery(string Text = "", AstralTargetCategory? ObjectType = null,
-    string? Constellation = null, string? CatalogueFamily = null);
+    string? Constellation = null, string? DesignationFamily = null);
 
 public interface ITargetCatalogue
 {
     IReadOnlyList<AstralTarget> Targets { get; }
     IReadOnlyList<AstralTargetCategory> ObjectTypes { get; }
     IReadOnlyList<string> Constellations { get; }
-    IReadOnlyList<string> CatalogueFamilies { get; }
+    IReadOnlyList<string> DesignationFamilies { get; }
     string? ResolveId(string id);
+    string? ResolveConfiguredTargetId(string persistedReference);
     AstralTarget Get(string id);
 }
 
@@ -34,37 +35,91 @@ public sealed class LocalTargetSearchService(ITargetCatalogue catalogue) : ITarg
     public Task<IReadOnlyList<AstralTarget>> SearchAsync(CatalogueSearchQuery query, int maximumResults, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var text = Normalise(query.Text);
+        var text = TargetSearchNormalization.NormalizeText(query.Text);
         if (text.Length is > 0 and < 2) return Task.FromResult<IReadOnlyList<AstralTarget>>([]);
         IEnumerable<AstralTarget> candidates = catalogue.Targets.Where(target => !target.IsSun && !target.IsMoon);
         if (query.ObjectType.HasValue) candidates = candidates.Where(target => target.Category == query.ObjectType);
         if (!string.IsNullOrWhiteSpace(query.Constellation)) candidates = candidates.Where(target => string.Equals(target.Constellation, query.Constellation, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(query.CatalogueFamily)) candidates = candidates.Where(target => Identifiers(target).Any(id => CatalogueFamily(id).Equals(query.CatalogueFamily, StringComparison.OrdinalIgnoreCase)));
-        if (text.Length >= 2) candidates = candidates.Where(target => SearchTerms(target).Any(term => Normalise(term).Contains(text, StringComparison.Ordinal)));
-        IReadOnlyList<AstralTarget> result = candidates.OrderBy(target => target.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+        if (!string.IsNullOrWhiteSpace(query.DesignationFamily))
+            candidates = candidates.Where(target => Identifiers(target).Any(id =>
+                TargetSearchNormalization.DesignationFamily(id).Equals(query.DesignationFamily, StringComparison.OrdinalIgnoreCase)));
+        var ranked = text.Length >= 2
+            ? candidates.Select(target => (Target: target, Rank: TargetSearchNormalization.MatchRank(target, query.Text)))
+                .Where(match => match.Rank.HasValue)
+            : candidates.Select(target => (Target: target, Rank: (int?)0));
+        IReadOnlyList<AstralTarget> result = ranked.OrderBy(match => match.Rank)
+            .ThenBy(match => match.Target.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(match => match.Target.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(match => match.Target)
             .Take(Math.Clamp(maximumResults, 1, 50)).ToArray();
         return Task.FromResult(result);
     }
 
-    private static IEnumerable<string> SearchTerms(AstralTarget target) =>
-        new[] { target.DisplayName, target.Id, target.PrimaryIdentifier, target.Constellation }
-            .Concat(target.Aliases ?? []).Concat(target.CatalogueIdentifiers ?? []).Where(value => !string.IsNullOrWhiteSpace(value))!;
     private static IEnumerable<string> Identifiers(AstralTarget target) =>
         new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? []).Where(value => !string.IsNullOrWhiteSpace(value))!;
+}
 
-    internal static string CatalogueFamily(string identifier)
+internal static class TargetSearchNormalization
+{
+    private sealed record Designation(string Family, string Number, string Suffix);
+
+    internal static string NormalizeText(string? value) =>
+        new((value ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+
+    internal static string DesignationFamily(string identifier) =>
+        TryParseDesignation(identifier, out var designation) ? designation.Family : "Other";
+
+    internal static int? MatchRank(AstralTarget target, string query)
     {
-        var compact = Normalise(identifier);
-        if (compact.StartsWith("NGC", StringComparison.Ordinal)) return "NGC";
-        if (compact.StartsWith("HIP", StringComparison.Ordinal)) return "HIP";
-        if (compact.StartsWith("CALDWELL", StringComparison.Ordinal) || compact.StartsWith('C') && compact.Length > 1 && char.IsDigit(compact[1])) return "Caldwell";
-        if (compact.StartsWith("IC", StringComparison.Ordinal)) return "IC";
-        if (compact.Length > 1 && compact[0] == 'M' && char.IsDigit(compact[1])) return "Messier";
-        if (compact.Length > 1 && compact[0] == 'B' && char.IsDigit(compact[1])) return "Barnard";
-        return "Other";
+        var normalizedQuery = NormalizeText(query);
+        if (normalizedQuery.Length == 0) return 0;
+        var identifiers = new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var aliases = (target.Aliases ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var normalizedDisplay = NormalizeText(target.DisplayName);
+
+        if (normalizedDisplay.Equals(normalizedQuery, StringComparison.Ordinal)) return 0;
+        if (identifiers.Any(value => value.Trim().Equals(query.Trim(), StringComparison.OrdinalIgnoreCase))) return 1;
+        if (identifiers.Any(value => NormalizeText(value).Equals(normalizedQuery, StringComparison.Ordinal)) ||
+            TryParseDesignation(query, out var queryDesignation) && identifiers.Any(value => SameDesignation(value, queryDesignation))) return 2;
+        if (normalizedDisplay.StartsWith(normalizedQuery, StringComparison.Ordinal) ||
+            identifiers.Any(value => NormalizeText(value).StartsWith(normalizedQuery, StringComparison.Ordinal))) return 3;
+        if (aliases.Any(value => NormalizeText(value).Equals(normalizedQuery, StringComparison.Ordinal))) return 4;
+        if (aliases.Any(value => NormalizeText(value).StartsWith(normalizedQuery, StringComparison.Ordinal)) ||
+            identifiers.Any(value => NormalizeText(value).Contains(normalizedQuery, StringComparison.Ordinal))) return 5;
+        return new[] { target.DisplayName, target.Id, target.Constellation }.Concat(aliases).Concat(identifiers)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Any(value => NormalizeText(value).Contains(normalizedQuery, StringComparison.Ordinal)) ? 6 : null;
     }
 
-    private static string Normalise(string? value) => new((value ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+    internal static bool IsExactDesignation(string value, string query) =>
+        TryParseDesignation(query, out var queryDesignation) && SameDesignation(value, queryDesignation);
+
+    private static bool SameDesignation(string value, Designation expected) =>
+        TryParseDesignation(value, out var actual) && actual == expected;
+
+    private static bool TryParseDesignation(string? value, out Designation designation)
+    {
+        designation = null!;
+        var compact = NormalizeText(value);
+        var families = new (string Prefix, string Family)[]
+        {
+            ("CALDWELL", "Caldwell"), ("BARNARD", "Barnard"), ("MESSIER", "Messier"),
+            ("NGC", "NGC"), ("HIP", "HIP"), ("IC", "IC"),
+            ("C", "Caldwell"), ("B", "Barnard"), ("M", "Messier")
+        };
+        foreach (var (prefix, family) in families)
+        {
+            if (!compact.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            var remainder = compact[prefix.Length..];
+            var digitCount = remainder.TakeWhile(char.IsDigit).Count();
+            if (digitCount == 0) continue;
+            var number = remainder[..digitCount].TrimStart('0');
+            designation = new Designation(family, number.Length == 0 ? "0" : number, remainder[digitCount..]);
+            return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>Offline catalogue populated from the unmodified OpenNGC CSV resources (CC-BY-SA-4.0).</summary>
@@ -72,17 +127,6 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
 {
     public const string Attribution = "OpenNGC · CC BY-SA 4.0";
     private static readonly Regex DesignationPattern = new("^(NGC|IC)(0*)([0-9]+)(.*)$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-    private static readonly IReadOnlyDictionary<string, string> LegacyIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["andromeda"] = "NGC0224", ["orion-nebula"] = "NGC1976", ["pleiades"] = "Mel022",
-        ["triangulum"] = "NGC0598", ["bodes-galaxy"] = "NGC3031", ["cigar-galaxy"] = "NGC3034",
-        ["whirlpool-galaxy"] = "NGC5194", ["sombrero-galaxy"] = "NGC4594", ["lagoon-nebula"] = "NGC6523",
-        ["eagle-nebula"] = "NGC6611", ["trifid-nebula"] = "NGC6514", ["dumbbell-nebula"] = "NGC6853",
-        ["ring-nebula"] = "NGC6720", ["crab-nebula"] = "NGC1952", ["north-america-nebula"] = "NGC7000",
-        ["heart-nebula"] = "IC1805", ["horsehead-nebula"] = "B033", ["beehive-cluster"] = "NGC2632",
-        ["double-cluster"] = "NGC0869", ["omega-centauri"] = "NGC5139", ["hercules-cluster"] = "NGC6205",
-        ["great-sagittarius-cluster"] = "NGC6656"
-    };
     private readonly IReadOnlyList<AstralTarget> _targets;
     private readonly IReadOnlyDictionary<string, AstralTarget> _byId;
     private readonly IReadOnlyDictionary<string, string> _openNgcNameToId;
@@ -100,23 +144,46 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
         ObjectTypes = loaded.Where(target => !target.IsSun && !target.IsMoon).Select(target => target.Category).Distinct().Order().ToArray();
         Constellations = loaded.Select(target => target.Constellation).Where(value => !string.IsNullOrWhiteSpace(value))
             .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.CurrentCultureIgnoreCase).ToArray()!;
-        CatalogueFamilies = loaded.SelectMany(target => new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? []))
-            .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => LocalTargetSearchService.CatalogueFamily(value!))
+        DesignationFamilies = loaded.SelectMany(target => new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? []))
+            .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => TargetSearchNormalization.DesignationFamily(value!))
             .Distinct(StringComparer.OrdinalIgnoreCase).Where(family => family != "Other").Order(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
     public IReadOnlyList<AstralTarget> Targets => _targets;
     public IReadOnlyList<AstralTargetCategory> ObjectTypes { get; }
     public IReadOnlyList<string> Constellations { get; }
-    public IReadOnlyList<string> CatalogueFamilies { get; }
+    public IReadOnlyList<string> DesignationFamilies { get; }
 
     public string? ResolveId(string id)
     {
-        if (_byId.ContainsKey(id)) return id;
-        if (LegacyIds.TryGetValue(id, out var oldName) && _openNgcNameToId.TryGetValue(oldName, out var migrated)) return migrated;
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        if (_byId.TryGetValue(id, out var direct)) return direct.Id;
         var compact = id.Replace(" ", string.Empty, StringComparison.Ordinal);
         if (_openNgcNameToId.TryGetValue(compact, out var openNgc)) return openNgc;
-        return _targets.FirstOrDefault(target => target.CatalogueIdentifiers?.Any(value => value.Equals(id, StringComparison.OrdinalIgnoreCase)) == true)?.Id;
+        var matches = _targets.Where(target => new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? [])
+            .Any(value => value?.Equals(id, StringComparison.OrdinalIgnoreCase) == true)).Take(2).ToArray();
+        return matches.Length == 1 ? matches[0].Id : null;
+    }
+
+    public string? ResolveConfiguredTargetId(string persistedReference)
+    {
+        if (string.IsNullOrWhiteSpace(persistedReference)) return null;
+        var resolved = ResolveId(persistedReference);
+        if (resolved is not null) return resolved;
+
+        var designationMatches = _targets.Where(target => new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Any(value => TargetSearchNormalization.IsExactDesignation(value!, persistedReference))).Take(2).ToArray();
+        if (designationMatches.Length == 1) return designationMatches[0].Id;
+
+        var normalized = TargetSearchNormalization.NormalizeText(persistedReference);
+        var displayMatches = _targets.Where(target =>
+            TargetSearchNormalization.NormalizeText(target.DisplayName).Equals(normalized, StringComparison.Ordinal)).Take(2).ToArray();
+        if (displayMatches.Length == 1) return displayMatches[0].Id;
+
+        var aliasMatches = _targets.Where(target => (target.Aliases ?? []).Any(alias =>
+            TargetSearchNormalization.NormalizeText(alias).Equals(normalized, StringComparison.Ordinal))).Take(2).ToArray();
+        return aliasMatches.Length == 1 ? aliasMatches[0].Id : null;
     }
 
     public AstralTarget Get(string id)
@@ -146,10 +213,12 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
             var designation = FormatDesignation(name);
             var commonNames = SplitValues(Field("Common names"));
             var identifiers = SplitValues(Field("Identifiers"));
+            var centralStarNames = SplitValues(Field("Cstar Names"));
             var catalogueIds = new[] { designation, messier, FormatNumbered("NGC", Field("NGC")), FormatNumbered("IC", Field("IC")) }
-                .Concat(identifiers).OfType<string>().Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+                .Concat(identifiers).Concat(centralStarNames).OfType<string>().Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var displayName = commonNames.FirstOrDefault() ?? (messier is not null ? $"{messier} · {designation}" : designation);
-            var aliases = commonNames.Skip(1).Concat(identifiers).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var aliases = commonNames.Skip(1).Concat(identifiers).Concat(centralStarNames).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var magnitude = ParseDouble(Field("V-Mag")) ?? ParseDouble(Field("B-Mag"));
             var major = ParseDouble(Field("MajAx"));
             var minor = ParseDouble(Field("MinAx"));
@@ -238,7 +307,7 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
         ["Lep"]="Lepus", ["Lib"]="Libra", ["Lup"]="Lupus", ["Lyn"]="Lynx", ["Lyr"]="Lyra", ["Men"]="Mensa", ["Mic"]="Microscopium", ["Mon"]="Monoceros",
         ["Mus"]="Musca", ["Nor"]="Norma", ["Oct"]="Octans", ["Oph"]="Ophiuchus", ["Ori"]="Orion", ["Pav"]="Pavo", ["Peg"]="Pegasus", ["Per"]="Perseus",
         ["Phe"]="Phoenix", ["Pic"]="Pictor", ["Psc"]="Pisces", ["PsA"]="Piscis Austrinus", ["Pup"]="Puppis", ["Pyx"]="Pyxis", ["Ret"]="Reticulum", ["Sge"]="Sagitta",
-        ["Sgr"]="Sagittarius", ["Sco"]="Scorpius", ["Scl"]="Sculptor", ["Sct"]="Scutum", ["Ser"]="Serpens", ["Sex"]="Sextans", ["Tau"]="Taurus", ["Tel"]="Telescopium",
+        ["Sgr"]="Sagittarius", ["Sco"]="Scorpius", ["Scl"]="Sculptor", ["Sct"]="Scutum", ["Ser"]="Serpens", ["Se1"]="Serpens Caput", ["Se2"]="Serpens Cauda", ["Sex"]="Sextans", ["Tau"]="Taurus", ["Tel"]="Telescopium",
         ["Tri"]="Triangulum", ["TrA"]="Triangulum Australe", ["Tuc"]="Tucana", ["UMa"]="Ursa Major", ["UMi"]="Ursa Minor", ["Vel"]="Vela", ["Vir"]="Virgo", ["Vol"]="Volans", ["Vul"]="Vulpecula"
     };
 
@@ -255,16 +324,4 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
             if (target.DeclinationDegrees is not >= -90 or > 90) throw new InvalidDataException($"OpenNGC target '{target.Id}' has invalid J2000 declination.");
         }
     }
-}
-
-/// <summary>Compatibility name retained for callers compiled against earlier Noctaxis builds; data is OpenNGC-backed.</summary>
-public sealed class EmbeddedTargetCatalogue : ITargetCatalogue
-{
-    private readonly OpenNgcTargetCatalogue _inner = new();
-    public IReadOnlyList<AstralTarget> Targets => _inner.Targets;
-    public IReadOnlyList<AstralTargetCategory> ObjectTypes => _inner.ObjectTypes;
-    public IReadOnlyList<string> Constellations => _inner.Constellations;
-    public IReadOnlyList<string> CatalogueFamilies => _inner.CatalogueFamilies;
-    public string? ResolveId(string id) => _inner.ResolveId(id);
-    public AstralTarget Get(string id) => _inner.Get(id);
 }

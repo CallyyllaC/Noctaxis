@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Environment;
 using Noctaxis.Desktop.Services;
 using SkiaSharp;
 
@@ -35,11 +38,11 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
-    public void OverpassQuery_UsesSouthWestNorthEastAndOnlyRequiredGeometry()
+    public void Overpass_BuildQuery_DoesNotRequestBuildings()
     {
         var bounds = new MapGeographicBounds(51.1, -2.2, 51.4, -1.8);
 
-        var query = OverpassMapFeatureDataService.BuildQuery(bounds, includeBuildings: false);
+        var query = OverpassMapFeatureDataService.BuildQuery(bounds);
 
         Assert.Contains("(51.1,-2.2,51.4,-1.8)", query);
         Assert.Contains("[out:json][timeout:25]", query);
@@ -50,6 +53,18 @@ public sealed class MapFeatureDataTests
         Assert.DoesNotContain("residential", query, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("key=", query, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("token", query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void SemanticFeatureContracts_ContainRoadsAndWaterwaysOnly()
+    {
+        var documentProperties = typeof(MapFeatureDataDocument).GetProperties().Select(value => value.Name).ToArray();
+        var outcomeProperties = typeof(MapFeatureFetchOutcome).GetProperties().Select(value => value.Name).ToArray();
+
+        Assert.Contains(nameof(MapFeatureDataDocument.Roads), documentProperties);
+        Assert.Contains(nameof(MapFeatureDataDocument.Waterways), documentProperties);
+        Assert.DoesNotContain(documentProperties, name => name.Contains("Building", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(outcomeProperties, name => name.Contains("Building", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -83,7 +98,33 @@ public sealed class MapFeatureDataTests
         Assert.DoesNotContain(data.Roads, road => road.Highway == "residential");
         Assert.Equal([MapWaterwayClassification.River, MapWaterwayClassification.Canal, MapWaterwayClassification.Stream],
             data.Waterways.Select(waterway => waterway.Classification));
-        Assert.Empty(data.Buildings);
+        Assert.Equal(data.Roads.Length + data.Waterways.Length, data.FeatureCount);
+    }
+
+    [Fact]
+    public void RoadWaterCache_RemainsReadableWithLegacyBuildingGeometryMember()
+    {
+        var viewport = Viewport();
+        var original = Features(viewport, roads:
+        [
+            new MapRoadFeature(7, "way", MapRoadClassification.ARoad,
+                Line(viewport, 80, 100, 820, 110), "primary", "A7", null, null, null, null)
+        ]);
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        var json = JsonNode.Parse(JsonSerializer.Serialize(original, options))!.AsObject();
+        json["buildings"] = new JsonArray(new JsonObject
+        {
+            ["id"] = 99,
+            ["elementType"] = "way",
+            ["rings"] = new JsonArray()
+        });
+
+        var restored = JsonSerializer.Deserialize<MapFeatureDataDocument>(json.ToJsonString(), options);
+
+        Assert.NotNull(restored);
+        Assert.Single(restored.Roads);
+        Assert.Equal("A7", restored.Roads[0].Reference);
+        Assert.Equal(OverpassMapFeatureDataService.FeatureSchemaVersion, restored.SchemaVersion);
     }
 
     [Fact]
@@ -159,7 +200,7 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
-    public async Task CoreOverpassClient_TimeoutDoesNotRetryBecauseBuildingsAreSeparate()
+    public async Task CoreOverpassClient_TimeoutDoesNotRetryOrInvokeAnotherFeaturePipeline()
     {
         var handler = new SequenceHandler(
             _ => throw new TaskCanceledException("timeout"),
@@ -176,7 +217,7 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
-    public async Task CoreOverpassClient_GatewayTimeoutRetainsHttpDiagnosticWithoutBuildingFallback()
+    public async Task CoreOverpassClient_GatewayTimeoutRetainsHttpDiagnosticWithoutFallbackQuery()
     {
         var handler = new SequenceHandler(
             _ => new HttpResponseMessage(HttpStatusCode.GatewayTimeout),
@@ -258,31 +299,21 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
-    public void SemanticRenderer_DenseBuildingsRemainRestrained()
+    public void SemanticRenderer_DenseWsfSettlementRemainsRestrained()
     {
         var viewport = Viewport();
-        var buildings = new List<MapBuildingFeature>();
-        var id = 1L;
+        var cells = new List<(int X, int Y, float Fraction, float Height)>();
         for (var y = 25; y < viewport.Height - 25; y += 12)
         for (var x = 25; x < viewport.Width - 25; x += 12)
         {
-            var ring = Ring(viewport, x, y, 6, 5);
-            buildings.Add(new MapBuildingFeature(id++, "way", [new MapFeatureRing(ring)], "yes", null,
-                ring[0] with
-                {
-                    Latitude = ring.Take(4).Average(point => point.Latitude),
-                    Longitude = ring.Take(4).Average(point => point.Longitude)
-                }));
+            cells.Add((x * 2, y * 2, .72f, 9));
         }
         var processor = new SavedLocationMapImageProcessor();
 
-        var centres = buildings.Select(building => new BuildingStarFeature(
-            building.ElementType, building.Id, building.Centroid.Latitude,
-            building.Centroid.Longitude, building.Building, null, building.Name)).ToArray();
-        var buildingDocument = Buildings(viewport, centres);
-        using var rendered = SKBitmap.Decode(processor.Process(DetailedSource(),
-            Features(viewport), buildingDocument, viewport, out var diagnostics));
+        using var rendered = SKBitmap.Decode(processor.ProcessSettlement(DetailedSource(),
+            Features(viewport), Settlement(viewport, cells), viewport, out var diagnostics));
 
+        Assert.NotNull(diagnostics);
         Assert.True(diagnostics.DensityCellCount > 100);
 
         var bright = 0;
@@ -295,41 +326,30 @@ public sealed class MapFeatureDataTests
             opaque++;
             if (.2126 * pixel.Red + .7152 * pixel.Green + .0722 * pixel.Blue > 185) bright++;
         }
-        Assert.True(bright / (double)opaque < .12, $"Dense buildings saturated {bright / (double)opaque:P1} of map pixels.");
+        Assert.True(bright / (double)opaque < .12,
+            $"Dense settlement saturated {bright / (double)opaque:P1} of map pixels.");
     }
 
     [Fact]
-    public void BuildingRenderer_IsolatedCentresProduceAlignedHabitationPoints()
+    public void SettlementRenderer_SparseOffPinCentreUsesDeterministicNearestFallback()
     {
         var viewport = Viewport();
-        var coordinate = viewport.Unproject(690, 180);
-        var buildings = Buildings(viewport,
-        [
-            new BuildingStarFeature("way", 1, coordinate.Latitude, coordinate.Longitude,
-                "house", 2, null)
-        ]);
+        var settlement = Settlement(viewport, [(690 * 2, 180 * 2, .8f, 8)]);
         var processor = new SavedLocationMapImageProcessor();
 
-        using var baseMap = SKBitmap.Decode(processor.Process(DetailedSource(), Features(viewport),
-            null, viewport, out _));
-        using var rendered = SKBitmap.Decode(processor.Process(DetailedSource(), Features(viewport),
-            buildings, viewport, out var diagnostics));
+        using var rendered = SKBitmap.Decode(processor.ProcessSettlement(DetailedSource(), Features(viewport),
+            settlement, viewport, out var diagnostics));
 
-        Assert.Equal(1, diagnostics.DensityCellCount);
-        var difference = 0;
-        for (var y = 60; y < 160; y++)
-        for (var x = 350; x < 480; x++)
-        {
-            var before = baseMap.GetPixel(x, y);
-            var after = rendered.GetPixel(x, y);
-            if (after.Red + after.Green + after.Blue > before.Red + before.Green + before.Blue + 15)
-                difference++;
-        }
-        Assert.True(difference > 2, "The isolated building did not produce a visible aligned point.");
+        Assert.NotNull(diagnostics);
+        Assert.True(diagnostics.DensityCellCount > 0);
+        Assert.Equal(1, diagnostics.ActiveSettlementCellCount);
+        Assert.True(diagnostics.PrimaryComponentSelected);
+        Assert.Equal(SavedLocationMapImageProcessor.ThumbnailWidth, rendered.Width);
+        Assert.Equal(SavedLocationMapImageProcessor.ThumbnailHeight, rendered.Height);
     }
 
     [Fact]
-    public void RoadRendering_IsUnchangedWhenBuildingLayerIsAbsent()
+    public void RoadRendering_IsUnchangedWhenSettlementLayerIsAbsent()
     {
         var viewport = Viewport();
         var featureData = Features(viewport, roads:
@@ -340,47 +360,44 @@ public sealed class MapFeatureDataTests
         var processor = new SavedLocationMapImageProcessor();
 
         var compatibilityOverload = processor.Process(DetailedSource(), featureData, viewport);
-        var separatedLayers = processor.Process(DetailedSource(), featureData, null, viewport, out var diagnostics);
+        var separatedLayers = processor.ProcessSettlement(DetailedSource(), featureData, null, viewport, out var diagnostics);
 
         Assert.Equal(compatibilityOverload, separatedLayers);
-        Assert.Equal(0, diagnostics.DensityCellCount);
+        Assert.Null(diagnostics);
     }
 
     private static WebMercatorViewport Viewport() => new(13, 256, 896, 504, 53.61, -0.43);
 
     private static MapFeatureDataDocument Features(WebMercatorViewport viewport,
-        MapRoadFeature[]? roads = null, MapWaterwayFeature[]? waterways = null,
-        MapBuildingFeature[]? buildings = null) => new(1, Guid.NewGuid(),
+        MapRoadFeature[]? roads = null, MapWaterwayFeature[]? waterways = null) => new(1, Guid.NewGuid(),
         new MapFeatureSourceMetadata("openstreetmap-overpass", "OpenStreetMap", "© OpenStreetMap contributors",
             "https://www.openstreetmap.org/copyright", "ODbL", "https://opendatacommons.org/licenses/odbl/",
             "test", 1, DateTimeOffset.UnixEpoch, viewport.Bounds),
-        roads ?? [], waterways ?? [], buildings ?? []);
+        roads ?? [], waterways ?? []);
 
-    private static BuildingFeatureDocument Buildings(WebMercatorViewport viewport,
-        BuildingStarFeature[] buildings) => new(
-        OverpassBuildingFeatureDataService.SchemaVersion,
-        Guid.NewGuid(),
-        viewport.CentreLatitude, viewport.CentreLongitude, viewport.Zoom, viewport.Width,
-        viewport.Height, viewport.Bounds,
-        new BuildingFeatureSourceMetadata(
-            "openstreetmap-overpass-buildings", "OpenStreetMap", "© OpenStreetMap contributors",
-            "https://www.openstreetmap.org/copyright", "Open Database License (ODbL)",
-            "https://opendatacommons.org/licenses/odbl/", "test",
-            OverpassBuildingFeatureDataService.QueryVersion, DateTimeOffset.UnixEpoch),
-        buildings, false, []);
+    private static SettlementRaster Settlement(WebMercatorViewport viewport,
+        IEnumerable<(int X, int Y, float Fraction, float Height)> cells)
+    {
+        var width = viewport.Width * SettlementDensityBuilder.Supersampling;
+        var height = viewport.Height * SettlementDensityBuilder.Supersampling;
+        var fractions = new float[width * height];
+        var heights = new float[fractions.Length];
+        foreach (var cell in cells)
+        {
+            fractions[cell.Y * width + cell.X] = cell.Fraction;
+            heights[cell.Y * width + cell.X] = cell.Height;
+        }
+        return new SettlementRaster("test-wsf", "v02",
+            new GeoRasterRequest(new GeoBounds(viewport.Bounds.South, viewport.Bounds.West,
+                viewport.Bounds.North, viewport.Bounds.East), width, height,
+                GeoRasterProjection.WebMercator), fractions, heights);
+    }
 
     private static MapFeatureCoordinate[] Line(WebMercatorViewport viewport, double x1, double y1, double x2, double y2)
     {
         var first = viewport.Unproject(x1, y1);
         var second = viewport.Unproject(x2, y2);
         return [new(first.Latitude, first.Longitude), new(second.Latitude, second.Longitude)];
-    }
-
-    private static MapFeatureCoordinate[] Ring(WebMercatorViewport viewport, double x, double y, double width, double height)
-    {
-        var pixels = new[] { (x, y), (x + width, y), (x + width, y + height), (x, y + height), (x, y) };
-        return pixels.Select(pixel => viewport.Unproject(pixel.Item1, pixel.Item2))
-            .Select(point => new MapFeatureCoordinate(point.Latitude, point.Longitude)).ToArray();
     }
 
     private static int CountPixels(SKBitmap bitmap, Func<SKColor, bool> predicate, bool excludePin)

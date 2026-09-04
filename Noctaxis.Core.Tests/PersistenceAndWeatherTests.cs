@@ -19,13 +19,20 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     public async Task SavedLocationSettingsAndSession_RoundTripThroughJson()
     {
         var now = Instant.FromUtc(2024, 6, 21, 22, 15);
-        var location = new SavedLocation(Guid.NewGuid(), "Durdle Door", new GeoCoordinate(50.621, -2.276, 18), "Europe/London", "Cliff viewpoint",
-            DateAddedUtc: new DateTimeOffset(2024, 6, 1, 12, 0, 0, TimeSpan.Zero));
+        var observerElevation = new ObserverElevationState(18, 25);
+        var location = new SavedLocation(Guid.NewGuid(), "Durdle Door", new GeoCoordinate(50.621, -2.276, 25), "Europe/London", "Cliff viewpoint",
+            DateAddedUtc: new DateTimeOffset(2024, 6, 1, 12, 0, 0, TimeSpan.Zero),
+            ObserverElevation: observerElevation);
         var session = new PlanningSession(location.Coordinate, now, location.TimeZoneId, "galactic-centre", new LensConfiguration(FocalLengthMillimetres: 20), location.Id,
-            [new("sun", true, 0), new("moon", false, 1), new("galactic-centre", true, 2)]);
-        var settings = new AppSettings("D:\\SRTM", "Metric", "Europe/London",
+            [new("sun", true, 0), new("moon", false, 1), new("galactic-centre", true, 2)],
+            "camera", "lens", observerElevation);
+        var equipment = new EquipmentSettings(
+            [new CameraProfile("camera", "Full Frame", 36, 24)],
+            [new LensProfile("lens", "14-24 mm", 14, 24)]);
+        var settings = new AppSettings("Metric", "Europe/London",
             new WeatherSettings([WeatherField.TotalCloudCover], 7.5),
-            CameraFraming: new CameraFramingSettings(false, 215, 4, false, 22, 2.5));
+            CameraFraming: new CameraFramingSettings(false, 215, 4, false, 22, 2.5),
+            CameraHeightAboveGroundMetres: 1.6, Equipment: equipment);
         var store = CreateStore(now);
         var custom = new GeoCoordinate(57.1, -4.2);
         await store.SaveAsync(new PersistedState(2, settings, [location], session, location.Id, custom), CancellationToken.None);
@@ -35,6 +42,9 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         Assert.Equal(session.Observer, loaded.Session.Observer);
         Assert.Equal(session.Instant, loaded.Session.Instant);
         Assert.Equal(session.TargetId, loaded.Session.TargetId);
+        Assert.Equal(observerElevation, loaded.Session.ObserverElevation);
+        Assert.Equal("camera", loaded.Session.CameraProfileId);
+        Assert.Equal("lens", loaded.Session.LensProfileId);
         Assert.Equal(session.VisibleObjects!.ToArray(), loaded.Session.VisibleObjects!.ToArray());
         Assert.Equal(7.5, loaded.Settings.EffectiveWeather.CacheDistanceKilometres);
         Assert.Equal([WeatherField.TotalCloudCover], loaded.Settings.EffectiveWeather.EffectiveFields);
@@ -44,6 +54,9 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         Assert.False(loaded.Settings.EffectiveCameraFraming.ShowVisibilityLimits);
         Assert.Equal(22, loaded.Settings.EffectiveCameraFraming.ShadingOpacityPercent);
         Assert.Equal(2.5, loaded.Settings.EffectiveCameraFraming.LineThickness);
+        Assert.Equal(1.6, loaded.Settings.EffectiveCameraHeightAboveGroundMetres);
+        Assert.Equal(equipment.Cameras!.ToArray(), loaded.Settings.Equipment!.Cameras!.ToArray());
+        Assert.Equal(equipment.Lenses!.ToArray(), loaded.Settings.Equipment!.Lenses!.ToArray());
         Assert.Equal(custom, loaded.LastCustomCoordinate);
     }
 
@@ -64,6 +77,28 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     }
 
     [Fact]
+    public async Task LegacyObserverElevations_ArePreservedAsExplicitManualOverrides()
+    {
+        var now = Instant.FromUtc(2024, 1, 1, 0, 0);
+        var location = new SavedLocation(Guid.NewGuid(), "Legacy ridge",
+            new GeoCoordinate(51, -2, 345), "UTC");
+        var session = PlanningSession.Default(now, "UTC") with
+        {
+            Observer = new GeoCoordinate(51, -2, 321),
+            ObserverElevation = null
+        };
+        var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(3, new AppSettings(), [location], session, location.Id),
+            CancellationToken.None);
+
+        var loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(321, loaded.Session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres);
+        Assert.Equal(345, Assert.Single(loaded.Locations).ObserverElevation!
+            .ManualGroundElevationOverrideAslMetres);
+    }
+
+    [Fact]
     public async Task CorruptPersistence_IsQuarantinedAndDefaultsRecover()
     {
         Directory.CreateDirectory(_directory);
@@ -78,10 +113,9 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     [Fact]
     public void LegacyRemovedMapAndMeteosourceSettings_AreIgnored()
     {
-        const string json = """{"MeteosourceApiKey":"secret","TileSource":{"UrlTemplate":"bad","Attribution":"bad"},"DemDirectory":"D:\\SRTM","TimeZoneOverride":"Invalid/Old"}""";
+        const string json = """{"MeteosourceApiKey":"secret","TileSource":{"UrlTemplate":"bad","Attribution":"bad"},"TimeZoneOverride":"Invalid/Old"}""";
         var settings = JsonSerializer.Deserialize<AppSettings>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
         Assert.NotNull(settings);
-        Assert.Equal("D:\\SRTM", settings.DemDirectory);
         Assert.Equal(AppSettings.UseSystemTimeZoneId, settings.SelectedTimeZoneId);
         Assert.Equal(5, settings.TimeSnapMinutes);
     }

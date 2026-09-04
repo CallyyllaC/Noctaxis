@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Environment;
 using Noctaxis.Core.Persistence;
 using SkiaSharp;
 
@@ -96,38 +97,27 @@ public sealed record SavedLocationThumbnailMetadata(
     DateTimeOffset? FeatureLastAttemptedAtUtc = null,
     int? FeatureRoadCount = null,
     int? FeatureWaterwayCount = null,
-    int? FeatureBuildingCount = null,
     bool FeatureFallbackAttempted = false,
-    string? BuildingFileName = null,
-    int? BuildingSchemaVersion = null,
-    int? BuildingQueryVersion = null,
-    string? BuildingProviderId = null,
-    string? BuildingAttributionText = null,
-    string? BuildingAttributionUrl = null,
-    string? BuildingLicenceName = null,
-    string? BuildingLicenceUrl = null,
-    DateTimeOffset? BuildingFetchedAtUtc = null,
-    string? BuildingContentHash = null,
-    MapGeographicBounds? BuildingBounds = null,
-    string? BuildingStarStatus = null,
-    string? BuildingFailureCode = null,
-    string? BuildingFailureReason = null,
-    int? BuildingHttpStatusCode = null,
-    bool BuildingTimedOut = false,
-    bool BuildingResponseTooLarge = false,
-    int BuildingAttemptCount = 0,
-    int? BuildingCount = null,
-    bool BuildingSubdivisionUsed = false,
-    int BuildingSubdivisionDepth = 0,
-    int BuildingRegionCount = 0,
-    int BuildingCompletedRegionCount = 0,
-    int BuildingFailedRegionCount = 0,
-    int BuildingCacheHitCount = 0,
-    int BuildingCacheMissCount = 0,
-    int BuildingDownloadedRegionCount = 0,
-    int? BuildingOverlayStyleVersion = null,
-    int? BuildingRenderedDensityCellCount = null,
-    double? BuildingMaximumDensity = null)
+    string? SettlementProviderId = null,
+    string? SettlementDatasetVersion = null,
+    string? SettlementStatus = null,
+    bool SettlementPartial = false,
+    int? SettlementCellCount = null,
+    int? SettlementOverlayStyleVersion = null,
+    string? SettlementFileName = null,
+    int? SettlementSchemaVersion = null,
+    string? SettlementContentHash = null,
+    GeoBounds? SettlementBounds = null,
+    int? SettlementPresetVersion = null,
+    string? SettlementStyleSettingsHash = null,
+    string? SettlementStatusMessage = null,
+    bool SettlementRendered = false,
+    int? SettlementActiveCellCount = null,
+    double? SettlementMaximumDensity = null,
+    int? SettlementGeneratedStarCount = null,
+    string? StyledInputHash = null,
+    string? ThumbnailRendererId = null,
+    int? ThumbnailRendererVersion = null)
 {
     public string MapProviderId => ProviderId;
     public string MapProviderAttribution => AttributionText;
@@ -153,11 +143,12 @@ public sealed record SavedLocationMapRefreshResult(
     bool ThumbnailSucceeded,
     bool ThumbnailUsedPrevious,
     string? FailureReason,
-    BuildingFeatureFetchOutcome? Buildings = null)
+    EnvironmentalDataState? SettlementState = null)
 {
     public bool IsComplete => RasterSucceeded && ThumbnailSucceeded &&
         (Semantic.Status is MapFeatureFetchStatus.Complete or MapFeatureFetchStatus.CachedPrevious) &&
-        (Buildings?.Status is BuildingStarStatus.Complete or BuildingStarStatus.Cached);
+        SettlementState is EnvironmentalDataState.Available or EnvironmentalDataState.Cached or
+            EnvironmentalDataState.Partial or EnvironmentalDataState.Empty;
     public bool IsDegraded => RasterSucceeded && ThumbnailSucceeded && !IsComplete;
 }
 
@@ -167,7 +158,7 @@ public enum SavedLocationMapRefreshMode
     RefreshSource,
     ReapplyStyle,
     RefreshFeatures,
-    RefreshBuildings
+    RefreshSettlement
 }
 
 public interface ILocationMapThumbnailService
@@ -208,14 +199,15 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     public const int SourceWidth = 896;
     public const int SourceHeight = 504;
     public const int TileSize = 256;
-    private const int MetadataSchemaVersion = 4;
+    private const int MetadataSchemaVersion = 9;
     private const int MaximumCaptureAttempts = 3;
     private readonly HttpClient _httpClient;
     private readonly ILogger<LocationMapThumbnailService> _logger;
     private readonly IMapTileSourceProvider _sources;
     private readonly SavedLocationMapImageProcessor _processor;
     private readonly IMapFeatureDataService _featureData;
-    private readonly IBuildingFeatureDataService _buildingData;
+    private readonly ISettlementDataProvider _settlementData;
+    private readonly IMapImageAcceleration _imageAcceleration;
     private readonly string _legacyStorageDirectory;
     private readonly ConcurrentDictionary<(string Provider, string Style, int Zoom, int X, int Y), byte[]> _tileCache = new();
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locationGates = new();
@@ -225,14 +217,16 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
 
     public LocationMapThumbnailService(HttpClient httpClient, ILogger<LocationMapThumbnailService> logger,
         IUserDataPathProvider paths, IMapTileSourceProvider sources, SavedLocationMapImageProcessor processor,
-        IMapFeatureDataService? featureData = null, IBuildingFeatureDataService? buildingData = null)
+        IMapFeatureDataService? featureData = null, ISettlementDataProvider? settlementData = null,
+        IMapImageAcceleration? imageAcceleration = null)
     {
         _httpClient = httpClient;
         _logger = logger;
         _sources = sources;
         _processor = processor;
         _featureData = featureData ?? new NullMapFeatureDataService();
-        _buildingData = buildingData ?? new NullBuildingFeatureDataService();
+        _settlementData = settlementData ?? new UnavailableSettlementDataProvider();
+        _imageAcceleration = imageAcceleration ?? OpenCvMapImageAcceleration.Shared;
         var applicationData = paths.GetApplicationDataDirectory();
         StorageDirectory = Path.Combine(applicationData, "SavedLocationMaps");
         _legacyStorageDirectory = Path.Combine(applicationData, "SavedLocationThumbnails");
@@ -259,15 +253,32 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             {
                 if (mode == SavedLocationMapRefreshMode.UseCache)
                 {
-                    // UseCache is intentionally read-only: ordinary Locations-page loading must
-                    // never download tiles, reprocess artwork, or change persisted timestamps.
+                    // Ordinary card loading never performs network acquisition. A persisted thumbnail
+                    // with stale renderer/style identity is the one exception to read-only reuse: it is
+                    // recomposed from the already-owned source/vector/settlement assets.
                     var complete = await TryLoadCompleteAsync(location, cancellationToken).ConfigureAwait(false);
                     if (complete is not null)
                     {
                         _logger.LogDebug("Saved-location map source cache reused at {SourcePath}", complete.SourcePath);
+                        LogThumbnailRoute(complete.Metadata, complete.ThumbnailPath, generated: false);
                         return new SavedLocationThumbnailResult(complete.ThumbnailPath, complete.Metadata, true, false);
                     }
-                    return previous;
+                    var metadata = await ReadMetadataAsync(location.Id, cancellationToken).ConfigureAwait(false);
+                    var thumbnailPath = Path.Combine(LocationDirectory(location.Id), "thumbnail.png");
+                    var staleReason = metadata is null ? null : StyledCacheIdentityIssue(metadata);
+                    if (metadata is not null && CoordinatesMatch(metadata, location.Coordinate) &&
+                        File.Exists(thumbnailPath) && staleReason is not null)
+                    {
+                        _logger.LogDebug(
+                            "Cached saved-location thumbnail rejected as stale ({StaleReason}); recomposing locally without source acquisition",
+                            staleReason);
+                        var styleSource = await TryLoadStyleSourceAsync(location, cancellationToken)
+                            .ConfigureAwait(false);
+                        if (styleSource is not null)
+                            return await ProcessAndCommitStyleAsync(styleSource, cancellationToken)
+                                .ConfigureAwait(false);
+                    }
+                    return null;
                 }
                 else if (mode == SavedLocationMapRefreshMode.ReapplyStyle)
                 {
@@ -285,13 +296,13 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     return await RefreshFeaturesAndCommitAsync(location, styleSource, cancellationToken)
                         .ConfigureAwait(false);
                 }
-                else if (mode == SavedLocationMapRefreshMode.RefreshBuildings)
+                else if (mode == SavedLocationMapRefreshMode.RefreshSettlement)
                 {
                     var styleSource = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
                     if (styleSource is null)
                         throw new InvalidDataException(
-                            "No valid saved source.png and viewport metadata are available for building refresh.");
-                    return await RefreshBuildingsAndCommitAsync(location, styleSource, cancellationToken)
+                            "No valid saved source.png and viewport metadata are available for settlement refresh.");
+                    return await RefreshSettlementAndCommitAsync(location, styleSource, cancellationToken)
                         .ConfigureAwait(false);
                 }
                 return await GenerateSourceAndCommitAsync(location, cancellationToken).ConfigureAwait(false);
@@ -301,25 +312,30 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                                              InvalidDataException or UnauthorizedAccessException or ArgumentException)
             {
                 _logger.LogWarning(ex,
-                    "Saved-location map operation {RefreshMode} failed for location {LocationId}; previous valid asset retained",
+                    "Saved-location map operation {RefreshMode} failed for location {LocationId}",
                     mode, location.Id);
                 if (previous is null) return null;
+                if (mode == SavedLocationMapRefreshMode.UseCache &&
+                    StyledCacheIdentityIssue(previous.Metadata) is not null)
+                {
+                    _logger.LogDebug(
+                        "Stale renderer output for {LocationId} was not returned after local recomposition failed",
+                        location.Id);
+                    return null;
+                }
                 var semanticFailure = MapFeatureFetchOutcome.Failure(
-                    mode is SavedLocationMapRefreshMode.RefreshFeatures or SavedLocationMapRefreshMode.RefreshBuildings
+                    mode is SavedLocationMapRefreshMode.RefreshFeatures or SavedLocationMapRefreshMode.RefreshSettlement
                         ? "semantic_refresh_failed" : "operation_failed",
-                    mode is SavedLocationMapRefreshMode.RefreshFeatures or SavedLocationMapRefreshMode.RefreshBuildings
+                    mode is SavedLocationMapRefreshMode.RefreshFeatures or SavedLocationMapRefreshMode.RefreshSettlement
                         ? "the semantic overlay refresh could not be completed"
                         : "the map refresh could not be completed");
-                var buildingFailure = mode == SavedLocationMapRefreshMode.RefreshBuildings
-                    ? BuildingFeatureFetchOutcome.Unavailable("building_refresh_failed",
-                        "the building cache refresh could not be completed")
-                    : null;
                 return previous with
                 {
                     RefreshSucceeded = false,
                     IsPreviousAsset = true,
                     Operation = new SavedLocationMapRefreshResult(false, true, semanticFailure,
-                        true, true, ex.Message, buildingFailure)
+                        true, true, ex.Message, mode == SavedLocationMapRefreshMode.RefreshSettlement
+                            ? EnvironmentalDataState.Unavailable : null)
                 };
             }
         }
@@ -331,14 +347,16 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     {
         var mapSource = _sources.Current;
         var viewport = WebMercatorViewport.Create(location.Coordinate, TileZoom, TileSize, SourceWidth, SourceHeight);
+        var previousMetadata = await ReadMetadataAsync(location.Id, cancellationToken).ConfigureAwait(false);
+        var previousSettlement = previousMetadata is null ? null :
+            await TryLoadSettlementDataAsync(location.Id, viewport, previousMetadata, cancellationToken)
+                .ConfigureAwait(false);
         _logger.LogInformation(
             "Saved-location source generation started for {LocationId} ({LocationName}); provider {ProviderId}, source version {SourceVersion}",
             location.Id, location.Name, mapSource.ProviderId, SourceRenderVersion);
         var sourcePng = await CaptureValidatedSourceAsync(viewport, mapSource, cancellationToken)
             .ConfigureAwait(false);
         var previousFeatures = await TryLoadFeatureDataAsync(location.Id, location.Coordinate, viewport,
-            cancellationToken).ConfigureAwait(false);
-        var previousBuildings = await TryLoadBuildingDataAsync(location.Id, location.Coordinate, viewport,
             cancellationToken).ConfigureAwait(false);
         MapFeatureFetchResult featureFetch;
         try
@@ -376,8 +394,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             {
                 Status = MapFeatureFetchStatus.CachedPrevious,
                 RoadCount = previousFeatures.Data.Roads.Length,
-                WaterwayCount = previousFeatures.Data.Waterways.Length,
-                BuildingCount = 0
+                WaterwayCount = previousFeatures.Data.Waterways.Length
             };
             _logger.LogInformation("Compatible OSM feature cache retained for {LocationId}", location.Id);
         }
@@ -385,30 +402,26 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             _logger.LogInformation("Generating saved-location thumbnail without a semantic overlay for {LocationId}",
                 location.Id);
 
-        ExistingBuildingAssets? buildings = previousBuildings;
-        BuildingFeatureFetchOutcome buildingOutcome;
-        if (buildings is not null)
+        var settlement = await FetchSettlementAsync(viewport, cancellationToken).ConfigureAwait(false);
+        if (!settlement.HasValue && previousSettlement is not null)
         {
-            buildingOutcome = CachedBuildingOutcome(buildings.Data, "Compatible building cache reused.");
-            _logger.LogInformation("Compatible building-star cache reused for {LocationId}", location.Id);
+            var previousWasEmpty = previousMetadata?.SettlementStatus == nameof(EnvironmentalDataState.Empty);
+            settlement = new EnvironmentalValue<SettlementRaster>(
+                previousWasEmpty ? EnvironmentalDataState.Empty : EnvironmentalDataState.Cached,
+                previousSettlement.Data, previousSettlement.Data.DatasetId, previousSettlement.Data.DatasetVersion,
+                $"Compatible saved WSF derivative retained after refresh failure: {settlement.Message}");
+            _logger.LogWarning(
+                "WSF acquisition failed for {LocationId}; retaining compatible saved derivative ({SettlementState})",
+                location.Id, settlement.State);
         }
-        else
-        {
-            var buildingFetch = await _buildingData.FetchAsync(location.Id, location.Name, viewport,
-                forceRefresh: false, cancellationToken).ConfigureAwait(false);
-            buildingOutcome = buildingFetch.Outcome;
-            if (buildingFetch.Data is not null && BuildingDocumentMatches(buildingFetch.Data, location.Id, viewport))
-            {
-                var bytes = JsonSerializer.SerializeToUtf8Bytes(buildingFetch.Data, _featureJson);
-                buildings = new ExistingBuildingAssets(buildingFetch.Data, bytes);
-            }
-        }
+        var settlementBytes = settlement.Value is null ? null : SettlementRasterCodec.Encode(settlement.Value);
 
         _logger.LogDebug(
-            "Processing saved-location thumbnail using style {StyleVersion} and feature overlay {OverlayVersion}",
-            ThumbnailStyleVersion, SavedLocationMapImageProcessor.FeatureOverlayStyleVersion);
-        var thumbnailPng = _processor.Process(sourcePng, features?.Data, buildings?.Data, viewport,
-            out var buildingRender);
+            "Processing saved-location thumbnail using style {StyleVersion}, feature overlay {OverlayVersion}, and {ImageBackend} ({NativeThreads} native threads)",
+            ThumbnailStyleVersion, SavedLocationMapImageProcessor.FeatureOverlayStyleVersion,
+            _imageAcceleration.Status.Backend, _imageAcceleration.Status.NativeThreadCount);
+        var thumbnailPng = _processor.ProcessSettlement(sourcePng, features?.Data, settlement.Value, viewport,
+            location.Id, out var settlementRender);
         var now = DateTimeOffset.UtcNow;
         var featureSource = features?.Data.Source;
         var metadata = new SavedLocationThumbnailMetadata(
@@ -428,18 +441,18 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             semanticOutcome.FailureCode, semanticOutcome.FailureReason, semanticOutcome.HttpStatusCode,
             semanticOutcome.TimedOut, semanticOutcome.ResponseTooLarge, semanticOutcome.ParseFailed,
             semanticOutcome.AttemptCount, semanticOutcome.AttemptedAtUtc, semanticOutcome.RoadCount,
-            semanticOutcome.WaterwayCount, semanticOutcome.BuildingCount, semanticOutcome.FallbackAttempted);
-        metadata = ApplyBuildingOutcome(metadata, buildingOutcome, buildings?.Data, buildings?.Bytes,
-            thumbnailPng, buildingRender);
+            semanticOutcome.WaterwayCount, semanticOutcome.FallbackAttempted);
+        metadata = ApplySettlementOutcome(metadata, settlement, settlementRender, settlementBytes);
         var operation = new SavedLocationMapRefreshResult(true, false, semanticOutcome, true, false, null,
-            buildingOutcome);
-        var result = await CommitFullAssetSetAsync(location.Id, sourcePng, features?.Bytes, buildings?.Bytes,
+            settlement.State);
+        var result = await CommitFullAssetSetAsync(location.Id, sourcePng, features?.Bytes, settlementBytes,
                 thumbnailPng, metadata,
                 cancellationToken)
             .ConfigureAwait(false);
         _logger.LogInformation(
             "Saved-location source and thumbnail completed at {Directory}; source {SourceVersion}, style {StyleVersion}",
             LocationDirectory(location.Id), SourceRenderVersion, ThumbnailStyleVersion);
+        LogThumbnailRoute(result.Metadata, result.ImagePath, generated: true);
         return result with { Operation = operation };
     }
 
@@ -476,16 +489,19 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     fetch.Outcome.AttemptCount, fallbackAttempted: fetch.Outcome.FallbackAttempted));
         }
 
+        var settlement = CachedSettlement(assets.Settlement, assets.Metadata);
+
         if (fetch.Data is not null)
         {
             try
             {
                 var featureBytes = JsonSerializer.SerializeToUtf8Bytes(fetch.Data, _featureJson);
-                var thumbnailBytes = _processor.Process(assets.SourceBytes, fetch.Data,
-                    assets.Buildings?.Data, viewport, out var buildingRender);
+                var thumbnailBytes = _processor.ProcessSettlement(assets.SourceBytes, fetch.Data,
+                    settlement.Value, viewport, location.Id, out var settlementRender);
                 var metadata = ApplyFeatureOutcome(assets.Metadata, fetch.Outcome, fetch.Data, featureBytes,
                     thumbnailBytes);
-                metadata = ApplyBuildingRenderMetadata(metadata, buildingRender);
+                metadata = ApplySettlementOutcome(metadata, settlement, settlementRender,
+                    assets.Settlement?.Bytes);
                 await CommitFilesAtomicallyAsync(LocationDirectory(metadata.LocationId),
                 [
                     ("features.json", featureBytes),
@@ -493,13 +509,12 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
                 ], cancellationToken).ConfigureAwait(false);
                 _logger.LogInformation(
-                    "Semantic-only refresh completed for {LocationId}: {Status}; roads {RoadCount}, waterways {WaterwayCount}, buildings {BuildingCount}",
+                    "Semantic-only refresh completed for {LocationId}: {Status}; roads {RoadCount}, waterways {WaterwayCount}",
                     metadata.LocationId, fetch.Outcome.Status, fetch.Outcome.RoadCount,
-                    fetch.Outcome.WaterwayCount, fetch.Outcome.BuildingCount);
+                    fetch.Outcome.WaterwayCount);
                 return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true, false,
                     new SavedLocationMapRefreshResult(true, true, fetch.Outcome, true, false, null,
-                        assets.Buildings is null ? null : CachedBuildingOutcome(assets.Buildings.Data,
-                            "Compatible building cache reused.")));
+                        settlement.State));
             }
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException or
                                              UnauthorizedAccessException or ArgumentException)
@@ -524,8 +539,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             {
                 Status = MapFeatureFetchStatus.CachedPrevious,
                 RoadCount = retained.Data.Roads.Length,
-                WaterwayCount = retained.Data.Waterways.Length,
-                BuildingCount = retained.Data.Buildings.Length
+                WaterwayCount = retained.Data.Waterways.Length
             };
         }
         var failedMetadata = ApplyFeatureOutcome(assets.Metadata, retainedOutcome,
@@ -547,8 +561,9 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         var viewport = new WebMercatorViewport(assets.Metadata.SourceZoom, TileSize,
             assets.Metadata.SourceImageWidth, assets.Metadata.SourceImageHeight,
             assets.Metadata.SourceCentreLatitude, assets.Metadata.SourceCentreLongitude);
-        var thumbnailPng = _processor.Process(assets.SourceBytes, assets.Features?.Data,
-            assets.Buildings?.Data, viewport, out var buildingRender);
+        var settlement = CachedSettlement(assets.Settlement, assets.Metadata);
+        var thumbnailPng = _processor.ProcessSettlement(assets.SourceBytes, assets.Features?.Data,
+            settlement.Value, viewport, assets.Metadata.LocationId, out var settlementRender);
         var metadata = assets.Metadata with
         {
             SchemaVersion = MetadataSchemaVersion,
@@ -562,61 +577,58 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             ThumbnailGeneratedAtUtc = DateTimeOffset.UtcNow,
             FeatureOverlayStyleVersion = SavedLocationMapImageProcessor.FeatureOverlayStyleVersion
         };
-        metadata = ApplyBuildingRenderMetadata(metadata, buildingRender);
+        metadata = ApplySettlementOutcome(metadata, settlement, settlementRender, assets.Settlement?.Bytes);
         await CommitFilesAtomicallyAsync(LocationDirectory(metadata.LocationId),
             [("thumbnail.png", thumbnailPng), ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))],
             cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Saved-location thumbnail style completed at {ThumbnailPath}", assets.ThumbnailPath);
+        LogThumbnailRoute(metadata, assets.ThumbnailPath, generated: true);
         return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true);
     }
 
-    private async Task<SavedLocationThumbnailResult> RefreshBuildingsAndCommitAsync(
+    private async Task<SavedLocationThumbnailResult> RefreshSettlementAndCommitAsync(
         SavedLocation location, ExistingMapAssets assets, CancellationToken cancellationToken)
     {
         var viewport = new WebMercatorViewport(assets.Metadata.SourceZoom, TileSize,
             assets.Metadata.SourceImageWidth, assets.Metadata.SourceImageHeight,
             assets.Metadata.SourceCentreLatitude, assets.Metadata.SourceCentreLongitude);
         _logger.LogInformation(
-            "Building-only refresh started for {LocationId} ({LocationName}); source and core features remain unchanged",
+            "WSF settlement refresh started for {LocationId} ({LocationName}); source and OSM vector features remain unchanged",
             location.Id, location.Name);
-        var fetch = await _buildingData.FetchAsync(location.Id, location.Name, viewport,
-            forceRefresh: true, cancellationToken).ConfigureAwait(false);
-        if (fetch.Data is not null && BuildingDocumentMatches(fetch.Data, location.Id, viewport))
+        var settlement = await FetchSettlementAsync(viewport, cancellationToken).ConfigureAwait(false);
+        if (settlement.HasValue)
         {
-            var buildingBytes = JsonSerializer.SerializeToUtf8Bytes(fetch.Data, _featureJson);
-            var thumbnailBytes = _processor.Process(assets.SourceBytes, assets.Features?.Data,
-                fetch.Data, viewport, out var buildingRender);
-            var metadata = ApplyBuildingOutcome(assets.Metadata, fetch.Outcome, fetch.Data,
-                buildingBytes, thumbnailBytes, buildingRender);
+            var settlementBytes = SettlementRasterCodec.Encode(settlement.Value!);
+            var thumbnailBytes = _processor.ProcessSettlement(assets.SourceBytes, assets.Features?.Data,
+                settlement.Value, viewport, location.Id, out var settlementRender);
+            var metadata = ApplySettlementOutcome(assets.Metadata with
+            {
+                ThumbnailContentHash = Hash(thumbnailBytes),
+                ThumbnailGeneratedAtUtc = DateTimeOffset.UtcNow
+            }, settlement, settlementRender, settlementBytes);
             await CommitFilesAtomicallyAsync(LocationDirectory(location.Id),
             [
-                ("buildings.json", buildingBytes),
+                ("settlement-field.bin.gz", settlementBytes),
                 ("thumbnail.png", thumbnailBytes),
                 ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
             ], cancellationToken).ConfigureAwait(false);
             var core = CoreOutcomeFromAssets(assets.Features);
             _logger.LogInformation(
-                "Building-only refresh completed for {LocationId}: {Status}, {BuildingCount} buildings, {DensityCells} rendered density cells, maximum density {MaximumDensity}",
-                location.Id, fetch.Outcome.Status, fetch.Outcome.BuildingCount,
-                buildingRender.DensityCellCount, buildingRender.MaximumDensityBeforeClamping);
+                "WSF settlement refresh completed for {LocationId}: {Status}, {DensityCells} active cells, maximum mass {MaximumDensity}",
+                location.Id, settlement.State, settlementRender?.DensityCellCount ?? 0,
+                settlementRender?.MaximumDensityBeforeClamping ?? 0);
             return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true, false,
-                new SavedLocationMapRefreshResult(true, true, core, true, false, null, fetch.Outcome));
+                new SavedLocationMapRefreshResult(true, true, core, true, false, null, settlement.State));
         }
 
-        var outcome = fetch.Outcome;
-        if (assets.Buildings is not null)
-        {
-            outcome = outcome with
-            {
-                Status = BuildingStarStatus.Cached,
-                BuildingCount = assets.Buildings.Data.BuildingCount
-            };
-            _logger.LogWarning(
-                "Building refresh failed for {LocationId}; compatible previous buildings and thumbnail retained",
-                location.Id);
-        }
-        var failedMetadata = ApplyBuildingOutcome(assets.Metadata, outcome, assets.Buildings?.Data,
-            assets.Buildings?.Bytes, null, null, preserveThumbnailMetadata: true);
+        _logger.LogWarning("WSF settlement refresh unavailable for {LocationId}; previous thumbnail retained",
+            location.Id);
+        var retainedSettlement = assets.Settlement is null ? settlement :
+            new EnvironmentalValue<SettlementRaster>(EnvironmentalDataState.Cached, assets.Settlement.Data,
+                assets.Settlement.Data.DatasetId, assets.Settlement.Data.DatasetVersion,
+                $"Compatible saved WSF derivative retained after refresh failure: {settlement.Message}");
+        var failedMetadata = ApplySettlementOutcome(assets.Metadata, retainedSettlement, null, null,
+            preserveSettlementMetadata: true, thumbnailRendered: false);
         await CommitFilesAtomicallyAsync(LocationDirectory(location.Id),
             [("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(failedMetadata, _json)))],
             cancellationToken).ConfigureAwait(false);
@@ -624,7 +636,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         return new SavedLocationThumbnailResult(assets.ThumbnailPath, failedMetadata, thumbnailUsable, false,
             thumbnailUsable, new SavedLocationMapRefreshResult(true, true,
                 CoreOutcomeFromAssets(assets.Features), thumbnailUsable, thumbnailUsable,
-                outcome.FailureReason, outcome));
+                settlement.Message, settlement.State));
     }
 
     private static SavedLocationThumbnailMetadata ApplyFeatureOutcome(
@@ -663,7 +675,6 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             FeatureLastAttemptedAtUtc = outcome.AttemptedAtUtc,
             FeatureRoadCount = outcome.RoadCount,
             FeatureWaterwayCount = outcome.WaterwayCount,
-            FeatureBuildingCount = outcome.BuildingCount,
             FeatureFallbackAttempted = outcome.FallbackAttempted,
             ThumbnailContentHash = preserveThumbnailMetadata || thumbnailBytes is null
                 ? metadata.ThumbnailContentHash
@@ -674,93 +685,102 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         };
     }
 
-    private static SavedLocationThumbnailMetadata ApplyBuildingOutcome(
+    private SavedLocationThumbnailMetadata ApplySettlementOutcome(
         SavedLocationThumbnailMetadata metadata,
-        BuildingFeatureFetchOutcome outcome,
-        BuildingFeatureDocument? data,
-        byte[]? buildingBytes,
-        byte[]? thumbnailBytes,
-        BuildingRenderDiagnostics? render,
-        bool preserveThumbnailMetadata = false)
+        EnvironmentalValue<SettlementRaster> settlement,
+        SettlementRenderDiagnostics? render,
+        byte[]? settlementBytes,
+        bool preserveSettlementMetadata = false,
+        bool thumbnailRendered = true)
     {
-        var source = data?.Source;
-        return metadata with
+        var updated = metadata with
         {
             SchemaVersion = MetadataSchemaVersion,
-            BuildingFileName = data is null ? null : "buildings.json",
-            BuildingSchemaVersion = data?.SchemaVersion,
-            BuildingQueryVersion = source?.QueryVersion,
-            BuildingProviderId = source?.ProviderId,
-            BuildingAttributionText = source?.AttributionText,
-            BuildingAttributionUrl = source?.AttributionUrl,
-            BuildingLicenceName = source?.LicenceName,
-            BuildingLicenceUrl = source?.LicenceUrl,
-            BuildingFetchedAtUtc = source?.FetchedAtUtc,
-            BuildingContentHash = buildingBytes is null ? null : Hash(buildingBytes),
-            BuildingBounds = data?.Bounds,
-            BuildingStarStatus = outcome.Status.ToString(),
-            BuildingFailureCode = outcome.FailureCode,
-            BuildingFailureReason = outcome.FailureReason,
-            BuildingHttpStatusCode = outcome.HttpStatusCode,
-            BuildingTimedOut = outcome.TimedOut,
-            BuildingResponseTooLarge = outcome.ResponseTooLarge,
-            BuildingAttemptCount = outcome.AttemptCount,
-            BuildingCount = data?.BuildingCount ?? outcome.BuildingCount,
-            BuildingSubdivisionUsed = outcome.SubdivisionUsed,
-            BuildingSubdivisionDepth = outcome.SubdivisionDepth,
-            BuildingRegionCount = outcome.RegionCount,
-            BuildingCompletedRegionCount = outcome.CompletedRegionCount,
-            BuildingFailedRegionCount = outcome.FailedRegionCount,
-            BuildingCacheHitCount = outcome.CacheHitCount,
-            BuildingCacheMissCount = outcome.CacheMissCount,
-            BuildingDownloadedRegionCount = outcome.DownloadedRegionCount,
-            BuildingOverlayStyleVersion = SavedLocationMapImageProcessor.BuildingOverlayStyleVersion,
-            BuildingRenderedDensityCellCount = render?.DensityCellCount ?? metadata.BuildingRenderedDensityCellCount,
-            BuildingMaximumDensity = render?.MaximumDensityBeforeClamping ?? metadata.BuildingMaximumDensity,
-            ThumbnailContentHash = preserveThumbnailMetadata || thumbnailBytes is null
-                ? metadata.ThumbnailContentHash : Hash(thumbnailBytes),
-            ThumbnailGeneratedAtUtc = preserveThumbnailMetadata || thumbnailBytes is null
-                ? metadata.ThumbnailGeneratedAtUtc : DateTimeOffset.UtcNow
+            SettlementProviderId = settlement.SourceId,
+            SettlementDatasetVersion = settlement.SourceVersion,
+            SettlementStatus = settlement.State.ToString(),
+            SettlementStatusMessage = settlement.Message,
+            SettlementPartial = settlement.State == EnvironmentalDataState.Partial ||
+                                settlement.Value?.IsPartial == true,
+            SettlementCellCount = settlement.Value?.CellCount,
+            SettlementOverlayStyleVersion = SavedLocationMapImageProcessor.SettlementGlowStyleVersion,
+            SettlementPresetVersion = _processor.SettlementPresetVersion,
+            SettlementStyleSettingsHash = _processor.SettlementStyleSettingsHash,
+            SettlementFileName = preserveSettlementMetadata || settlement.Value is null
+                ? metadata.SettlementFileName : "settlement-field.bin.gz",
+            SettlementSchemaVersion = preserveSettlementMetadata || settlement.Value is null
+                ? metadata.SettlementSchemaVersion : SettlementRasterCodec.SchemaVersion,
+            SettlementContentHash = preserveSettlementMetadata || settlementBytes is null
+                ? metadata.SettlementContentHash : Hash(settlementBytes),
+            SettlementBounds = preserveSettlementMetadata || settlement.Value is null
+                ? metadata.SettlementBounds : settlement.Value.Grid.Bounds,
+            SettlementRendered = render?.SettlementRendered ??
+                (preserveSettlementMetadata ? metadata.SettlementRendered : false),
+            SettlementActiveCellCount = render?.ActiveSettlementCellCount ??
+                (preserveSettlementMetadata ? metadata.SettlementActiveCellCount : null),
+            SettlementMaximumDensity = render?.MaximumDensityBeforeClamping ??
+                (preserveSettlementMetadata ? metadata.SettlementMaximumDensity : null),
+            SettlementGeneratedStarCount = render?.GeneratedStarCount ??
+                (preserveSettlementMetadata ? metadata.SettlementGeneratedStarCount : null),
+            ThumbnailRendererId = thumbnailRendered
+                ? SavedLocationMapImageProcessor.RendererId : metadata.ThumbnailRendererId,
+            ThumbnailRendererVersion = thumbnailRendered
+                ? SavedLocationMapImageProcessor.RendererVersion : metadata.ThumbnailRendererVersion
         };
+        return updated with { StyledInputHash = ComputeStyledInputHash(updated) };
     }
 
-    private static SavedLocationThumbnailMetadata ApplyBuildingRenderMetadata(
-        SavedLocationThumbnailMetadata metadata, BuildingRenderDiagnostics render) => metadata with
-    {
-        BuildingOverlayStyleVersion = SavedLocationMapImageProcessor.BuildingOverlayStyleVersion,
-        BuildingRenderedDensityCellCount = render.DensityCellCount,
-        BuildingMaximumDensity = render.MaximumDensityBeforeClamping
-    };
+    private static EnvironmentalValue<SettlementRaster> CachedSettlement(ExistingSettlementAssets? assets,
+        SavedLocationThumbnailMetadata metadata) =>
+        assets is null
+            ? EnvironmentalValue<SettlementRaster>.Unavailable(WsfSettlementDataProvider.SourceId,
+                WsfSettlementDataProvider.SourceVersion, "No compatible saved WSF settlement derivative is available.")
+            : new EnvironmentalValue<SettlementRaster>(
+                metadata.SettlementStatus == nameof(EnvironmentalDataState.Empty)
+                    ? EnvironmentalDataState.Empty : EnvironmentalDataState.Cached,
+                assets.Data, assets.Data.DatasetId, assets.Data.DatasetVersion,
+                metadata.SettlementStatus == nameof(EnvironmentalDataState.Empty)
+                    ? "Saved valid zero-settlement WSF derivative reused."
+                    : "Saved WSF settlement derivative reused.");
 
-    private static BuildingFeatureFetchOutcome CachedBuildingOutcome(BuildingFeatureDocument data,
-        string reason) => new(BuildingStarStatus.Cached, data.BuildingCount, null, reason, null, false,
-        false, 0, DateTimeOffset.UtcNow, data.SubdivisionUsed,
-        data.Regions.Length == 0 ? 0 : data.Regions.Max(region => region.Depth), data.Regions.Length,
-        data.Regions.Count(region => region.Complete), data.Regions.Count(region => !region.Complete),
-        data.Regions.Length, 0, 0);
+    private async Task<EnvironmentalValue<SettlementRaster>> FetchSettlementAsync(
+        WebMercatorViewport viewport, CancellationToken cancellationToken)
+    {
+        var bounds = viewport.Bounds;
+        var request = new GeoRasterRequest(new GeoBounds(bounds.South, bounds.West, bounds.North, bounds.East),
+            viewport.Width * SettlementDensityBuilder.Supersampling,
+            viewport.Height * SettlementDensityBuilder.Supersampling,
+            GeoRasterProjection.WebMercator);
+        try
+        {
+            return await _settlementData.GetSettlementAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+        {
+            _logger.LogWarning(ex, "WSF settlement grid could not be acquired for viewport {Bounds}", bounds);
+            var state = ex is InvalidDataException
+                ? EnvironmentalDataState.InvalidRaster
+                : EnvironmentalDataState.SourceUnavailable;
+            return new EnvironmentalValue<SettlementRaster>(state, null, WsfSettlementDataProvider.SourceId,
+                WsfSettlementDataProvider.SourceVersion,
+                state == EnvironmentalDataState.InvalidRaster
+                    ? "WSF settlement raster failed validation."
+                    : "The WSF settlement source could not be reached.");
+        }
+    }
 
     private static MapFeatureFetchOutcome CoreOutcomeFromAssets(ExistingFeatureAssets? features) =>
         features is null
             ? MapFeatureFetchOutcome.Failure("core_features_unavailable",
                 "Road and water overlays are unavailable.", attemptCount: 0)
             : new MapFeatureFetchOutcome(MapFeatureFetchStatus.CachedPrevious,
-                features.Data.Roads.Length, features.Data.Waterways.Length, 0, null,
-                "Compatible road and water overlays reused.", null, false, false, false, 0,
-                DateTimeOffset.UtcNow);
-
-    private static bool BuildingDocumentMatches(BuildingFeatureDocument data, Guid locationId,
-        WebMercatorViewport viewport) => data.LocationId == locationId &&
-        data.SchemaVersion == OverpassBuildingFeatureDataService.SchemaVersion &&
-        data.Source.QueryVersion == OverpassBuildingFeatureDataService.QueryVersion &&
-        data.SourceZoom == viewport.Zoom && data.SourceWidth == viewport.Width &&
-        data.SourceHeight == viewport.Height &&
-        BitConverter.DoubleToInt64Bits(data.SourceCentreLatitude) ==
-        BitConverter.DoubleToInt64Bits(viewport.CentreLatitude) &&
-        BitConverter.DoubleToInt64Bits(data.SourceCentreLongitude) ==
-        BitConverter.DoubleToInt64Bits(viewport.CentreLongitude) && BoundsMatch(data.Bounds, viewport.Bounds);
+                features.Data.Roads.Length, features.Data.Waterways.Length,
+                null, "Compatible road and water overlays reused.", null,
+                false, false, false, 0, DateTimeOffset.UtcNow);
 
     private async Task<SavedLocationThumbnailResult> CommitFullAssetSetAsync(Guid locationId, byte[] sourcePng,
-        byte[]? featureBytes, byte[]? buildingBytes, byte[] thumbnailPng,
+        byte[]? featureBytes, byte[]? settlementBytes, byte[] thumbnailPng,
         SavedLocationThumbnailMetadata metadata,
         CancellationToken cancellationToken)
     {
@@ -772,11 +792,12 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
         };
         if (featureBytes is not null) files.Insert(1, ("features.json", featureBytes));
-        if (buildingBytes is not null) files.Insert(featureBytes is null ? 1 : 2,
-            ("buildings.json", buildingBytes));
+        if (settlementBytes is not null) files.Insert(featureBytes is null ? 1 : 2,
+            ("settlement-field.bin.gz", settlementBytes));
         await CommitFilesAtomicallyAsync(directory, files, cancellationToken).ConfigureAwait(false);
         if (featureBytes is null) TryDelete(Path.Combine(directory, "features.json"));
-        if (buildingBytes is null) TryDelete(Path.Combine(directory, "buildings.json"));
+        // Legacy building caches are left untouched but no longer referenced by v6 metadata.
+        // This makes migration non-destructive while ensuring they cannot feed WSF rendering.
         return new SavedLocationThumbnailResult(Path.Combine(directory, "thumbnail.png"), metadata, true, true);
     }
 
@@ -888,11 +909,100 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     {
         var assets = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
         if (assets is null || !File.Exists(assets.ThumbnailPath)) return null;
+        var staleReason = StyledCacheIdentityIssue(assets.Metadata);
+        if (staleReason is not null)
+        {
+            _logger.LogDebug("Cached saved-location thumbnail rejected: {StaleReason}", staleReason);
+            return null;
+        }
+        var settlementIssue = SettlementCacheCompletenessIssue(assets.Metadata, assets.Settlement);
+        if (settlementIssue is not null)
+        {
+            _logger.LogDebug("Cached saved-location thumbnail rejected as degraded: {StaleReason}", settlementIssue);
+            return null;
+        }
         var thumbnail = await File.ReadAllBytesAsync(assets.ThumbnailPath, cancellationToken).ConfigureAwait(false);
         var validation = _processor.ValidateThumbnail(thumbnail);
-        if (!validation.IsValid || !HashMatches(thumbnail, assets.Metadata.ThumbnailContentHash)) return null;
+        if (!validation.IsValid)
+        {
+            _logger.LogDebug("Cached saved-location thumbnail rejected as invalid: {Reason}", validation.Reason);
+            return null;
+        }
+        if (!HashMatches(thumbnail, assets.Metadata.ThumbnailContentHash))
+        {
+            _logger.LogDebug("Cached saved-location thumbnail rejected because its content hash does not match");
+            return null;
+        }
         return assets with { ThumbnailBytes = thumbnail };
     }
+
+    private string? StyledCacheIdentityIssue(SavedLocationThumbnailMetadata metadata)
+    {
+        if (!string.Equals(metadata.ThumbnailRendererId, SavedLocationMapImageProcessor.RendererId,
+                StringComparison.Ordinal))
+            return $"renderer '{metadata.ThumbnailRendererId ?? "unspecified"}' is not '{SavedLocationMapImageProcessor.RendererId}'";
+        if (metadata.ThumbnailRendererVersion != SavedLocationMapImageProcessor.RendererVersion)
+            return $"renderer version {metadata.ThumbnailRendererVersion?.ToString() ?? "unspecified"} is stale";
+        if (metadata.ThumbnailStyleVersion != ThumbnailStyleVersion)
+            return $"thumbnail style version {metadata.ThumbnailStyleVersion} is stale";
+        if (metadata.SettlementOverlayStyleVersion != SavedLocationMapImageProcessor.SettlementGlowStyleVersion)
+            return $"settlement overlay version {metadata.SettlementOverlayStyleVersion?.ToString() ?? "unspecified"} is stale";
+        if (metadata.SettlementPresetVersion != _processor.SettlementPresetVersion)
+            return $"settlement preset version {metadata.SettlementPresetVersion?.ToString() ?? "unspecified"} is stale";
+        if (!string.Equals(metadata.SettlementStyleSettingsHash, _processor.SettlementStyleSettingsHash,
+                StringComparison.Ordinal))
+            return "settlement style settings identity is stale";
+        var expectedInputHash = ComputeStyledInputHash(metadata);
+        return string.Equals(metadata.StyledInputHash, expectedInputHash, StringComparison.Ordinal)
+            ? null : "styled source-input identity is stale";
+    }
+
+    private static string? SettlementCacheCompletenessIssue(SavedLocationThumbnailMetadata metadata,
+        ExistingSettlementAssets? settlement)
+    {
+        if (!Enum.TryParse<EnvironmentalDataState>(metadata.SettlementStatus, out var state))
+            return "settlement status is missing or unrecognised";
+        return state switch
+        {
+            EnvironmentalDataState.Available or EnvironmentalDataState.Cached or EnvironmentalDataState.Partial
+                when settlement is null => "usable WSF settlement metadata has no compatible derivative",
+            EnvironmentalDataState.Available or EnvironmentalDataState.Cached or EnvironmentalDataState.Partial
+                when !metadata.SettlementRendered => "usable WSF settlement did not complete galaxy rendering",
+            EnvironmentalDataState.Empty when settlement is null =>
+                "valid empty WSF coverage has no compatible derivative",
+            EnvironmentalDataState.Empty when metadata.SettlementRendered =>
+                "empty WSF coverage was incorrectly marked as settlement-rendered",
+            EnvironmentalDataState.Unavailable or EnvironmentalDataState.InvalidData or EnvironmentalDataState.Error or
+                EnvironmentalDataState.SourceUnavailable or EnvironmentalDataState.InvalidRaster or
+                EnvironmentalDataState.TileAbsent => "WSF settlement coverage is unavailable",
+            _ => null
+        };
+    }
+
+    private static string ComputeStyledInputHash(SavedLocationThumbnailMetadata metadata)
+    {
+        var settlementIdentity = metadata.SettlementStatus == nameof(EnvironmentalDataState.Empty)
+            ? $"empty:{metadata.SettlementContentHash ?? "missing"}"
+            : metadata.SettlementContentHash ?? $"degraded:{metadata.SettlementStatus ?? "unknown"}";
+        var canonical = string.Join('|', metadata.SourceContentHash,
+            metadata.FeatureContentHash ?? "absent:" + metadata.FeatureFetchStatus,
+            settlementIdentity, metadata.SettlementProviderId, metadata.SettlementDatasetVersion,
+            metadata.SourceCentreLatitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            metadata.SourceCentreLongitude.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+            metadata.SourceZoom, metadata.SourceImageWidth, metadata.SourceImageHeight,
+            SavedLocationMapImageProcessor.RendererId, SavedLocationMapImageProcessor.RendererVersion,
+            metadata.ThumbnailStyleVersion, metadata.SettlementPresetVersion,
+            metadata.SettlementStyleSettingsHash);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+    }
+
+    private void LogThumbnailRoute(SavedLocationThumbnailMetadata metadata, string thumbnailPath, bool generated) =>
+        _logger.LogDebug(
+            "SavedLocationThumbnail: Renderer={Renderer}; Style={Style}; StyleVersion={StyleVersion}; SettlementSource={SettlementSource}; SettlementCells={SettlementCellCount}; SettlementRendered={SettlementRendered}; Roads={RoadCount}; Waterways={WaterwayCount}; Thumbnail={Thumbnail}; Generated={Generated}",
+            metadata.ThumbnailRendererId, _processor.SettlementPresetName,
+            metadata.ThumbnailStyleVersion, metadata.SettlementProviderId,
+            metadata.SettlementCellCount ?? 0, metadata.SettlementRendered, metadata.FeatureRoadCount ?? 0,
+            metadata.FeatureWaterwayCount ?? 0, thumbnailPath, generated);
 
     private async Task<ExistingMapAssets?> TryLoadStyleSourceAsync(SavedLocation location,
         CancellationToken cancellationToken)
@@ -912,10 +1022,10 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             metadata.SourceCentreLatitude, metadata.SourceCentreLongitude);
         var features = await TryLoadFeatureDataAsync(location.Id, location.Coordinate, viewport, cancellationToken)
             .ConfigureAwait(false);
-        var buildings = await TryLoadBuildingDataAsync(location.Id, location.Coordinate, viewport,
-            cancellationToken).ConfigureAwait(false);
+        var settlement = await TryLoadSettlementDataAsync(location.Id, viewport, metadata, cancellationToken)
+            .ConfigureAwait(false);
         return new ExistingMapAssets(metadata, sourcePath, Path.Combine(directory, "thumbnail.png"), source, null,
-            features, buildings);
+            features, settlement);
     }
 
     private async Task<ExistingFeatureAssets?> TryLoadFeatureDataAsync(Guid locationId, GeoCoordinate coordinate,
@@ -953,32 +1063,36 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         }
     }
 
-    private async Task<ExistingBuildingAssets?> TryLoadBuildingDataAsync(Guid locationId,
-        GeoCoordinate coordinate, WebMercatorViewport viewport, CancellationToken cancellationToken)
+    private async Task<ExistingSettlementAssets?> TryLoadSettlementDataAsync(Guid locationId,
+        WebMercatorViewport viewport, SavedLocationThumbnailMetadata metadata,
+        CancellationToken cancellationToken)
     {
-        var metadata = await ReadMetadataAsync(locationId, cancellationToken).ConfigureAwait(false);
-        if (metadata is null || !CoordinatesMatch(metadata, coordinate) ||
-            string.IsNullOrWhiteSpace(metadata.BuildingFileName) ||
-            metadata.BuildingSchemaVersion != OverpassBuildingFeatureDataService.SchemaVersion ||
-            metadata.BuildingQueryVersion != OverpassBuildingFeatureDataService.QueryVersion ||
-            metadata.BuildingBounds is null || !BoundsMatch(metadata.BuildingBounds, viewport.Bounds))
+        if (string.IsNullOrWhiteSpace(metadata.SettlementFileName) ||
+            metadata.SettlementSchemaVersion != SettlementRasterCodec.SchemaVersion ||
+            metadata.SettlementBounds is null ||
+            string.IsNullOrWhiteSpace(metadata.SettlementProviderId) ||
+            string.IsNullOrWhiteSpace(metadata.SettlementDatasetVersion))
             return null;
-        var path = Path.Combine(LocationDirectory(locationId), Path.GetFileName(metadata.BuildingFileName));
+        var path = Path.Combine(LocationDirectory(locationId), Path.GetFileName(metadata.SettlementFileName));
         if (!File.Exists(path)) return null;
         try
         {
             var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-            if (!HashMatches(bytes, metadata.BuildingContentHash)) return null;
-            var data = JsonSerializer.Deserialize<BuildingFeatureDocument>(bytes, _featureJson);
-            if (data is null || !BuildingDocumentMatches(data, locationId, viewport)) return null;
-            _logger.LogDebug(
-                "Building-star cache hit for {LocationId}; {BuildingCount} buildings; subdivision {SubdivisionUsed}",
-                locationId, data.BuildingCount, data.SubdivisionUsed);
-            return new ExistingBuildingAssets(data, bytes);
+            if (!HashMatches(bytes, metadata.SettlementContentHash)) return null;
+            var data = SettlementRasterCodec.Decode(bytes);
+            var expected = new GeoBounds(viewport.Bounds.South, viewport.Bounds.West,
+                viewport.Bounds.North, viewport.Bounds.East);
+            if (data.DatasetId != metadata.SettlementProviderId ||
+                data.DatasetVersion != metadata.SettlementDatasetVersion ||
+                data.Grid.Bounds != expected ||
+                data.Grid.Width != viewport.Width * SettlementDensityBuilder.Supersampling ||
+                data.Grid.Height != viewport.Height * SettlementDensityBuilder.Supersampling ||
+                data.Grid.Projection != GeoRasterProjection.WebMercator) return null;
+            return new ExistingSettlementAssets(data, bytes);
         }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Could not load building-star cache for {LocationId}", locationId);
+            _logger.LogWarning(ex, "Could not load WSF settlement derivative for {LocationId}", locationId);
             return null;
         }
     }
@@ -1112,9 +1226,9 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
 
     private sealed record ExistingMapAssets(SavedLocationThumbnailMetadata Metadata, string SourcePath,
         string ThumbnailPath, byte[] SourceBytes, byte[]? ThumbnailBytes, ExistingFeatureAssets? Features,
-        ExistingBuildingAssets? Buildings);
+        ExistingSettlementAssets? Settlement);
     private sealed record ExistingFeatureAssets(MapFeatureDataDocument Data, byte[] Bytes);
-    private sealed record ExistingBuildingAssets(BuildingFeatureDocument Data, byte[] Bytes);
+    private sealed record ExistingSettlementAssets(SettlementRaster Data, byte[] Bytes);
 }
 
 public sealed class NullLocationMapThumbnailService : ILocationMapThumbnailService

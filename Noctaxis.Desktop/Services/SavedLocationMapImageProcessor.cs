@@ -1,3 +1,7 @@
+using Noctaxis.Core.Environment;
+using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using SkiaSharp;
 
 namespace Noctaxis.Desktop.Services;
@@ -11,16 +15,58 @@ public sealed record MapImageValidationResult(
     int QuantisedColourCount,
     double MeanEdgeDifference);
 
-public sealed record BuildingRenderDiagnostics(int DensityCellCount, double MaximumDensityBeforeClamping);
+public sealed record SettlementRenderDiagnostics(
+    int DensityCellCount,
+    double MaximumDensityBeforeClamping,
+    int ActiveSettlementCellCount,
+    bool PrimaryComponentSelected,
+    int PrimaryComponentCellCount,
+    int SubCoreCount,
+    int GeneratedStarCount,
+    bool SettlementRendered);
 
 /// <summary>Provider-neutral validation and Noctaxis card-art processing.</summary>
 public sealed class SavedLocationMapImageProcessor
 {
     public const int ThumbnailWidth = 512;
     public const int ThumbnailHeight = 280;
-    public const int StyleVersion = 8;
+    public const string RendererId = "settlement-galaxy-passes-1-14";
+    public const int RendererVersion = 3;
+    public const int StyleVersion = 15;
     public const int FeatureOverlayStyleVersion = 1;
-    public const int BuildingOverlayStyleVersion = 1;
+    public const int SettlementGlowStyleVersion = 8;
+    private readonly SettlementDensityBuilder _densityBuilder;
+    private readonly SettlementGlowGeometryCalculator _geometryCalculator;
+    private readonly SettlementGlowCompositor _glowCompositor;
+    private readonly SettlementStarGenerator _starGenerator;
+    private readonly SettlementGalaxyStyle _style;
+    private readonly ILogger<SavedLocationMapImageProcessor> _logger;
+
+    public string SettlementStyleSettingsHash => _style.SettingsHash;
+    public int SettlementPresetVersion => _style.StyleVersion;
+    public string SettlementPresetName => _style.PresetName;
+
+    public SavedLocationMapImageProcessor() : this(new SettlementDensityBuilder(),
+        new SettlementGlowGeometryCalculator(), new SettlementGlowCompositor(), new SettlementStarGenerator(),
+        SettlementGalaxyStyle.DefaultV1) { }
+
+    public SavedLocationMapImageProcessor(SettlementDensityBuilder densityBuilder,
+        SettlementGlowGeometryCalculator geometryCalculator, SettlementGlowCompositor glowCompositor)
+        : this(densityBuilder, geometryCalculator, glowCompositor, new SettlementStarGenerator(),
+            SettlementGalaxyStyle.DefaultV1) { }
+
+    public SavedLocationMapImageProcessor(SettlementDensityBuilder densityBuilder,
+        SettlementGlowGeometryCalculator geometryCalculator, SettlementGlowCompositor glowCompositor,
+        SettlementStarGenerator starGenerator, SettlementGalaxyStyle? style = null,
+        ILogger<SavedLocationMapImageProcessor>? logger = null)
+    {
+        _densityBuilder = densityBuilder;
+        _geometryCalculator = geometryCalculator;
+        _glowCompositor = glowCompositor;
+        _starGenerator = starGenerator;
+        _style = style ?? SettlementGalaxyStyle.DefaultV1;
+        _logger = logger ?? NullLogger<SavedLocationMapImageProcessor>.Instance;
+    }
 
     public MapImageValidationResult ValidateSource(byte[] png)
     {
@@ -45,30 +91,57 @@ public sealed class SavedLocationMapImageProcessor
             minimumRange: 12, minimumColours: 10, minimumEdgeDifference: .40);
     }
 
-    public byte[] Process(byte[] sourcePng) => Process(sourcePng, null, null, null, out _);
+    public byte[] Process(byte[] sourcePng) => ProcessSettlement(sourcePng, null, null, null, out _);
 
     public byte[] Process(byte[] sourcePng, MapFeatureDataDocument? features, WebMercatorViewport? viewport)
-        => Process(sourcePng, features, null, viewport, out _);
+        => ProcessSettlement(sourcePng, features, null, viewport, out _);
 
-    public byte[] Process(byte[] sourcePng, MapFeatureDataDocument? features,
-        BuildingFeatureDocument? buildings, WebMercatorViewport? viewport,
-        out BuildingRenderDiagnostics buildingDiagnostics)
+    public byte[] ProcessSettlement(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport? viewport,
+        out SettlementRenderDiagnostics? settlementDiagnostics)
+        => ProcessCore(sourcePng, features, settlement, viewport, Guid.Empty, null, out settlementDiagnostics);
+
+    public byte[] ProcessSettlement(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport? viewport, Guid locationId,
+        out SettlementRenderDiagnostics? settlementDiagnostics)
+        => ProcessCore(sourcePng, features, settlement, viewport, locationId, null, out settlementDiagnostics);
+
+    public byte[] ProcessSettlementDebug(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport? viewport, Guid locationId, string outputDirectory,
+        out SettlementRenderDiagnostics? settlementDiagnostics)
+        => ProcessCore(sourcePng, features, settlement, viewport, locationId,
+            new SettlementGalaxyDebugWriter(outputDirectory), out settlementDiagnostics);
+
+    private byte[] ProcessCore(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport? viewport, Guid locationId,
+        SettlementGalaxyDebugWriter? debug,
+        out SettlementRenderDiagnostics? settlementDiagnostics)
     {
-        buildingDiagnostics = new BuildingRenderDiagnostics(0, 0);
+        var totalTimer = Stopwatch.StartNew();
+        settlementDiagnostics = null;
         var validation = ValidateSource(sourcePng);
         if (!validation.IsValid) throw new InvalidDataException("Source map validation failed: " + validation.Reason);
-        if (features is not null && viewport is null)
+        if ((features is not null || settlement is not null) && viewport is null)
             throw new ArgumentNullException(nameof(viewport), "A viewport is required to align semantic map features.");
         using var source = SKBitmap.Decode(sourcePng)!;
         using var scaled = ScaleAndCrop(source);
-        using var semanticOverlay = features is null
-            ? null
-            : RenderFeatureOverlay(source.Width, source.Height, features, viewport!);
-        using var scaledOverlay = semanticOverlay is null ? null : ScaleAndCrop(semanticOverlay);
-        using var buildingOverlay = buildings is null
-            ? null
-            : RenderBuildingOverlay(source.Width, source.Height, buildings, viewport!, out buildingDiagnostics);
-        using var scaledBuildings = buildingOverlay is null ? null : ScaleAndCrop(buildingOverlay);
+        using var roadOverlay = features is null ? null : RenderRoadOverlay(source.Width, source.Height, features, viewport!);
+        using var waterOverlay = features is null ? null : RenderWaterOverlay(source.Width, source.Height, features, viewport!);
+        using var scaledRoadOverlay = roadOverlay is null ? null : ScaleAndCrop(roadOverlay);
+        using var scaledWaterOverlay = waterOverlay is null ? null : ScaleAndCrop(waterOverlay);
+        var preparationMs = totalTimer.Elapsed.TotalMilliseconds;
+        SettlementGlowGeometry? glowGeometry = null;
+        SettlementDensityModel? density = null;
+        if (settlement is not null)
+        {
+            density = _densityBuilder.Build(settlement, ThumbnailWidth, ThumbnailHeight, _style);
+            glowGeometry = _geometryCalculator.Calculate(density, ThumbnailWidth, ThumbnailHeight, _style);
+            settlementDiagnostics = new SettlementRenderDiagnostics(density.DensityCellCount,
+                density.MaximumDensity, density.ActiveSettlementCellCount, density.HasPrimaryComponent,
+                density.PrimaryComponentCellCount, glowGeometry?.SubCores.Length ?? 0, 0,
+                false);
+        }
+        var densityMs = totalTimer.Elapsed.TotalMilliseconds - preparationMs;
         using var output = new SKBitmap(ThumbnailWidth, ThumbnailHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(output);
         canvas.Clear(SKColors.Transparent);
@@ -95,8 +168,7 @@ public sealed class SavedLocationMapImageProcessor
                 new SKSamplingOptions(SKCubicResampler.Mitchell), grade);
         canvas.Restore();
 
-        // The raster recedes farther beneath the editorial content. Semantic lines and stars are
-        // drawn after this mask and therefore retain the approved, longer-lived fade reach.
+        // Finish the styled base before any settlement light or semantic lines are added.
         using (var baseFade = new SKPaint
         {
             BlendMode = SKBlendMode.DstIn,
@@ -107,26 +179,6 @@ public sealed class SavedLocationMapImageProcessor
                 [0f, .28f, .74f, 1f], SKShaderTileMode.Clamp)
         })
             canvas.DrawRect(SKRect.Create(ThumbnailWidth, ThumbnailHeight), baseFade);
-
-        canvas.Save();
-        canvas.Translate(ThumbnailWidth / 2f, ThumbnailHeight / 2f);
-        canvas.Skew(skew, 0);
-        canvas.Translate(-ThumbnailWidth / 2f, -ThumbnailHeight / 2f);
-        if (scaledOverlay is not null)
-        {
-            using var overlayImage = SKImage.FromBitmap(scaledOverlay);
-            canvas.DrawImage(overlayImage,
-                new SKRect(-6, -2, ThumbnailWidth + 6, ThumbnailHeight + 2),
-                new SKSamplingOptions(SKCubicResampler.Mitchell));
-        }
-        if (scaledBuildings is not null)
-        {
-            using var buildingImage = SKImage.FromBitmap(scaledBuildings);
-            canvas.DrawImage(buildingImage,
-                new SKRect(-6, -2, ThumbnailWidth + 6, ThumbnailHeight + 2),
-                new SKSamplingOptions(SKCubicResampler.Mitchell));
-        }
-        canvas.Restore();
 
         using (var atmosphere = new SKPaint
         {
@@ -163,6 +215,54 @@ public sealed class SavedLocationMapImageProcessor
             canvas.DrawRect(SKRect.Create(ThumbnailWidth, ThumbnailHeight), fade);
 
         EnsureMapArtworkIsVisible(output);
+        if (debug is not null && density is not null) debug.BeginRun(output, density);
+        var baseMs = totalTimer.Elapsed.TotalMilliseconds - preparationMs - densityMs;
+
+        canvas.Flush();
+        var renderViewport = viewport ?? new WebMercatorViewport(0, 256, source.Width, source.Height, 0, 0);
+        var context = new SettlementGalaxyRenderContext(locationId, renderViewport);
+        using var finalRoadOverlay = scaledRoadOverlay is null ? null : TransformOverlay(scaledRoadOverlay, skew);
+        using var finalWaterOverlay = scaledWaterOverlay is null ? null : TransformOverlay(scaledWaterOverlay, skew);
+        var featureMasks = BuildFeatureMasks(finalRoadOverlay, finalWaterOverlay, ThumbnailWidth, ThumbnailHeight);
+        SettlementGalaxyFieldMap? galaxyFields = null;
+        var stars = settlement is null
+            ? Array.Empty<SettlementStar>()
+            : _starGenerator.Generate(settlement, ThumbnailWidth, ThumbnailHeight, context, _style).ToArray();
+        if (settlementDiagnostics is not null)
+            settlementDiagnostics = settlementDiagnostics with
+            {
+                GeneratedStarCount = stars.Length,
+                SettlementRendered = glowGeometry is not null || stars.Length > 0
+            };
+        if (settlement is not null && density is not null && glowGeometry is not null)
+        {
+            galaxyFields = _glowCompositor.CompositeAstronomicalLayers(output, density, glowGeometry,
+                stars, context, _style, debug, featureMasks);
+        }
+        else
+        {
+            _glowCompositor.CompositeBackgroundAmbience(output, context, _style);
+            if (density is not null && stars.Length > 0)
+                _glowCompositor.CompositeSettlementStarsOnly(output, density, stars, _style);
+        }
+        var astronomicalMs = totalTimer.Elapsed.TotalMilliseconds - preparationMs - densityMs - baseMs;
+
+        // The existing line renderers remain geometry driven. Roads and then water are separately
+        // redrawn above the astronomical layers; density only controls their selected retention.
+        if (finalRoadOverlay is not null)
+            CompositeFeatureLayer(output, finalRoadOverlay, galaxyFields, isWater: false, _style.MapIntegration);
+        if (finalWaterOverlay is not null)
+            CompositeFeatureLayer(output, finalWaterOverlay, galaxyFields, isWater: true, _style.MapIntegration);
+        // Pass 12 is captured again after real roads/water are redrawn so the diagnostic proves
+        // that semantic lines remain above the completed positive-light envelope. Pass 11 keeps
+        // the compositor's pre-falloff map-integration snapshot instead of being overwritten.
+        debug?.WriteColour("12-falloff.png", output);
+        var semanticMs = totalTimer.Elapsed.TotalMilliseconds - preparationMs - densityMs - baseMs - astronomicalMs;
+
+        // Tonemapping changes only photographic response: highlight shoulder compression and
+        // positive local detail. It precedes the pin so the location glyph is never filtered.
+        _glowCompositor.ApplyTonemapping(output, _style, debug);
+        var toneMs = totalTimer.Elapsed.TotalMilliseconds - preparationMs - densityMs - baseMs - astronomicalMs - semanticMs;
 
         // The source location is centred within the map artwork. In the 42/58 card split this
         // places the final pin at roughly 71% of the complete card width.
@@ -173,6 +273,11 @@ public sealed class SavedLocationMapImageProcessor
         var processedValidation = ValidateThumbnail(bytes);
         if (!processedValidation.IsValid)
             throw new InvalidDataException("Processed thumbnail validation failed: " + processedValidation.Reason);
+        _logger.LogDebug(
+            "SavedLocationThumbnail renderer timing: Renderer={Renderer}; Style={Style}; StyleVersion={StyleVersion}; Preparation={PreparationMs:F1} ms; Density={DensityMs:F1} ms; Base={BaseMs:F1} ms; Astronomical={AstronomicalMs:F1} ms; Semantic={SemanticMs:F1} ms; Tonemap={ToneMs:F1} ms; EncodeAndValidate={EncodeMs:F1} ms; Total={TotalMs:F1} ms",
+            RendererId, _style.PresetName, StyleVersion, preparationMs, densityMs, baseMs, astronomicalMs,
+            semanticMs, toneMs, totalTimer.Elapsed.TotalMilliseconds - preparationMs - densityMs - baseMs -
+            astronomicalMs - semanticMs - toneMs, totalTimer.Elapsed.TotalMilliseconds);
         return bytes;
     }
 
@@ -203,7 +308,7 @@ public sealed class SavedLocationMapImageProcessor
         return scaled;
     }
 
-    private static SKBitmap RenderFeatureOverlay(int width, int height, MapFeatureDataDocument features,
+    private static SKBitmap RenderRoadOverlay(int width, int height, MapFeatureDataDocument features,
         WebMercatorViewport viewport)
     {
         var overlay = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
@@ -211,12 +316,102 @@ public sealed class SavedLocationMapImageProcessor
         using var canvas = new SKCanvas(overlay);
         canvas.ClipRect(SKRect.Create(width, height));
 
-        foreach (var waterway in features.Waterways)
-            DrawWaterway(canvas, waterway, viewport);
-        foreach (var road in features.Roads.OrderByDescending(road => road.Classification))
+        foreach (var road in features.Roads.OrderByDescending(road => road.Classification)
+                     .ThenBy(road => road.ElementType, StringComparer.Ordinal).ThenBy(road => road.Id))
             DrawRoad(canvas, road, viewport);
         return overlay;
     }
+
+    private static SKBitmap RenderWaterOverlay(int width, int height, MapFeatureDataDocument features,
+        WebMercatorViewport viewport)
+    {
+        var overlay = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
+        overlay.Erase(SKColors.Transparent);
+        using var canvas = new SKCanvas(overlay);
+        canvas.ClipRect(SKRect.Create(width, height));
+        foreach (var waterway in features.Waterways.OrderBy(waterway => waterway.ElementType,
+                     StringComparer.Ordinal).ThenBy(waterway => waterway.Id))
+            DrawWaterway(canvas, waterway, viewport);
+        return overlay;
+    }
+
+    private static SKBitmap TransformOverlay(SKBitmap overlay, float skew)
+    {
+        var transformed = new SKBitmap(ThumbnailWidth, ThumbnailHeight, SKColorType.Bgra8888, SKAlphaType.Premul);
+        transformed.Erase(SKColors.Transparent);
+        using var canvas = new SKCanvas(transformed);
+        canvas.Translate(ThumbnailWidth / 2f, ThumbnailHeight / 2f);
+        canvas.Skew(skew, 0);
+        canvas.Translate(-ThumbnailWidth / 2f, -ThumbnailHeight / 2f);
+        using var image = SKImage.FromBitmap(overlay);
+        canvas.DrawImage(image, new SKRect(-6, -2, ThumbnailWidth + 6, ThumbnailHeight + 2),
+            new SKSamplingOptions(SKCubicResampler.Mitchell));
+        return transformed;
+    }
+
+    private static SettlementGalaxyFeatureMasks BuildFeatureMasks(SKBitmap? roads, SKBitmap? water,
+        int width, int height)
+    {
+        var roadMask = new float[width * height];
+        var waterMask = new float[width * height];
+        var pinMask = new float[width * height];
+        CopyAlpha(roads, roadMask);
+        CopyAlpha(water, waterMask);
+        var centreX = width / 2d;
+        var centreY = height / 2d;
+        for (var y = 0; y < height; y++)
+        for (var x = 0; x < width; x++)
+            if (Square(x - centreX) + Square(y - centreY) <= Square(24))
+                pinMask[y * width + x] = 1;
+        return new SettlementGalaxyFeatureMasks(roadMask, waterMask, pinMask);
+
+        static void CopyAlpha(SKBitmap? bitmap, float[] destination)
+        {
+            if (bitmap is null) return;
+            var pixels = new SkiaBitmapPixelBuffer(bitmap);
+            for (var y = 0; y < bitmap.Height; y++)
+            for (var x = 0; x < bitmap.Width; x++)
+                destination[y * bitmap.Width + x] = pixels.Read(x, y).Alpha / 255f;
+        }
+    }
+
+    private static void CompositeFeatureLayer(SKBitmap destination, SKBitmap overlay,
+        SettlementGalaxyFieldMap? fields, bool isWater, MapIntegrationStyle integration)
+    {
+        var destinationPixels = new SkiaBitmapPixelBuffer(destination);
+        var overlayPixels = new SkiaBitmapPixelBuffer(overlay);
+        for (var y = 0; y < destination.Height; y++)
+        for (var x = 0; x < destination.Width; x++)
+        {
+            var source = overlayPixels.Read(x, y);
+            if (source.Alpha == 0) continue;
+            var body = fields?.At(fields.Body, x, y) ?? 0;
+            var dense = fields?.At(fields.Dense, x, y) ?? 0;
+            var retention = isWater
+                ? 1 - dense * (1 - integration.DenseRiverRetention)
+                : 1 - body * (1 - integration.BodyRoadRetention) - dense *
+                    (integration.BodyRoadRetention - integration.DenseRoadRetention);
+            retention = Math.Clamp(retention, 0, 1);
+            var alpha = source.Alpha / 255d;
+            var target = destinationPixels.Read(x, y);
+            var index = y * destination.Width + x;
+            var underRed = fields is null ? target.Red : fields.UnderRed[index] * 255;
+            var underGreen = fields is null ? target.Green : fields.UnderGreen[index] * 255;
+            var underBlue = fields is null ? target.Blue : fields.UnderBlue[index] * 255;
+            var roadRed = underRed * (1 - retention) + source.Red * retention;
+            var roadGreen = underGreen * (1 - retention) + source.Green * retention;
+            var roadBlue = underBlue * (1 - retention) + source.Blue * retention;
+            destinationPixels.Write(x, y,
+                BlendChannel(target.Red, roadRed, alpha),
+                BlendChannel(target.Green, roadGreen, alpha),
+                BlendChannel(target.Blue, roadBlue, alpha), target.Alpha);
+        }
+    }
+
+    private static byte BlendChannel(double target, double source, double alpha) =>
+        (byte)Math.Clamp((int)Math.Round(target * (1 - alpha) + source * alpha), 0, 255);
+
+    private static double Square(double value) => value * value;
 
     private static void DrawRoad(SKCanvas canvas, MapRoadFeature road, WebMercatorViewport viewport)
     {
@@ -251,61 +446,6 @@ public sealed class SavedLocationMapImageProcessor
         };
         using var paint = LinePaint(new SKColor(70, 203, 232, alpha), width);
         canvas.DrawPath(path, paint);
-    }
-
-    private static SKBitmap RenderBuildingOverlay(int width, int height,
-        BuildingFeatureDocument buildings, WebMercatorViewport viewport,
-        out BuildingRenderDiagnostics diagnostics)
-    {
-        const int cellSize = 4;
-        var columns = (width + cellSize - 1) / cellSize;
-        var rows = (height + cellSize - 1) / cellSize;
-        var density = new float[columns * rows];
-        foreach (var building in buildings.Buildings)
-        {
-            var centre = viewport.Project(building.Latitude, building.Longitude);
-            if (!viewport.ContainsPixel(centre)) continue;
-            var column = Math.Clamp((int)(centre.X / cellSize), 0, columns - 1);
-            var row = Math.Clamp((int)(centre.Y / cellSize), 0, rows - 1);
-            density[row * columns + column] += BuildingWeight(building);
-        }
-        var maxDensity = density.Length == 0 ? 0 : density.Max();
-        var nonEmpty = density.Count(value => value > 0);
-        diagnostics = new BuildingRenderDiagnostics(nonEmpty, maxDensity);
-
-        var overlay = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
-        overlay.Erase(SKColors.Transparent);
-        using var canvas = new SKCanvas(overlay);
-        using var glow = new SKPaint { IsAntialias = true, BlendMode = SKBlendMode.SrcOver };
-        using var point = new SKPaint { IsAntialias = true, BlendMode = SKBlendMode.SrcOver };
-        for (var row = 0; row < rows; row++)
-        for (var column = 0; column < columns; column++)
-        {
-            var value = density[row * columns + column];
-            if (value <= 0) continue;
-            var intensity = (float)Math.Clamp(Math.Log2(1 + value) / 4.2, .16, 1);
-            var x = column * cellSize + cellSize / 2f;
-            var y = row * cellSize + cellSize / 2f;
-            glow.Color = new SKColor(190, 180, 255, (byte)Math.Round(38 + 74 * intensity));
-            point.Color = new SKColor(239, 235, 255, (byte)Math.Round(82 + 116 * intensity));
-            canvas.DrawCircle(x, y, 2.0f + 2.4f * intensity, glow);
-            canvas.DrawCircle(x, y, .65f + .85f * intensity, point);
-        }
-        return overlay;
-    }
-
-    private static float BuildingWeight(BuildingStarFeature building)
-    {
-        var type = building.Building?.ToLowerInvariant();
-        var typeWeight = type switch
-        {
-            "industrial" or "warehouse" or "commercial" or "retail" or "hospital" or
-                "school" or "civic" or "office" => 1.65f,
-            "shed" or "garage" or "garages" or "carport" or "hut" or "greenhouse" => .20f,
-            _ => 1f
-        };
-        var levels = Math.Clamp(building.Levels ?? 1, 1, 12);
-        return typeWeight * (1f + MathF.Log2(levels) * .16f);
     }
 
     private static SKPath? CreatePath(MapFeatureCoordinate[] geometry, WebMercatorViewport viewport, bool close)

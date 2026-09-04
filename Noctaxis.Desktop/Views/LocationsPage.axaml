@@ -124,9 +124,9 @@
                       <MenuFlyout>
                         <MenuItem Header="Edit location" Command="{Binding EditCommand}"/>
                         <MenuItem Header="Regenerate map image" Command="{Binding RefreshMapThumbnailCommand}"/>
-                        <MenuItem Header="Refresh building cache" Command="{Binding RefreshBuildingCacheCommand}"/>
-                        <MenuItem Header="{Binding BuildingStatusSummary}" IsEnabled="False"
-                                  IsVisible="{Binding HasBuildingWarning}" Foreground="#9AA6B8"/>
+                        <MenuItem Header="Refresh WSF settlement layer" Command="{Binding RefreshSettlementCacheCommand}"/>
+                        <MenuItem Header="{Binding SettlementStatusSummary}" IsEnabled="False"
+                                  IsVisible="{Binding HasSettlementWarning}" Foreground="#9AA6B8"/>
                         <Separator/>
                         <MenuItem Header="Delete location" Command="{Binding DeleteCommand}" Foreground="#E88991"/>
                       </MenuFlyout>

@@ -10,3 +10,6 @@ artifacts/
 appsettings.local.json
 secrets.json
 *.hgt
+/.calibration-input
+/docs
+/docs

@@ -71,8 +71,11 @@ public sealed class CalculationTests
     [Fact]
     public void CameraFramingAppearanceSettings_AreClampedForSafeRendering()
     {
-        var settings = new CameraFramingSettings(ShadingOpacityPercent: 120, LineThickness: .1).Normalised();
+        var settings = new CameraFramingSettings(ShadingOpacityPercent: 120, LineThickness: .1,
+            TerrainCastAngularDetailDegrees: 100).Normalised();
         Assert.Equal(50, settings.ShadingOpacityPercent);
         Assert.Equal(.5, settings.LineThickness);
+        Assert.Equal(45, settings.TerrainCastAngularDetailDegrees);
+        Assert.Equal(10, new CameraFramingSettings().TerrainCastAngularDetailDegrees);
     }
 }

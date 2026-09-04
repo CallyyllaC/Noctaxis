@@ -1,9 +1,13 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
+using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Environment;
 using Noctaxis.Core.Persistence;
 using Noctaxis.Desktop.Services;
+using Noctaxis.Desktop.ViewModels;
 using SkiaSharp;
 
 namespace Noctaxis.Desktop.Tests;
@@ -54,10 +58,14 @@ public sealed class LocationMapThumbnailServiceTests
         Assert.Equal("OpenStreetMap", metadata.ProviderName);
         Assert.Equal("standard", metadata.MapStyleId);
         Assert.Contains("OpenStreetMap", metadata.AttributionText);
-        Assert.Equal(8, SavedLocationMapImageProcessor.StyleVersion);
+        Assert.Equal(15, SavedLocationMapImageProcessor.StyleVersion);
         Assert.Equal(SavedLocationMapImageProcessor.StyleVersion,
             LocationMapThumbnailService.ThumbnailStyleVersion);
         Assert.Equal(LocationMapThumbnailService.ThumbnailStyleVersion, metadata.ThumbnailStyleVersion);
+        Assert.Equal(SettlementGalaxyStyle.DefaultV1.StyleVersion, metadata.SettlementPresetVersion);
+        Assert.Equal(SettlementGalaxyStyle.CanonicalV1Hash, metadata.SettlementStyleSettingsHash);
+        Assert.Equal(SavedLocationMapImageProcessor.RendererId, metadata.ThumbnailRendererId);
+        Assert.Equal(SavedLocationMapImageProcessor.RendererVersion, metadata.ThumbnailRendererVersion);
         Assert.False(string.IsNullOrWhiteSpace(metadata.SourceConfigurationHash));
         Assert.False(string.IsNullOrWhiteSpace(metadata.SourceContentHash));
         Assert.False(string.IsNullOrWhiteSpace(metadata.ThumbnailContentHash));
@@ -371,7 +379,6 @@ public sealed class LocationMapThumbnailServiceTests
         Assert.Equal(MapFeatureFetchStatus.Complete.ToString(), result.Metadata.FeatureFetchStatus);
         Assert.Equal(1, result.Metadata.FeatureRoadCount);
         Assert.Equal(0, result.Metadata.FeatureWaterwayCount);
-        Assert.Equal(0, result.Metadata.FeatureBuildingCount);
         Assert.Equal(1, result.Metadata.FeatureAttemptCount);
         Assert.NotNull(result.Metadata.FeatureLastAttemptedAtUtc);
         Assert.False(string.IsNullOrWhiteSpace(result.Metadata.FeatureContentHash));
@@ -527,7 +534,7 @@ public sealed class LocationMapThumbnailServiceTests
         var thumbnailPath = Path.Combine(directory, "thumbnail.png");
         var featuresBefore = await File.ReadAllBytesAsync(featurePath);
         var thumbnailBefore = await File.ReadAllBytesAsync(thumbnailPath);
-        var failure = new MapFeatureFetchOutcome(MapFeatureFetchStatus.Unavailable, 0, 0, 0,
+        var failure = new MapFeatureFetchOutcome(MapFeatureFetchStatus.Unavailable, 0, 0,
             "timeout", "the Overpass request timed out", 504, true, false, false, 2,
             DateTimeOffset.UtcNow, true);
         var tiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
@@ -580,15 +587,14 @@ public sealed class LocationMapThumbnailServiceTests
     }
 
     [Fact]
-    public async Task RefreshBuildings_UsesCachedRasterAndCoreFeaturesWithoutTheirNetworkRequests()
+    public async Task RefreshSettlement_UsesCachedRasterAndCoreFeaturesWithoutTheirNetworkRequests()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Castlethorpe Bridge");
-        var initialBuildings = new FakeBuildingService((id, viewport, _) =>
-            BuildingResult(id, viewport, 2, BuildingStarStatus.Complete));
+        var initialSettlement = new FakeSettlementService(available: true);
         using (var initial = CreateService(files, new TileHandler(CreateTile()),
                    featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
-                   buildingData: initialBuildings))
+                   settlementData: initialSettlement))
             Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, default));
 
@@ -597,108 +603,257 @@ public sealed class LocationMapThumbnailServiceTests
         var featuresBefore = await File.ReadAllBytesAsync(Path.Combine(directory, "features.json"));
         var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
         var core = new FakeFeatureService((_, _) => throw new InvalidOperationException("Core fetch is forbidden."));
-        var buildings = new FakeBuildingService((id, viewport, force) =>
-            BuildingResult(id, viewport, 5, BuildingStarStatus.Complete));
-        using var refresh = CreateService(files, offlineTiles, featureData: core, buildingData: buildings);
+        var settlement = new FakeSettlementService(available: true);
+        using var refresh = CreateService(files, offlineTiles, featureData: core, settlementData: settlement);
 
         var result = await refresh.Value.GetThumbnailAsync(location,
-            SavedLocationMapRefreshMode.RefreshBuildings, default);
+            SavedLocationMapRefreshMode.RefreshSettlement, default);
 
         Assert.NotNull(result);
-        Assert.Equal(BuildingStarStatus.Complete, result.Operation!.Buildings!.Status);
+        Assert.Equal(EnvironmentalDataState.Available, result.Operation!.SettlementState);
         Assert.Equal(0, offlineTiles.RequestCount);
         Assert.Equal(0, core.RequestCount);
-        Assert.Equal(1, buildings.RequestCount);
-        Assert.True(buildings.ForceRefreshValues.Single());
+        Assert.Equal(1, settlement.RequestCount);
         Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "source.png")));
         Assert.Equal(featuresBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "features.json")));
-        Assert.Equal(5, result.Metadata.BuildingCount);
-        Assert.True(File.Exists(Path.Combine(directory, "buildings.json")));
+        Assert.Equal("test-wsf", result.Metadata.SettlementProviderId);
     }
 
     [Fact]
-    public async Task FailedBuildingRefresh_PreservesPreviousBuildingAggregateAndThumbnail()
+    public async Task FailedSettlementRefresh_PreservesPreviousThumbnail()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Castlethorpe Bridge");
         using (var initial = CreateService(files, new TileHandler(CreateTile()),
                    featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
-                   buildingData: new FakeBuildingService((id, viewport, _) =>
-                       BuildingResult(id, viewport, 3, BuildingStarStatus.Complete))))
+                   settlementData: new FakeSettlementService(available: true)))
             Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, default));
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var buildingsPath = Path.Combine(directory, "buildings.json");
         var thumbnailPath = Path.Combine(directory, "thumbnail.png");
-        var buildingsBefore = await File.ReadAllBytesAsync(buildingsPath);
         var thumbnailBefore = await File.ReadAllBytesAsync(thumbnailPath);
-        var failed = new FakeBuildingService((_, _, _) => new BuildingFeatureFetchResult(null,
-            BuildingFeatureFetchOutcome.Unavailable("timeout", "the building request timed out",
-                timedOut: true)));
+        var failed = new FakeSettlementService(available: false);
         using var refresh = CreateService(files, new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable),
             featureData: new FakeFeatureService((_, _) => throw new InvalidOperationException()),
-            buildingData: failed);
+            settlementData: failed);
 
         var result = await refresh.Value.GetThumbnailAsync(location,
-            SavedLocationMapRefreshMode.RefreshBuildings, default);
+            SavedLocationMapRefreshMode.RefreshSettlement, default);
 
         Assert.NotNull(result);
-        Assert.Equal(BuildingStarStatus.Cached, result.Operation!.Buildings!.Status);
-        Assert.Equal("timeout", result.Metadata.BuildingFailureCode);
-        Assert.Equal(buildingsBefore, await File.ReadAllBytesAsync(buildingsPath));
+        Assert.Equal(EnvironmentalDataState.Unavailable, result.Operation!.SettlementState);
+        Assert.Equal(EnvironmentalDataState.Cached.ToString(), result.Metadata.SettlementStatus);
+        Assert.True(result.Metadata.SettlementRendered,
+            $"active={result.Metadata.SettlementActiveCellCount}, stars={result.Metadata.SettlementGeneratedStarCount}, max={result.Metadata.SettlementMaximumDensity}");
         Assert.Equal(thumbnailBefore, await File.ReadAllBytesAsync(thumbnailPath));
     }
 
     [Fact]
-    public async Task RegenerateMapImage_ReusesCompatibleBuildingAggregate()
+    public async Task ValidEmptySettlement_IsPersistedAsEmptyAndCountsAsACompleteRefresh()
     {
         using var files = new TestDirectory();
-        var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Castlethorpe Bridge");
-        using (var initial = CreateService(files, new TileHandler(CreateTile()),
-                   featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
-                   buildingData: new FakeBuildingService((id, viewport, _) =>
-                       BuildingResult(id, viewport, 4, BuildingStarStatus.Complete))))
-            Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
-                SavedLocationMapRefreshMode.RefreshSource, default));
-
-        var mustNotFetch = new FakeBuildingService((_, _, _) =>
-            throw new InvalidOperationException("A compatible building aggregate must be reused."));
-        using var regenerated = CreateService(files, new TileHandler(CreateTile()),
+        var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Valid empty WSF");
+        using var service = CreateService(files, new TileHandler(CreateTile()),
             featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
-            buildingData: mustNotFetch);
+            settlementData: new EmptySettlementService());
 
-        var result = await regenerated.Value.GetThumbnailAsync(location,
+        var result = await service.Value.GetThumbnailAsync(location,
             SavedLocationMapRefreshMode.RefreshSource, default);
 
         Assert.NotNull(result);
-        Assert.Equal(0, mustNotFetch.RequestCount);
-        Assert.Equal(BuildingStarStatus.Cached, result.Operation!.Buildings!.Status);
-        Assert.Equal(4, result.Metadata.BuildingCount);
+        Assert.Equal(EnvironmentalDataState.Empty, result.Operation!.SettlementState);
+        Assert.True(result.Operation.IsComplete);
+        Assert.Equal(nameof(EnvironmentalDataState.Empty), result.Metadata.SettlementStatus);
+        Assert.False(result.Metadata.SettlementRendered);
+        Assert.False(string.IsNullOrWhiteSpace(result.Metadata.StyledInputHash));
+        Assert.Contains("no settlement", result.Metadata.SettlementStatusMessage,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.True(File.Exists(Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"),
+            "settlement-field.bin.gz")));
     }
 
     [Fact]
-    public async Task UseCacheAndReapplyStyle_NeverRequestBuildingData()
+    public async Task PartialWsfRaster_RendersAndRemainsExplicitlyPartial()
+    {
+        using var files = new TestDirectory();
+        var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Partial WSF");
+        using var service = CreateService(files, new TileHandler(CreateTile()),
+            featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
+            settlementData: new StateSettlementService(EnvironmentalDataState.Partial));
+
+        var result = await service.Value.GetThumbnailAsync(location,
+            SavedLocationMapRefreshMode.RefreshSource, default);
+
+        Assert.NotNull(result);
+        Assert.Equal(nameof(EnvironmentalDataState.Partial), result.Metadata.SettlementStatus);
+        Assert.True(result.Metadata.SettlementPartial);
+        Assert.True(result.Metadata.SettlementRendered,
+            $"active={result.Metadata.SettlementActiveCellCount}, stars={result.Metadata.SettlementGeneratedStarCount}, max={result.Metadata.SettlementMaximumDensity}");
+        Assert.True(result.Metadata.SettlementGeneratedStarCount > 0);
+        Assert.True(result.Operation!.IsComplete);
+    }
+
+    [Fact]
+    public async Task UnavailableWsfThumbnail_IsDegradedAndCannotSatisfyCompleteCache()
+    {
+        using var files = new TestDirectory();
+        var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Unavailable WSF");
+        var unavailable = new FakeSettlementService(available: false);
+        using var service = CreateService(files, new TileHandler(CreateTile()),
+            featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
+            settlementData: unavailable);
+
+        var generated = await service.Value.GetThumbnailAsync(location,
+            SavedLocationMapRefreshMode.RefreshSource, default);
+        var cached = await service.Value.GetThumbnailAsync(location,
+            SavedLocationMapRefreshMode.UseCache, default);
+
+        Assert.NotNull(generated);
+        Assert.True(generated.Operation!.IsDegraded);
+        Assert.False(generated.Metadata.SettlementRendered);
+        Assert.Null(generated.Metadata.SettlementContentHash);
+        Assert.Null(cached);
+        Assert.Equal(1, unavailable.RequestCount);
+    }
+
+    [Fact]
+    public async Task ChangedSettlementDerivative_InvalidatesOnlyStyledThumbnail()
+    {
+        using var files = new TestDirectory();
+        var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Changed WSF");
+        using (var initial = CreateService(files, new TileHandler(CreateTile()),
+                   featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
+                   settlementData: new FakeSettlementService(available: true)))
+            Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
+                SavedLocationMapRefreshMode.RefreshSource, default));
+
+        var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
+        var settlementPath = Path.Combine(directory, "settlement-field.bin.gz");
+        var metadataPath = Path.Combine(directory, "metadata.json");
+        var raster = SettlementRasterCodec.Decode(await File.ReadAllBytesAsync(settlementPath));
+        var fractions = (float[])raster.BuildingFraction.Clone();
+        fractions[fractions.Length / 3] = .95f;
+        var changedBytes = SettlementRasterCodec.Encode(raster with { BuildingFraction = fractions });
+        await File.WriteAllBytesAsync(settlementPath, changedBytes);
+        var metadata = JsonSerializer.Deserialize<SavedLocationThumbnailMetadata>(
+            await File.ReadAllTextAsync(metadataPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))! with
+        {
+            SettlementContentHash = Convert.ToHexStringLower(SHA256.HashData(changedBytes))
+        };
+        await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(metadata,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
+        var offlineSettlement = new FakeSettlementService(available: false);
+        using var cached = CreateService(files, offlineTiles,
+            featureData: new FakeFeatureService((_, _) => throw new InvalidOperationException()),
+            settlementData: offlineSettlement);
+        var result = await cached.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.UseCache, default);
+
+        Assert.NotNull(result);
+        Assert.True(result.WasGenerated);
+        Assert.Equal(0, offlineTiles.RequestCount);
+        Assert.Equal(0, offlineSettlement.RequestCount);
+    }
+
+    [Fact]
+    public async Task UseCache_DoesNotRequestSettlementData()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Castlethorpe Bridge");
         using (var initial = CreateService(files, new TileHandler(CreateTile()),
                    featureData: new FakeFeatureService((id, viewport) => CompleteFeatures(id, viewport)),
-                   buildingData: new FakeBuildingService((id, viewport, _) =>
-                       BuildingResult(id, viewport, 2, BuildingStarStatus.Complete))))
+                   settlementData: new FakeSettlementService(available: true)))
             Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, default));
 
-        var forbidden = new FakeBuildingService((_, _, _) =>
-            throw new InvalidOperationException("Network-free modes must not request buildings."));
+        var settlement = new FakeSettlementService(available: false);
         var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
         using var cached = CreateService(files, offlineTiles,
             featureData: new FakeFeatureService((_, _) => throw new InvalidOperationException()),
-            buildingData: forbidden);
+            settlementData: settlement);
 
         Assert.NotNull(await cached.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.UseCache, default));
-        Assert.NotNull(await cached.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.ReapplyStyle, default));
-        Assert.Equal(0, forbidden.RequestCount);
+        Assert.Equal(0, settlement.RequestCount);
         Assert.Equal(0, offlineTiles.RequestCount);
+    }
+
+    [Fact]
+    public async Task StyleSettingsHash_InvalidatesOnlyStyledThumbnail_AndReapplyReusesSourceData()
+    {
+        using var files = new TestDirectory();
+        var location = Location(Guid.NewGuid(), 53.5664, -.5063, "Style identity");
+        using (var initial = CreateService(files, new TileHandler(CreateTile()),
+                   settlementData: new FakeSettlementService(available: true)))
+            Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
+                SavedLocationMapRefreshMode.RefreshSource, default));
+
+        var changedStyle = SettlementGalaxyStyle.DefaultV1 with
+        {
+            OuterFalloff = SettlementGalaxyStyle.DefaultV1.OuterFalloff with
+            { Gain = SettlementGalaxyStyle.DefaultV1.OuterFalloff.Gain + .001 }
+        };
+        var changedProcessor = new SavedLocationMapImageProcessor(new SettlementDensityBuilder(),
+            new SettlementGlowGeometryCalculator(), new SettlementGlowCompositor(),
+            new SettlementStarGenerator(), changedStyle);
+        var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
+        var offlineSettlement = new FakeSettlementService(available: false);
+        using var changed = CreateService(files, offlineTiles, settlementData: offlineSettlement,
+            processor: changedProcessor);
+
+        var reapplied = await changed.Value.GetThumbnailAsync(location,
+            SavedLocationMapRefreshMode.UseCache, default);
+
+        Assert.NotNull(reapplied);
+        Assert.True(reapplied.WasGenerated);
+        Assert.Equal(changedStyle.SettingsHash, reapplied.Metadata.SettlementStyleSettingsHash);
+        Assert.Equal(0, offlineTiles.RequestCount);
+        Assert.Equal(0, offlineSettlement.RequestCount);
+
+    }
+
+    [AvaloniaFact]
+    public async Task LegacyRendererIdentity_IsRecomposedLocally_AndCannotReachLocationCard()
+    {
+        using var files = new TestDirectory();
+        var location = Location(Guid.NewGuid(), 53.5664, -.5063, "Renderer migration");
+        using (var initial = CreateService(files, new TileHandler(CreateTile()),
+                   settlementData: new FakeSettlementService(available: true)))
+            Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
+                SavedLocationMapRefreshMode.RefreshSource, default));
+
+        var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
+        var metadataPath = Path.Combine(directory, "metadata.json");
+        var legacy = JsonSerializer.Deserialize<SavedLocationThumbnailMetadata>(
+            await File.ReadAllTextAsync(metadataPath), new JsonSerializerOptions(JsonSerializerDefaults.Web))! with
+        {
+            ThumbnailRendererId = "legacy-settlement-glow",
+            ThumbnailRendererVersion = 1
+        };
+        await File.WriteAllTextAsync(metadataPath, JsonSerializer.Serialize(legacy,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+
+        var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
+        var offlineSettlement = new FakeSettlementService(available: false);
+        using var current = CreateService(files, offlineTiles, settlementData: offlineSettlement);
+
+        var result = await current.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.UseCache, default);
+
+        Assert.NotNull(result);
+        Assert.True(result.WasGenerated);
+        Assert.Equal(SavedLocationMapImageProcessor.RendererId, result.Metadata.ThumbnailRendererId);
+        Assert.Equal(SavedLocationMapImageProcessor.RendererVersion, result.Metadata.ThumbnailRendererVersion);
+        Assert.Equal(0, offlineTiles.RequestCount);
+        Assert.Equal(0, offlineSettlement.RequestCount);
+
+        var card = new LocationCardViewModel(location, false, current.Value,
+            () => DateTimeOffset.UnixEpoch, _ => Task.CompletedTask, _ => Task.CompletedTask,
+            _ => Task.CompletedTask, _ => Task.CompletedTask);
+        var cardResult = await card.RefreshMapThumbnailWithResultAsync(SavedLocationMapRefreshMode.UseCache);
+        Assert.NotNull(cardResult);
+        Assert.NotNull(card.MapThumbnail);
+        Assert.Equal(SavedLocationMapImageProcessor.RendererId, card.ThumbnailMetadata?.ThumbnailRendererId);
+        Assert.Equal(result.ImagePath, cardResult.ImagePath);
     }
 
     private static SavedLocation Location(Guid id, double latitude, double longitude, string name) =>
@@ -706,12 +861,13 @@ public sealed class LocationMapThumbnailServiceTests
 
     private static ServiceLease CreateService(TestDirectory files, TileHandler handler,
         IMapTileSourceProvider? source = null, IMapFeatureDataService? featureData = null,
-        IBuildingFeatureDataService? buildingData = null)
+        ISettlementDataProvider? settlementData = null, SavedLocationMapImageProcessor? processor = null)
     {
         var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
         var service = new LocationMapThumbnailService(client, NullLogger<LocationMapThumbnailService>.Instance,
             new TestPathProvider(files.Path), source ?? new DefaultMapTileSourceProvider(),
-            new SavedLocationMapImageProcessor(), featureData, buildingData);
+            processor ?? new SavedLocationMapImageProcessor(), featureData,
+            settlementData ?? new FakeSettlementService(available: true));
         return new ServiceLease(service, client);
     }
 
@@ -727,36 +883,13 @@ public sealed class LocationMapThumbnailServiceTests
                 viewport.Bounds),
             [new MapRoadFeature(1, "way", MapRoadClassification.ARoad,
                 [new(start.Latitude, start.Longitude), new(end.Latitude, end.Longitude)],
-                "primary", "A15", null, null, null, null)], [], []);
+                "primary", "A15", null, null, null, null)], []);
     }
 
     private static MapFeatureFetchResult CompleteFeatures(Guid locationId, WebMercatorViewport viewport) =>
         new(CreateFeatures(locationId, viewport), new MapFeatureFetchOutcome(
-            MapFeatureFetchStatus.Complete, 1, 0, 0, null, null, 200, false, false,
+            MapFeatureFetchStatus.Complete, 1, 0, null, null, 200, false, false,
             false, 1, DateTimeOffset.UtcNow, false));
-
-    private static BuildingFeatureFetchResult BuildingResult(Guid locationId,
-        WebMercatorViewport viewport, int count, BuildingStarStatus status)
-    {
-        var values = Enumerable.Range(0, count).Select(index =>
-        {
-            var coordinate = viewport.Unproject(200 + index * 15, 160 + index * 8);
-            return new BuildingStarFeature("way", index + 1, coordinate.Latitude,
-                coordinate.Longitude, "house", 2, null);
-        }).ToArray();
-        var document = new BuildingFeatureDocument(OverpassBuildingFeatureDataService.SchemaVersion,
-            locationId, viewport.CentreLatitude, viewport.CentreLongitude, viewport.Zoom,
-            viewport.Width, viewport.Height, viewport.Bounds,
-            new BuildingFeatureSourceMetadata("openstreetmap-overpass-buildings", "OpenStreetMap",
-                "© OpenStreetMap contributors", "https://www.openstreetmap.org/copyright",
-                "Open Database License (ODbL)", "https://opendatacommons.org/licenses/odbl/",
-                "test", OverpassBuildingFeatureDataService.QueryVersion, DateTimeOffset.UtcNow),
-            values, false, []);
-        return new BuildingFeatureFetchResult(document, new BuildingFeatureFetchOutcome(status, count,
-            null, null, 200, false, false, 1, DateTimeOffset.UtcNow, false, 0, 1, 1,
-            0, status == BuildingStarStatus.Cached ? 1 : 0, 0,
-            status == BuildingStarStatus.Complete ? 1 : 0));
-    }
 
     private static byte[] CreateTile()
     {
@@ -890,20 +1023,57 @@ public sealed class LocationMapThumbnailServiceTests
         }
     }
 
-    private sealed class FakeBuildingService(
-        Func<Guid, WebMercatorViewport, bool, BuildingFeatureFetchResult> fetch)
-        : IBuildingFeatureDataService
+    private sealed class FakeSettlementService(bool available) : ISettlementDataProvider
     {
-        public string SharedCacheDirectory => string.Empty;
         public int RequestCount { get; private set; }
-        public List<bool> ForceRefreshValues { get; } = [];
 
-        public Task<BuildingFeatureFetchResult> FetchAsync(Guid locationId, string locationName,
-            WebMercatorViewport viewport, bool forceRefresh, CancellationToken cancellationToken)
+        public Task<EnvironmentalValue<SettlementRaster>> GetSettlementAsync(GeoRasterRequest request,
+            CancellationToken cancellationToken)
         {
             RequestCount++;
-            ForceRefreshValues.Add(forceRefresh);
-            return Task.FromResult(fetch(locationId, viewport, forceRefresh));
+            if (!available)
+                return Task.FromResult(EnvironmentalValue<SettlementRaster>.Unavailable(
+                    "test-wsf", "1", "Test WSF unavailable."));
+            var fractions = new float[request.Width * request.Height];
+            var heights = new float[fractions.Length];
+            for (var y = request.Height / 2 - 35; y <= request.Height / 2 + 35; y++)
+            for (var x = request.Width / 2 - 55; x <= request.Width / 2 + 55; x++)
+            {
+                var index = y * request.Width + x;
+                fractions[index] = .75f;
+                heights[index] = 12;
+            }
+            return Task.FromResult(new EnvironmentalValue<SettlementRaster>(EnvironmentalDataState.Available,
+                new SettlementRaster("test-wsf", "1", request, fractions, heights),
+                "test-wsf", "1", "Synthetic WSF"));
+        }
+    }
+
+    private sealed class EmptySettlementService : ISettlementDataProvider
+    {
+        public Task<EnvironmentalValue<SettlementRaster>> GetSettlementAsync(GeoRasterRequest request,
+            CancellationToken cancellationToken)
+        {
+            var count = request.Width * request.Height;
+            return Task.FromResult(new EnvironmentalValue<SettlementRaster>(EnvironmentalDataState.Empty,
+                new SettlementRaster("test-wsf", "1", request, new float[count], new float[count]),
+                "test-wsf", "1", "Valid WSF coverage contains no settlement in this map area."));
+        }
+    }
+
+    private sealed class StateSettlementService(EnvironmentalDataState state) : ISettlementDataProvider
+    {
+        public Task<EnvironmentalValue<SettlementRaster>> GetSettlementAsync(GeoRasterRequest request,
+            CancellationToken cancellationToken)
+        {
+            var fractions = new float[request.Width * request.Height];
+            var heights = new float[fractions.Length];
+            for (var y = request.Height / 2 - 25; y <= request.Height / 2 + 25; y++)
+            for (var x = request.Width / 2 - 40; x <= request.Width / 2 + 40; x++)
+                fractions[y * request.Width + x] = .72f;
+            return Task.FromResult(new EnvironmentalValue<SettlementRaster>(state,
+                new SettlementRaster("test-wsf", "1", request, fractions, heights),
+                "test-wsf", "1", "Synthetic state WSF"));
         }
     }
 

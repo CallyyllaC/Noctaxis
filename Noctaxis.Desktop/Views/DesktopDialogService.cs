@@ -37,17 +37,17 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
     {
         return await ShowOwnedDialogAsync(() => new ConfirmationDialog(
             "Regenerate all map images",
-            $"Download fresh raster maps and road and water overlays for all {locationCount} saved locations? Compatible building caches will be reused.",
+            $"Download fresh raster maps and road and water overlays for all {locationCount} saved locations? Shared environmental tiles will be reused.",
             "Regenerate all"), false, cancellationToken);
     }
 
-    public async Task<bool> ConfirmRefreshSavedLocationBuildingCachesAsync(int locationCount,
+    public async Task<bool> ConfirmRefreshSavedLocationSettlementCachesAsync(int locationCount,
         CancellationToken cancellationToken = default)
     {
         return await ShowOwnedDialogAsync(() => new ConfirmationDialog(
-            "Refresh building caches",
-            $"Refresh OpenStreetMap building-star caches for all {locationCount} saved locations without redownloading base maps or road and water data?",
-            "Refresh buildings"), false, cancellationToken);
+            "Refresh WSF settlement layers",
+            $"Rebuild WSF settlement layers for all {locationCount} saved locations without redownloading base maps or road and water data?",
+            "Refresh settlement"), false, cancellationToken);
     }
 
     private async Task<TResult> ShowOwnedDialogAsync<TResult>(Func<NoctaxisDialogWindow> create,
@@ -77,14 +77,4 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
         }
     }
 
-    public async Task<string?> ChooseDemDirectoryAsync(CancellationToken cancellationToken = default)
-    {
-        if (Owner is null) return null;
-        var folders = await Owner.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            Title = "Choose SRTM terrain folder", AllowMultiple = false
-        });
-        cancellationToken.ThrowIfCancellationRequested();
-        return folders.Count == 0 ? null : folders[0].Path.LocalPath;
-    }
 }

@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Environment;
 using Noctaxis.Core.Locations;
 using Noctaxis.Desktop.Services;
 using Avalonia.Media.Imaging;
@@ -20,9 +21,8 @@ public interface IPlannerDialogService
         Task.FromResult(true);
     Task<bool> ConfirmRefreshSavedLocationThumbnailsAsync(int locationCount, CancellationToken cancellationToken = default) =>
         Task.FromResult(true);
-    Task<bool> ConfirmRefreshSavedLocationBuildingCachesAsync(int locationCount,
+    Task<bool> ConfirmRefreshSavedLocationSettlementCachesAsync(int locationCount,
         CancellationToken cancellationToken = default) => Task.FromResult(true);
-    Task<string?> ChooseDemDirectoryAsync(CancellationToken cancellationToken = default);
 }
 
 public partial class SavedLocationEditorViewModel : ObservableObject
@@ -140,8 +140,7 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     [ObservableProperty] private SavedLocationThumbnailResult? _lastThumbnailResult;
     public string FavouriteLabel => IsFavourite ? "Unfavourite" : "Favourite";
     public bool HasSemanticWarning => ThumbnailMetadata?.FeatureFetchStatus is
-        nameof(MapFeatureFetchStatus.Unavailable) or nameof(MapFeatureFetchStatus.CachedPrevious) or
-        nameof(MapFeatureFetchStatus.PartialWithoutBuildings) or "BuildingsOmitted";
+        nameof(MapFeatureFetchStatus.Unavailable) or nameof(MapFeatureFetchStatus.CachedPrevious);
     public string SemanticStatusSummary
     {
         get
@@ -150,9 +149,6 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
             var reason = ThumbnailMetadata.FeatureFailureReason;
             return ThumbnailMetadata.FeatureFetchStatus switch
             {
-                nameof(MapFeatureFetchStatus.PartialWithoutBuildings) =>
-                    reason ?? "Roads and waterways loaded; buildings were skipped.",
-                "BuildingsOmitted" => reason ?? "Roads and waterways loaded; buildings were skipped.",
                 nameof(MapFeatureFetchStatus.CachedPrevious) =>
                     "Previous semantic overlay retained" + (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}"),
                 nameof(MapFeatureFetchStatus.Unavailable) =>
@@ -161,25 +157,31 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
             };
         }
     }
-    public bool HasBuildingWarning => ThumbnailMetadata?.BuildingStarStatus is
-        nameof(BuildingStarStatus.Partial) or nameof(BuildingStarStatus.Unavailable) or
-        nameof(BuildingStarStatus.Cached);
-    public string BuildingStatusSummary
+    public bool HasSettlementWarning => ThumbnailMetadata?.SettlementStatus is
+        nameof(EnvironmentalDataState.Partial) or nameof(EnvironmentalDataState.Unavailable) or
+        nameof(EnvironmentalDataState.InvalidData) or nameof(EnvironmentalDataState.TileAbsent) or
+        nameof(EnvironmentalDataState.SourceUnavailable) or nameof(EnvironmentalDataState.InvalidRaster);
+    public string SettlementStatusSummary
     {
         get
         {
-            if (ThumbnailMetadata is null) return "Building-star status unavailable";
-            var reason = ThumbnailMetadata.BuildingFailureReason;
-            return ThumbnailMetadata.BuildingStarStatus switch
+            if (ThumbnailMetadata is null) return "Settlement-density status unavailable";
+            return ThumbnailMetadata.SettlementStatus switch
             {
-                nameof(BuildingStarStatus.Complete) =>
-                    $"Building stars available ({ThumbnailMetadata.BuildingCount ?? 0:N0})",
-                nameof(BuildingStarStatus.Cached) => "Previous building stars retained" +
-                    (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}"),
-                nameof(BuildingStarStatus.Partial) => reason ??
-                    $"Partial building stars: {ThumbnailMetadata.BuildingCompletedRegionCount} of {ThumbnailMetadata.BuildingRegionCount} regions loaded.",
-                _ => "Building stars unavailable" +
-                    (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}")
+                nameof(EnvironmentalDataState.Available) or nameof(EnvironmentalDataState.Cached) =>
+                    $"WSF settlement data available ({ThumbnailMetadata.SettlementCellCount ?? 0:N0} sampled cells)",
+                nameof(EnvironmentalDataState.Empty) =>
+                    "Valid WSF coverage contains no settlement in this map area.",
+                nameof(EnvironmentalDataState.Partial) => "WSF settlement data has partial coverage.",
+                nameof(EnvironmentalDataState.TileAbsent) =>
+                    "The WSF service reports no coverage tile for this map area.",
+                nameof(EnvironmentalDataState.InvalidRaster) =>
+                    "WSF returned data that failed scientific raster validation; the map remains usable.",
+                nameof(EnvironmentalDataState.SourceUnavailable) =>
+                    "The WSF source is currently unreachable; the map remains usable without settlement light.",
+                _ => string.IsNullOrWhiteSpace(ThumbnailMetadata.SettlementStatusMessage)
+                    ? "WSF settlement data unavailable; the map remains usable without settlement light."
+                    : ThumbnailMetadata.SettlementStatusMessage
             };
         }
     }
@@ -188,8 +190,8 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     {
         OnPropertyChanged(nameof(HasSemanticWarning));
         OnPropertyChanged(nameof(SemanticStatusSummary));
-        OnPropertyChanged(nameof(HasBuildingWarning));
-        OnPropertyChanged(nameof(BuildingStatusSummary));
+        OnPropertyChanged(nameof(HasSettlementWarning));
+        OnPropertyChanged(nameof(SettlementStatusSummary));
     }
 
     public void Update(SavedLocation location)
@@ -220,7 +222,7 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     private Task RefreshMapThumbnail() => LoadMapThumbnailAsync(SavedLocationMapRefreshMode.RefreshSource);
 
     [RelayCommand]
-    private Task RefreshBuildingCache() => LoadMapThumbnailAsync(SavedLocationMapRefreshMode.RefreshBuildings);
+    private Task RefreshSettlementCache() => LoadMapThumbnailAsync(SavedLocationMapRefreshMode.RefreshSettlement);
 
     public Task<bool> RefreshMapThumbnailAsync(bool forceRefresh) => LoadMapThumbnailAsync(
         forceRefresh ? SavedLocationMapRefreshMode.RefreshSource : SavedLocationMapRefreshMode.UseCache);
@@ -415,9 +417,10 @@ public partial class LocationsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(metadata.FeatureAttributionText))
             yield return (metadata.FeatureProviderId ?? "openstreetmap-overpass",
                 metadata.FeatureAttributionUrl, metadata.FeatureAttributionText);
-        if (!string.IsNullOrWhiteSpace(metadata.BuildingAttributionText))
-            yield return (metadata.BuildingProviderId ?? "openstreetmap-overpass-buildings",
-                metadata.BuildingAttributionUrl, metadata.BuildingAttributionText);
+        if (string.Equals(metadata.SettlementProviderId, WsfSettlementDataProvider.SourceId,
+                StringComparison.OrdinalIgnoreCase))
+            yield return (metadata.SettlementProviderId!, "https://geoservice.dlr.de/web/datasets/wsf_3d",
+                "World Settlement Footprint 3D (DLR)");
     }
 
     partial void OnSelectedSortOptionChanged(LocationSortOption value) => ApplySort();

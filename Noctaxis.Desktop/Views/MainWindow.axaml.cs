@@ -24,7 +24,7 @@ public partial class MainWindow : Window
         dialogs.Owner = this;
         DataContext = viewModel;
         PlannerMap.PreviewCoordinateChanged += (_, coordinate) => _viewModel.PreviewObserverLocation(coordinate);
-        PlannerMap.CoordinateCommitted += (_, coordinate) => _viewModel.CommitObserverLocation(coordinate);
+        PlannerMap.CoordinateCommitted += (_, coordinate) => _viewModel.CommitUnresolvedObserverLocation(coordinate);
         PlannerMap.InteractionStateChanged += (_, interacting) => _viewModel.SetLocationInteraction(interacting);
         PlannerMap.SaveCurrentPinRequested += async (_, _) => await _viewModel.SaveLocationCommand.ExecuteAsync(null);
     }
@@ -63,6 +63,14 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) { }
         catch (InvalidOperationException) { }
         catch (Exception ex) { _viewModel.ReportExportDestinationFailure(ex); }
+    }
+
+    private async void CopyTerrainDebugClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null) return;
+        await clipboard.SetTextAsync(_viewModel.TerrainDebugText);
+        await clipboard.FlushAsync();
     }
 
     private void TimeSliderReleased(object? sender, PointerReleasedEventArgs e) => _viewModel.CommitTemporalPreview();

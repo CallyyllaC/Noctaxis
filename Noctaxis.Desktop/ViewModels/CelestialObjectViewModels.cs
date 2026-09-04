@@ -6,7 +6,7 @@ using Noctaxis.Core.Domain;
 
 namespace Noctaxis.Desktop.ViewModels;
 
-public sealed record CatalogueTypeOption(string Label, AstralTargetCategory? Value);
+public sealed record ObjectTypeOption(string Label, AstralTargetCategory? Value);
 
 public partial class CelestialObjectItemViewModel : ObservableObject
 {
@@ -60,38 +60,38 @@ public partial class CelestialSearchViewModel : ObservableObject
     public CelestialSearchViewModel(ITargetSearchService search, ITargetCatalogue catalogue)
     {
         _search = search;
-        ObjectTypes = [new CatalogueTypeOption("All object types", null),
-            .. catalogue.ObjectTypes.Select(type => new CatalogueTypeOption(FormatType(type), type))];
+        ObjectTypes = [new ObjectTypeOption("All object types", null),
+            .. catalogue.ObjectTypes.Select(type => new ObjectTypeOption(FormatType(type), type))];
         Constellations = ["All constellations", .. catalogue.Constellations];
-        CatalogueFamilies = ["All catalogues", .. catalogue.CatalogueFamilies];
+        DesignationFamilies = ["All designations", .. catalogue.DesignationFamilies];
         _selectedObjectType = ObjectTypes[0];
         _selectedConstellation = Constellations[0];
-        _selectedCatalogueFamily = CatalogueFamilies[0];
+        _selectedDesignationFamily = DesignationFamilies[0];
         Results.CollectionChanged += (_, _) => NotifyResultState();
     }
 
     public ObservableCollection<AstralTarget> Results { get; } = [];
     public string Attribution => OpenNgcTargetCatalogue.Attribution;
-    public IReadOnlyList<CatalogueTypeOption> ObjectTypes { get; }
+    public IReadOnlyList<ObjectTypeOption> ObjectTypes { get; }
     public IReadOnlyList<string> Constellations { get; }
-    public IReadOnlyList<string> CatalogueFamilies { get; }
+    public IReadOnlyList<string> DesignationFamilies { get; }
     [ObservableProperty] private string _query = string.Empty;
-    [ObservableProperty] private CatalogueTypeOption _selectedObjectType;
+    [ObservableProperty] private ObjectTypeOption _selectedObjectType;
     [ObservableProperty] private string _selectedConstellation;
-    [ObservableProperty] private string _selectedCatalogueFamily;
+    [ObservableProperty] private string _selectedDesignationFamily;
     [ObservableProperty] private bool _isSearching;
 
     public bool HasActiveFilters => SelectedObjectType.Value.HasValue ||
                                     SelectedConstellation != Constellations[0] ||
-                                    SelectedCatalogueFamily != CatalogueFamilies[0];
+                                    SelectedDesignationFamily != DesignationFamilies[0];
     public bool HasResults => Results.Count > 0;
     public bool ShowEmptyState => !IsSearching && !HasResults && (Query.Trim().Length >= 2 || HasActiveFilters);
-    public string EmptyStateMessage => "No catalogue objects match the current search and filters.";
+    public string EmptyStateMessage => "No celestial objects match the current search and filters.";
 
     partial void OnQueryChanged(string value) { NotifyResultState(); if (!_suppressSearch) QueueSearch(); }
-    partial void OnSelectedObjectTypeChanged(CatalogueTypeOption value) => FilterChanged();
+    partial void OnSelectedObjectTypeChanged(ObjectTypeOption value) => FilterChanged();
     partial void OnSelectedConstellationChanged(string value) => FilterChanged();
-    partial void OnSelectedCatalogueFamilyChanged(string value) => FilterChanged();
+    partial void OnSelectedDesignationFamilyChanged(string value) => FilterChanged();
     partial void OnIsSearchingChanged(bool value) => NotifyResultState();
 
     public void ClearResults()
@@ -110,7 +110,7 @@ public partial class CelestialSearchViewModel : ObservableObject
         _suppressSearch = true;
         SelectedObjectType = ObjectTypes[0];
         SelectedConstellation = Constellations[0];
-        SelectedCatalogueFamily = CatalogueFamilies[0];
+        SelectedDesignationFamily = DesignationFamilies[0];
         _suppressSearch = false;
         OnPropertyChanged(nameof(HasActiveFilters));
         QueueSearch();
@@ -144,7 +144,7 @@ public partial class CelestialSearchViewModel : ObservableObject
             IsSearching = true;
             var query = new CatalogueSearchQuery(Query, SelectedObjectType.Value,
                 SelectedConstellation == Constellations[0] ? null : SelectedConstellation,
-                SelectedCatalogueFamily == CatalogueFamilies[0] ? null : SelectedCatalogueFamily);
+                SelectedDesignationFamily == DesignationFamilies[0] ? null : SelectedDesignationFamily);
             var results = await _search.SearchAsync(query, 12, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             Results.Clear();

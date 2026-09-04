@@ -1,0 +1,165 @@
+{
+  "presetName": "Noctaxis Default Galaxy",
+  "styleVersion": 1,
+  "rendererFamily": "settlement-galaxy",
+  "determinism": {
+    "seedNamespace": "noctaxis:settlement-galaxy:v1",
+    "seedInputs": ["WSF dataset id/version", "WSF source cell x/y", "location id", "viewport centre", "viewport zoom", "viewport dimensions", "styleVersion", "settings"],
+    "requireStableOrdering": true,
+    "requireStableHash": true,
+    "forbidRuntimeRandom": true,
+    "forbidTimeBasedSeeds": true,
+    "forbidProcessHashCodes": true
+  },
+  "stars": {
+    "sizeMinPercent": 65.0,
+    "sizeMaxPercent": 125.0,
+    "baseRadius": 0.72,
+    "targetSettlementStarDensity": 0.1625,
+    "maxSettlementStars": 1600,
+    "coreSigma": 0.46,
+    "normalisePercentile": 99.93,
+    "minimumImpulseRadius": 0.35,
+    "neutralColour": [245, 242, 255],
+    "classThresholds": { "faintMax": 0.6, "commonMax": 0.94, "mediumMax": 0.997 },
+    "classGains": { "faint": 0.17, "common": 0.348, "medium": 0.66, "bright": 1.0 },
+    "brightBloomGain": 0.252,
+    "brightBloomRadius": 2.2,
+    "colourVariation": {
+      "starChroma": 0.58,
+      "bridgeChroma": 0.49,
+      "hazeChroma": 0.4,
+      "coreSigma": 0.9,
+      "bridgeSigma": 2.55,
+      "hazeSigma": 7.1,
+      "densityWeightFloor": 0.30,
+      "densityWeightExponent": 0.35,
+      "families": [
+        { "name": "neutral", "ceiling": 0.688, "colour": [240, 242, 255] },
+        { "name": "bluewhite", "ceiling": 0.779, "colour": [191, 219, 255] },
+        { "name": "blue", "ceiling": 0.795, "colour": [92, 146, 255] },
+        { "name": "lavender", "ceiling": 0.880, "colour": [204, 148, 255] },
+        { "name": "pink", "ceiling": 0.906, "colour": [255, 128, 186] },
+        { "name": "cream", "ceiling": 0.996, "colour": [255, 232, 194] },
+        { "name": "gold", "ceiling": 1.000, "colour": [255, 184, 104] }
+      ]
+    }
+  },
+  "density": {
+    "workingScale": 2,
+    "gaussianSigma": 7.5,
+    "normalisePercentile": 99.65
+  },
+  "galaxy": {
+    "hierarchy": {
+      "haloGain": 0.07, "bodyGain": 0.13775, "coreGain": 0.24225, "subcoreGain": 0.145,
+      "coreAxisRatioClamp": 1.32, "bodyAxisRatioClamp": 1.38, "haloAxisRatioClamp": 1.4,
+      "maxSubcores": 5,
+      "haloRadiusScale": 3.30, "bodyRadiusScale": 2.15, "coreRadiusScale": 0.92,
+      "broadDensitySigma": 8.0, "densityGateExponent": 0.5,
+      "haloDensityFloor": 0.28, "haloDensityWeight": 0.72,
+      "bodyDensityExponent": 0.78, "coreDensityExponent": 1.65,
+      "subcoreMinimumStrengthFraction": 0.035, "subcoreAxisRatioClamp": 1.30,
+      "subcoreRadiusScale": 0.70,
+      "haloColour": [87, 97, 209], "bodyColour": [140, 77, 235], "coreColour": [230, 199, 255]
+    },
+    "colourZoning": {
+      "outer": [88, 112, 222], "body": [154, 96, 238], "dense": [214, 188, 255], "core": [255, 247, 236],
+      "thresholds": {
+        "outerStart": 0.03, "outerFull": 0.18, "outerFadeStart": 0.42, "outerFadeEnd": 0.70,
+        "bodyStart": 0.10, "bodyFull": 0.42, "bodyFadeStart": 0.68, "bodyFadeEnd": 0.94,
+        "denseStart": 0.42, "denseFull": 0.78, "denseFadeStart": 0.86, "denseFadeEnd": 0.98,
+        "coreStart": 0.78, "coreFull": 0.98
+      },
+      "strength": 0.50
+    },
+    "luminance": {
+      "broadGamma": 1.12, "broadGain": 0.088, "denseGamma": 1.7, "denseGain": 0.1215,
+      "knotGamma": 2.35, "knotGain": 0.10875, "coreThreshold": 0.82, "coreFull": 0.98, "coreGamma": 3.4,
+      "coreGain": 0.24, "bloomGain": 0.14, "bloomRadius": 11.5, "hotRadius": 4.0, "softClip": 0.72
+      ,"softClipSlope": 1.6,
+      "lavenderColour": [158, 112, 250], "paleColour": [232, 209, 255],
+      "warmColour": [255, 240, 214]
+    },
+    "coreRadiance": {
+      "bloomGain": 0.1485, "auraGain": 0.228, "hotGain": 0.06,
+      "bloomColour": [116, 116, 238], "auraColour": [175, 132, 248], "hotColour": [236, 224, 255],
+      "mergeDistance": 56.0, "peakFilterSize": 17, "peakThreshold": 0.40,
+      "maximumPeakCount": 7, "peakMinimumDistance": 12.0,
+      "bloomRadiusScale": 2.10, "auraRadiusScale": 1.15, "hotRadiusScale": 0.48,
+      "bloomAxisRatioClamp": 1.32, "auraAxisRatioClamp": 1.28, "hotAxisRatioClamp": 1.18,
+      "minimumMajorSigma": 10.0, "minimumMinorSigma": 8.0
+    }
+  },
+  "clouds": {
+    "whirlpoolHazePreset": "B_underlay_balanced", "underlayEnabled": true,
+    "preserveBrightStarsAbove": true, "spiralArms": 3.0, "spiralTwist": 4.2,
+    "radialFrequency": 0.075, "noiseScale": 58.0, "noiseMix": 0.30,
+    "structureFloor": 0.30, "gain": 0.29, "colour": [154, 112, 235],
+    "spiralPower": 1.35, "radialLogScale": 0.08, "noiseBlurSigma": 7.0,
+    "hazeSigma": 13.0
+  },
+  "wisps": {
+    "preset": "B_obvious_fibres", "count": 34,
+    "minLength": 26.0, "maxLength": 74.0, "minWidth": 0.75, "maxWidth": 1.85,
+    "minGain": 0.052, "maxGain": 0.116,
+    "majorAxisInfluence": 0.62, "gradientTangentInfluence": 0.38,
+    "colour": [196, 166, 255], "deterministic": true, "brightOnly": true
+    ,"densityWeightExponent": 1.25, "minimumDensity": 0.055,
+    "angleJitterSigma": 0.16, "rasterScale": 2, "maskBlurRadius": 1.25
+  },
+  "satellites": {
+    "componentThreshold": 0.06, "satelliteCount": 3,
+    "ranking": { "integratedDensityExponent": 0.85, "peakDensityExponent": 0.35 },
+    "preset": "A_visible", "bodyGain": 0.378, "innerGain": 0.162, "coreGain": 0.252,
+    "haloGain": 0.09, "backgroundComponentGain": 0.03,
+    "pcaRadiusScale": 2.35, "minimumMeaningfulStrengthFraction": 0.008,
+    "axisRatioClamp": 1.55, "shapedDensityFloor": 0.45, "shapedDensityWeight": 0.55,
+    "innerEllipseExponent": 1.55, "innerDensityExponent": 0.38,
+    "coreEllipseExponent": 2.65, "coreDensityExponent": 1.35,
+    "haloEllipseExponent": 0.72, "corePeakThreshold": 0.42,
+    "strengthExponent": 0.65, "minimumStrength": 0.12,
+    "minorAxisRatioClamp": 1.65, "minorRadiusScale": 1.65,
+    "minorStrengthExponent": 0.70, "minorMaximumStrength": 0.50,
+    "bodyColour": [140, 89, 235], "innerColour": [189, 135, 255],
+    "coreColour": [235, 214, 255], "haloColour": [94, 110, 219]
+  },
+  "backgroundAmbience": {
+    "preset": "C_upper_bound", "backgroundLiftGain": 0.056, "broadHazeGain": 0.04,
+    "backgroundStarCount": 60, "backgroundStarGain": 0.82,
+    "liftColour": [28, 31, 64], "hazeColour": [58, 54, 104], "noiseScale": 96.0
+    ,"galaxySuppressionExponent": 0.55, "hazeBlurSigma": 14.0,
+    "starAvoidDensity": 0.055, "starSigma": 0.48,
+    "roadAvoidAlpha": 0.10, "waterAvoidAlpha": 0.10, "pinAvoidAlpha": 0.05,
+    "starIntensityMin": 0.45, "starIntensityMax": 1.0, "starAttemptMultiplier": 80,
+    "starColour": [209, 224, 255]
+  },
+  "mapIntegration": {
+    "preset": "C_galaxy_forward", "denseRoadRetention": 0.68, "bodyRoadRetention": 0.89,
+    "denseRiverRetention": 0.86, "backgroundMapContrast": 0.91,
+    "galaxyLuminanceLift": 0.078, "coreLuminanceLift": 0.046,
+    "roadsAboveGalaxy": true, "waterAboveGalaxy": true, "pinAlwaysLast": true,
+    "bodyStart": 0.05, "bodyFull": 0.28, "denseStart": 0.20, "denseFull": 0.62,
+    "localContrastSigma": 9.0, "underColourSigma": 2.2
+  },
+  "outerFalloff": {
+    "preset": "C_upper_bound", "outerHaloRadius": 72.0, "minimumOpacity": 0.145,
+    "falloffGamma": 0.4, "gain": 0.205, "positiveLightOnly": true,
+    "outerColour": [94, 90, 194], "midColour": [132, 102, 220],
+    "envelopeSigma": 7.0, "normalisePercentile": 99.5,
+    "innerPresenceStart": 0.10, "innerPresenceFull": 0.48,
+    "outerBaseWeight": 0.40, "outerAbsenceWeight": 0.60,
+    "midDensityExponent": 0.70, "midGainFactor": 0.34
+  },
+  "tonemapping": {
+    "preset": "A_stronger", "highlightThreshold": 0.69, "highlightCompression": 0.25,
+    "localPositiveLightContrast": 0.27, "localRadius": 6.0,
+    "globalCurveStrength": 0.095, "saturation": 1.08,
+    "detailSuppressionStart": 0.76, "detailSuppressionEnd": 1.0,
+    "detailSuppressionAmount": 0.75, "curvePivot": 0.42,
+    "toeStart": 0.015, "toeEnd": 0.10,
+    "saturationStart": 0.05, "saturationFull": 0.20,
+    "saturationFadeStart": 0.82, "saturationFadeEnd": 0.98
+  },
+  "layerOrder": ["mapBackground", "galaxyBodyAndHierarchy", "galaxyColourZoning", "galaxyLuminance", "coreRadiance", "whirlpoolCloudUnderlay", "emissionWisps", "settlementStars", "starColourAura", "satelliteTreatment", "backgroundAmbience", "mapIntegration", "outerFalloff", "roads", "water", "finalTonemapping", "pin"]
+}

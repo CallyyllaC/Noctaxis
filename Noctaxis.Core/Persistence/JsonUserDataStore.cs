@@ -29,8 +29,8 @@ public sealed class PlatformUserDataPathProvider : IUserDataPathProvider
 {
     public string GetApplicationDataDirectory()
     {
-        var root = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        if (string.IsNullOrWhiteSpace(root)) root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config");
+        var root = System.Environment.GetFolderPath(System.Environment.SpecialFolder.ApplicationData);
+        if (string.IsNullOrWhiteSpace(root)) root = Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile), ".config");
         return Path.Combine(root, "Noctaxis");
     }
 }
@@ -110,9 +110,59 @@ public sealed class JsonUserDataStore : IUserDataStore
                 resolver.GetEffectiveId(selected) == resolver.MachineTimeZoneId &&
                 !string.Equals(selected, resolver.MachineTimeZoneId, StringComparison.OrdinalIgnoreCase))
                 settings = settings with { SelectedTimeZoneId = AppSettings.UseSystemTimeZoneId };
-            settings = settings with { Units = MeasurementUnits.NormaliseId(settings.Units), LegacyData = null };
             var session = Session.ToDomain();
             session = session with { TimeZoneId = resolver.GetEffectiveId(session.TimeZoneId) };
+            var locations = Locations ?? Array.Empty<SavedLocation>();
+            if (Version < 4)
+            {
+                if (session.ObserverElevation is null)
+                    session = session with
+                    {
+                        ObserverElevation = new ObserverElevationState(
+                            ManualGroundElevationOverrideAslMetres: session.Observer.ElevationMetres)
+                    };
+                locations = locations.Select(location => location.ObserverElevation is null
+                    ? location with
+                    {
+                        ObserverElevation = new ObserverElevationState(
+                            ManualGroundElevationOverrideAslMetres: location.Coordinate.ElevationMetres)
+                    }
+                    : location).ToArray();
+            }
+            var equipment = settings.EffectiveEquipment(session.Lens);
+            var cameras = equipment.Cameras ?? throw new InvalidDataException("Equipment migration did not create a camera.");
+            var lenses = equipment.Lenses ?? throw new InvalidDataException("Equipment migration did not create a lens.");
+            var cameraId = cameras.Any(item => item.Id.Equals(session.CameraProfileId,
+                StringComparison.OrdinalIgnoreCase))
+                ? session.CameraProfileId!
+                : cameras[0].Id;
+            var lensId = lenses.Any(item => item.Id.Equals(session.LensProfileId,
+                StringComparison.OrdinalIgnoreCase))
+                ? session.LensProfileId!
+                : lenses[0].Id;
+            var camera = cameras.First(item => item.Id.Equals(cameraId,
+                StringComparison.OrdinalIgnoreCase));
+            var lens = lenses.First(item => item.Id.Equals(lensId,
+                StringComparison.OrdinalIgnoreCase));
+            session = session with
+            {
+                CameraProfileId = cameraId,
+                LensProfileId = lensId,
+                Lens = session.Lens with
+                {
+                    Preset = SensorPreset.Custom,
+                    SensorWidthMillimetres = camera.SensorWidthMillimetres,
+                    SensorHeightMillimetres = camera.SensorHeightMillimetres,
+                    FocalLengthMillimetres = lens.ClampFocalLength(session.Lens.FocalLengthMillimetres)
+                }
+            };
+            settings = settings with
+            {
+                Units = MeasurementUnits.NormaliseId(settings.Units),
+                CameraHeightAboveGroundMetres = settings.EffectiveCameraHeightAboveGroundMetres,
+                Equipment = equipment,
+                LegacyData = null
+            };
             var configured = settings.CelestialObjects?.ConfiguredObjects ?? session.VisibleObjects ?? CelestialObjectSettings.Defaults;
             var normalised = CelestialVisibilityPolicy.Normalise(configured);
             var primary = settings.CelestialObjects?.DefaultPrimaryTargetId ?? session.TargetId;
@@ -121,14 +171,24 @@ public sealed class JsonUserDataStore : IUserDataStore
                 primary = normalised.FirstOrDefault(item => item.IsVisible)?.TargetId ?? "sun";
             settings = settings with { CelestialObjects = new CelestialObjectSettings(normalised, primary) };
             session = session with { VisibleObjects = normalised, TargetId = primary };
-            return new(Version, settings, Locations ?? Array.Empty<SavedLocation>(), session, MostRecentLocationId, LastCustomCoordinate);
+            return new(Version, settings, locations, session, MostRecentLocationId, LastCustomCoordinate);
         }
         public static PersistedStateDto FromDomain(PersistedState state) => new(state.Version, state.Settings, state.Locations, SessionDto.FromDomain(state.Session), state.MostRecentLocationId, state.LastCustomCoordinate);
     }
 
-    private sealed record SessionDto(GeoCoordinate Observer, DateTime InstantUtc, string TimeZoneId, string TargetId, LensConfiguration Lens, Guid? SavedLocationId, IReadOnlyList<CelestialObjectSelection>? VisibleObjects = null)
+    private sealed record SessionDto(GeoCoordinate Observer, DateTime InstantUtc, string TimeZoneId,
+        string TargetId, LensConfiguration Lens, Guid? SavedLocationId,
+        IReadOnlyList<CelestialObjectSelection>? VisibleObjects = null,
+        string? CameraProfileId = null, string? LensProfileId = null,
+        ObserverElevationState? ObserverElevation = null)
     {
-        public PlanningSession ToDomain() => new(Observer, Instant.FromDateTimeUtc(DateTime.SpecifyKind(InstantUtc, DateTimeKind.Utc)), TimeZoneId, TargetId, Lens, SavedLocationId, VisibleObjects);
-        public static SessionDto FromDomain(PlanningSession session) => new(session.Observer, session.Instant.ToDateTimeUtc(), session.TimeZoneId, session.TargetId, session.Lens, session.SavedLocationId, session.VisibleObjects);
+        public PlanningSession ToDomain() => new(Observer,
+            Instant.FromDateTimeUtc(DateTime.SpecifyKind(InstantUtc, DateTimeKind.Utc)), TimeZoneId,
+            TargetId, Lens, SavedLocationId, VisibleObjects, CameraProfileId, LensProfileId,
+            ObserverElevation);
+        public static SessionDto FromDomain(PlanningSession session) => new(session.Observer,
+            session.Instant.ToDateTimeUtc(), session.TimeZoneId, session.TargetId, session.Lens,
+            session.SavedLocationId, session.VisibleObjects, session.CameraProfileId,
+            session.LensProfileId, session.ObserverElevation);
     }
 }

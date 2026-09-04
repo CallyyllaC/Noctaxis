@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Noctaxis.Core.Catalogues;
+using Noctaxis.Core.Astronomy;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Export;
 using Noctaxis.Core.Persistence;
@@ -13,6 +14,7 @@ using NodaTime;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Locations;
+using Noctaxis.Core.Environment;
 using System.Diagnostics;
 using System.Collections.Specialized;
 using Noctaxis.Core.Measurements;
@@ -27,11 +29,11 @@ public partial class MainViewModel : ObservableObject
     private readonly ITimeZoneResolver _timeZones;
     private readonly IUserDataStore _store;
     private readonly IScoutingCardExporter _exporter;
-    private readonly IDemDirectoryProvider _demDirectory;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ILensCalculator _lensCalculator;
     private readonly ICameraFramingGuideCalculator _cameraFramingGuideCalculator;
     private readonly IFramingVisibilityCalculator _framingVisibilityCalculator;
+    private readonly ILocalHorizonCalculator _localHorizonCalculator;
     private readonly IClock _clock;
     private readonly IPlannerDialogService _dialogs;
     private readonly IReverseGeocodingProvider _reverseGeocoding;
@@ -39,6 +41,10 @@ public partial class MainViewModel : ObservableObject
     private CancellationTokenSource? _temporalCommitCancellation;
     private CancellationTokenSource? _temporalPreviewCancellation;
     private CancellationTokenSource? _reverseLookupCancellation;
+    private Task _activePlannerRefresh = Task.CompletedTask;
+    private readonly SemaphoreSlim _plannerSnapshotCommitGate = new(1, 1);
+    private readonly object _plannerRefreshGate = new();
+    private long _refreshGeneration;
     private long _reverseLookupGeneration;
     private string? _resolvedPlaceSuggestion;
     private PlanningSession _session;
@@ -47,12 +53,13 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _dateSliderAnchor = DateTimeOffset.Now.Date;
 
     public MainViewModel(IPlanningService planning, ITargetCatalogue catalogue, ITimeZoneResolver timeZones,
-        IUserDataStore store, IScoutingCardExporter exporter, IDemDirectoryProvider demDirectory,
+        IUserDataStore store, IScoutingCardExporter exporter,
         ILogger<MainViewModel> logger, ILensCalculator lensCalculator,
         ICameraFramingGuideCalculator cameraFramingGuideCalculator,
-        IFramingVisibilityCalculator framingVisibilityCalculator, IClock clock,
+        IFramingVisibilityCalculator framingVisibilityCalculator, ILocalHorizonCalculator localHorizonCalculator,
+        IClock clock,
         LocationSearchViewModel locationSearch, ILocationResolver locationResolver,
-        IDeviceLocationAvailabilityService deviceLocationAvailability, CelestialSearchViewModel celestialSearch,
+        IDeviceLocationAvailabilityService deviceLocationAvailability, ITargetSearchService targetSearch,
         IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
         ILocationMapThumbnailService? locationMapThumbnails = null)
     {
@@ -61,11 +68,11 @@ public partial class MainViewModel : ObservableObject
         _timeZones = timeZones;
         _store = store;
         _exporter = exporter;
-        _demDirectory = demDirectory;
         _logger = logger;
         _lensCalculator = lensCalculator;
         _cameraFramingGuideCalculator = cameraFramingGuideCalculator;
         _framingVisibilityCalculator = framingVisibilityCalculator;
+        _localHorizonCalculator = localHorizonCalculator;
         _clock = clock;
         _dialogs = dialogs;
         _reverseGeocoding = reverseGeocoding;
@@ -80,9 +87,6 @@ public partial class MainViewModel : ObservableObject
         _elevation = _session.Observer.ElevationMetres;
         _timeZoneId = _session.TimeZoneId;
         _focalLength = _session.Lens.FocalLengthMillimetres;
-        _sensorWidth = _session.Lens.SensorWidthMillimetres;
-        _sensorHeight = _session.Lens.SensorHeightMillimetres;
-        _selectedSensor = _session.Lens.Preset;
         _selectedOrientation = _session.Lens.Orientation;
         _previewObserver = _session.Observer;
         LocationSearch = locationSearch;
@@ -95,22 +99,24 @@ public partial class MainViewModel : ObservableObject
         // The collection and its subscriber share this view model's lifetime, so the
         // notification subscription cannot keep an otherwise-discarded view model alive.
         Locations.Saved.CollectionChanged += OnSavedLocationCardsChanged;
-        CelestialSearch = celestialSearch;
+        SettingsCelestialSearch = new CelestialSearchViewModel(targetSearch, catalogue);
     }
 
     public IReadOnlyList<AstralTarget> Targets { get; }
-    public IReadOnlyList<SensorPreset> SensorPresets { get; } = Enum.GetValues<SensorPreset>();
     public IReadOnlyList<CameraOrientation> Orientations { get; } = Enum.GetValues<CameraOrientation>();
-    public IReadOnlyList<double> FocalLengthPresets { get; } = [14, 24, 35, 50, 85, 135, 200, 300, 400, 600];
-    public IReadOnlyList<string> TimeZoneOptions => _timeZones.AvailableIds;
     public IReadOnlyList<string> SettingsTimeZoneOptions => [AppSettings.UseSystemTimeZoneId, .. _timeZones.AvailableIds.Where(id => !id.Equals(AppSettings.UseSystemTimeZoneId, StringComparison.OrdinalIgnoreCase))];
     public IReadOnlyList<string> UnitsOptions { get; } = MeasurementUnits.Options;
     public ObservableCollection<SavedLocation> SavedLocations { get; } = [];
     public ObservableCollection<CelestialObjectItemViewModel> CelestialObjects { get; } = [];
     public ObservableCollection<WeatherFieldOptionViewModel> WeatherFieldOptions { get; } = [];
+    public ObservableCollection<WeatherFieldGroupViewModel> WeatherFieldGroups { get; } = [];
+    public ObservableCollection<CameraProfile> Cameras { get; } = [];
+    public ObservableCollection<LensProfile> Lenses { get; } = [];
+    public ObservableCollection<CameraProfileEditorViewModel> EquipmentCameraEditors { get; } = [];
+    public ObservableCollection<LensProfileEditorViewModel> EquipmentLensEditors { get; } = [];
     public LocationSearchViewModel LocationSearch { get; }
     public LocationsViewModel Locations { get; }
-    public CelestialSearchViewModel CelestialSearch { get; }
+    public CelestialSearchViewModel SettingsCelestialSearch { get; }
     public AppSettings Settings { get; private set; } = new();
     public PlanningSession Session => _session;
     public GeoCoordinate Observer => _session.Observer;
@@ -124,36 +130,38 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _latitude;
     [ObservableProperty] private double _longitude;
     [ObservableProperty] private double _elevation;
-    [ObservableProperty] private SensorPreset _selectedSensor;
+    [ObservableProperty] private CameraProfile? _selectedCamera;
+    [ObservableProperty] private LensProfile? _selectedLens;
     [ObservableProperty] private CameraOrientation _selectedOrientation;
-    [ObservableProperty] private double _sensorWidth;
-    [ObservableProperty] private double _sensorHeight;
     [ObservableProperty] private double _focalLength;
     [ObservableProperty] private string _locationName = "Current location";
     [ObservableProperty] private string? _currentLocationAttribution;
     public bool HasCurrentLocationAttribution => !string.IsNullOrWhiteSpace(CurrentLocationAttribution);
     [ObservableProperty] private PlanningSnapshot? _snapshot;
-    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private PlannerRefreshState _plannerRefresh = PlannerRefreshState.Idle;
     [ObservableProperty] private bool _isWeatherRefreshing;
     [ObservableProperty] private bool _isInspectorOpen = true;
     [ObservableProperty] private int _selectedPageIndex;
     [ObservableProperty] private GeoCoordinate _previewObserver;
     [ObservableProperty] private double _previewMinutesOfDay;
     [ObservableProperty] private double _previewDateOffsetDays;
-    [ObservableProperty] private bool _isLensAdvancedOpen;
     [ObservableProperty] private bool _isCameraFramingOverlayVisible = true;
     [ObservableProperty] private bool _showFramingVisibilityLimits = true;
     [ObservableProperty] private bool _isLocationInteracting;
     [ObservableProperty] private string? _celestialLimitMessage;
-    [ObservableProperty] private string? _settingsDemDirectory;
     [ObservableProperty] private string _settingsUnits = "Metric";
     [ObservableProperty] private string _settingsTimeZoneId = AppSettings.UseSystemTimeZoneId;
+    [ObservableProperty] private double _settingsCameraHeightAboveGroundMetres =
+        AppSettings.DefaultCameraHeightAboveGroundMetres;
     [ObservableProperty] private double _settingsWeatherCacheDistance = 5;
     [ObservableProperty] private int _settingsTimeSnapMinutes = 5;
     [ObservableProperty] private double _settingsFramingShadingOpacityPercent = 10;
     [ObservableProperty] private double _settingsFramingLineThickness = 1.25;
+    [ObservableProperty] private double _settingsTerrainCastAngularDetailDegrees =
+        CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees;
     [ObservableProperty] private bool _settingsCameraFramingOverlayVisible = true;
     [ObservableProperty] private bool _settingsShowFramingVisibilityLimits = true;
+    [ObservableProperty] private bool _settingsTerrainDebugOverlay;
     [ObservableProperty] private bool _isRefreshingLocationThumbnails;
     [ObservableProperty] private string? _locationThumbnailRefreshStatus;
     public bool CanExport => !IsLocationInteracting && Snapshot is not null;
@@ -161,15 +169,103 @@ public partial class MainViewModel : ObservableObject
     public string VisibleCelestialCountText => $"Visible objects: {VisibleCelestialCount} / {CelestialVisibilityPolicy.MaximumVisibleObjects}";
     [ObservableProperty] private string _statusMessage = "Starting Noctaxis…";
 
+    public bool IsPlannerRefreshing => PlannerRefresh.IsRefreshing;
+    public double PlannerRefreshProgress => PlannerRefresh.Progress;
+    public string PlannerRefreshStatusText => PlannerRefresh.StatusText;
+    public PlannerPinActivity PlannerPinActivity => PlannerRefresh.PinActivity;
+    public bool CelestialOverlaysReady => PlannerRefresh.CelestialOverlayState == PlannerRefreshWorkState.Ready;
+    public bool CameraOverlayReady => PlannerRefresh.CameraGeometryState == PlannerRefreshWorkState.Ready;
+    public bool ShowTerrainDebugOverlay => Settings.TerrainDebugOverlay && CurrentTerrain is not null;
+    public TerrainHorizonProfile? TerrainDebugProfile => CurrentTerrain;
+    public double TerrainDebugBearing => CurrentCameraBearing ?? 0;
+    public double TerrainDebugHorizontalFieldOfView => CameraFramingGuide?.HorizontalFieldOfViewDegrees ?? 60;
+    public string TerrainDebugText => CurrentTerrain is { } terrain
+        ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
+            CurrentCameraBearing ?? Snapshot?.Position.Horizontal.AzimuthDegrees ?? 0)
+        : "Terrain diagnostics are waiting for a production horizon profile.";
+    public bool IsElevationManualOverride => _session.EffectiveObserverElevation.IsManualOverride;
+    public bool CanResetGroundElevation => IsElevationManualOverride &&
+        _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue;
+    public string GroundElevationSourceText => IsElevationManualOverride
+        ? "Manual ground-elevation override"
+        : _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue
+            ? "Terrain-derived ground elevation"
+            : "Terrain ground elevation pending; using the saved fallback";
+    public string EffectiveObserverAltitudeText =>
+        $"Effective camera altitude: {_session.EffectiveObserverElevation.EffectiveObserverAltitudeAsl(
+            _session.Observer.ElevationMetres, Settings.EffectiveCameraHeightAboveGroundMetres):F1} m ASL " +
+        $"(ground + {Settings.EffectiveCameraHeightAboveGroundMetres:F1} m camera height)";
+    public bool IsFocalLengthEditable => SelectedLens is { IsPrime: false };
+    public double FocalLengthMinimum => SelectedLens?.MinimumFocalLengthMillimetres ?? 1;
+    public double FocalLengthMaximum => SelectedLens?.MaximumFocalLengthMillimetres ?? 2_000;
+    public bool IsLandscapeOrientation
+    {
+        get => SelectedOrientation == CameraOrientation.Landscape;
+        set
+        {
+            if (value) SelectedOrientation = CameraOrientation.Landscape;
+        }
+    }
+    public bool IsPortraitOrientation
+    {
+        get => SelectedOrientation == CameraOrientation.Portrait;
+        set
+        {
+            if (value) SelectedOrientation = CameraOrientation.Portrait;
+        }
+    }
+    public string LensFocalRangeText => SelectedLens is null ? "No lens selected" :
+        SelectedLens.IsPrime ? $"Prime · {SelectedLens.MinimumFocalLengthMillimetres:0.#} mm" :
+        $"Zoom · {SelectedLens.MinimumFocalLengthMillimetres:0.#}–{SelectedLens.MaximumFocalLengthMillimetres:0.#} mm";
+
     public string AzimuthText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AzimuthDegrees:F1}°";
     public string AltitudeText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AltitudeDegrees:+0.0;-0.0;0.0}°";
-    public string HorizonStatus => Snapshot is null ? "Calculating" : Snapshot.Position.Horizontal.IsAboveHorizon ? "Above astronomical horizon" : "Below astronomical horizon";
+    private TargetLocalVisibility? CurrentTargetLocalVisibility => Snapshot is null
+        ? null
+        : _localHorizonCalculator.AssessTarget(Snapshot.Terrain,
+            Snapshot.Position.Horizontal.AzimuthDegrees, Snapshot.Position.Horizontal.AltitudeDegrees);
+    public string HorizonStatus => CurrentTargetLocalVisibility?.State switch
+    {
+        null => "Calculating…",
+        TargetLocalVisibilityState.BelowAstronomicalHorizon => "Below astronomical horizon",
+        TargetLocalVisibilityState.TerrainBlocked => "Terrain blocked",
+        TargetLocalVisibilityState.Marginal => "Marginal",
+        TargetLocalVisibilityState.Clear => "Clear",
+        _ => "Above astronomical horizon · terrain unavailable"
+    };
+    public bool HasTargetLocalHorizonDetails => CurrentTargetLocalVisibility is
+        { State: TargetLocalVisibilityState.TerrainBlocked or TargetLocalVisibilityState.Marginal or TargetLocalVisibilityState.Clear };
+    public string TargetLocalHorizonText => FormatHorizonAngle(CurrentTargetLocalVisibility?.LocalHorizonAltitudeDegrees);
+    public string TargetTerrainMarginLabel => CurrentTargetLocalVisibility?.State == TargetLocalVisibilityState.TerrainBlocked
+        ? "Blocked by"
+        : "Clearance";
+    public string TargetTerrainMarginText => CurrentTargetLocalVisibility?.ClearanceDegrees is double clearance
+        ? $"{Math.Abs(clearance):0.0}°"
+        : "—";
     public string RiseText => FormatTime(Snapshot?.Position.Events.Rise);
     public string TransitText => FormatTime(Snapshot?.Position.Events.Transit);
     public string SetText => FormatTime(Snapshot?.Position.Events.Set);
-    public string TerrainClearText => FormatTime(Snapshot?.TerrainCrossings.ClearsTerrain);
-    public string TerrainDropText => FormatTime(Snapshot?.TerrainCrossings.DropsBehindTerrain);
-    public string TerrainStatus => Snapshot?.Terrain.Status ?? "Calculating terrain…";
+    public string TerrainStatus => CurrentEnvironment is { } environment
+        ? environment.ActiveSourceDescription
+        : CurrentTerrain is { } terrain
+            ? terrain.Status
+            : "Loading terrain horizon…";
+    public string TerrainCurrentLocationText => $"{Observer.Latitude:F5}, {Observer.Longitude:F5}";
+    public string GroundHorizonState => IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
+        ? CurrentTerrain is { IsComplete: false, HasTerrainCoverage: true } ? "Ready · refining…" : "Loading…"
+        : FormatHorizonState(CurrentTerrain?.HasTerrainCoverage == true,
+            CurrentTerrain?.GroundHorizonState);
+    public string GroundHorizonAngleText => FormatHorizonAngle(
+        CurrentCameraBearing is double bearing ? CurrentTerrain?.GroundAltitudeAt(bearing) : null);
+    public string TerrainDatumText => CurrentTerrain switch
+    {
+        null => "Observer datum: Loading",
+        { ObserverDatumConfidence: ObserverDatumConfidence.Normal } => "Observer datum: Normal",
+        _ => "Observer datum: Unavailable"
+    };
+    public string GroundObstructionText => FormatObstruction(
+        CurrentCameraObstruction.HasGroundData,
+        CurrentCameraObstruction.GroundFirstObstructionDistanceMetres);
     public string WeatherSummary => Snapshot?.Weather.Conditions is { } weather
         ? "Open-Meteo · " + weather.Summary
         : Snapshot?.Weather.Message ?? "Loading weather…";
@@ -255,30 +351,70 @@ public partial class MainViewModel : ObservableObject
                 Snapshot.Weather,
                 Snapshot.Terrain,
                 Snapshot.Position.Horizontal.AltitudeDegrees,
-                CameraFramingGuide.CentreBearingDegrees);
+                CameraFramingGuide.CentreBearingDegrees,
+                CameraFramingGuide.HorizontalFieldOfViewDegrees,
+                Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees,
+                Snapshot.FieldOfView.VerticalDegrees);
     public string FramingVisibilityStatus => !IsCameraFramingOverlayVisible
         ? string.Empty
         : !ShowFramingVisibilityLimits
             ? "Visibility limits hidden"
             : CameraFramingVisibility?.Status ?? "Visibility data unavailable";
-    public CameraFramingSettings CameraFramingMapSettings => Settings.EffectiveCameraFraming;
+    public CameraFramingSettings CameraFramingMapSettings =>
+        (Settings.EffectiveCameraFraming with { LineThickness = SettingsFramingLineThickness }).Normalised();
+
+    private PlannerEnvironmentSnapshot? CurrentEnvironment =>
+        Snapshot?.Environment is { } environment && IsCurrentObserver(environment.ObserverCoordinate)
+            ? environment
+            : null;
+
+    private TerrainHorizonProfile? CurrentTerrain =>
+        Snapshot is { } snapshot && IsCurrentObserver(snapshot.Session.Observer)
+            ? snapshot.Terrain
+            : null;
+
+    private HorizonObstruction CurrentCameraObstruction
+    {
+        get
+        {
+            if (Snapshot is not { } snapshot || CurrentTerrain is not { } terrain) return default;
+            return CurrentCameraBearing is double bearing
+                ? terrain.TerrainObstructionAt(bearing)
+                : default;
+        }
+    }
+
+    private double? CurrentCameraBearing
+    {
+        get
+        {
+            if (Snapshot is not { } snapshot || CurrentTerrain is null) return null;
+            return _cameraFramingGuideCalculator.Calculate(snapshot.FieldOfView,
+                snapshot.Position.Horizontal.AzimuthDegrees,
+                Settings.EffectiveCameraFraming).CentreBearingDegrees;
+        }
+    }
 
     public async Task InitializeAsync()
     {
         var persisted = await _store.LoadAsync(CancellationToken.None);
-        Settings = persisted.Settings;
+        Settings = persisted.Settings with
+        {
+            CameraHeightAboveGroundMetres = persisted.Settings.EffectiveCameraHeightAboveGroundMetres,
+            Equipment = persisted.Settings.EffectiveEquipment(persisted.Session.Lens)
+        };
         _suppressChanges = true;
         IsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         ShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
         _suppressChanges = false;
         OnPropertyChanged(nameof(CameraFramingMapSettings));
-        _demDirectory.DirectoryPath = Settings.DemDirectory;
         SavedLocations.Clear();
         foreach (var location in persisted.Locations) SavedLocations.Add(location);
         _lastCustomCoordinate = persisted.LastCustomCoordinate;
         var configuredZone = _timeZones.GetEffectiveId(Settings.SelectedTimeZoneId);
         _session = persisted.Session with { TimeZoneId = _timeZones.GetEffectiveId(persisted.Session.TimeZoneId) };
         if (_session.SavedLocationId is null) _session = _session with { TimeZoneId = configuredZone };
+        LoadEquipmentOptions();
         EnsureCelestialSelections();
         BuildCelestialObjectItems();
         LoadSettingsEditor();
@@ -296,6 +432,8 @@ public partial class MainViewModel : ObservableObject
         PreviewObserverLocation(coordinate);
         CommitObserverLocation(coordinate);
     }
+
+    internal Task WaitForPlannerRefreshAsync() => _activePlannerRefresh;
 
     public void PreviewObserverLocation(GeoCoordinate coordinate)
     {
@@ -324,21 +462,38 @@ public partial class MainViewModel : ObservableObject
     public void CommitObserverLocation(GeoCoordinate coordinate)
         => CommitObserverLocation(coordinate, null, resolvePlaceName: true);
 
+    public void CommitUnresolvedObserverLocation(GeoCoordinate coordinate)
+        => CommitObserverLocation(coordinate with { ElevationMetres = 0 }, null, resolvePlaceName: true);
+
     private void CommitObserverLocation(GeoCoordinate coordinate, string? resolvedName, bool resolvePlaceName)
     {
         var normalised = coordinate.Normalised();
+        var locationChanged = Angles.GreatCircleDistanceMetres(normalised, _session.Observer) > 2;
+        var elevationState = locationChanged ? new ObserverElevationState() :
+            _session.EffectiveObserverElevation;
+        normalised = normalised with
+        {
+            ElevationMetres = elevationState.ResolveGroundElevationAsl(normalised.ElevationMetres)
+        };
         CancelReverseLocationLookup();
         _resolvedPlaceSuggestion = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName.Trim();
         LocationName = _resolvedPlaceSuggestion ?? "New location";
         CurrentLocationAttribution = null;
         SetPreviewObserver(normalised);
-        _session = _session with { Observer = normalised, SavedLocationId = null };
+        _session = _session with
+        {
+            Observer = normalised,
+            SavedLocationId = null,
+            ObserverElevation = elevationState
+        };
         SelectedLocation = null;
         _lastCustomCoordinate = normalised;
         OnPropertyChanged(nameof(Observer));
+        NotifyTerrainProperties();
+        NotifyObserverElevationProperties();
         _logger.LogInformation("Map coordinate committed; scheduling authoritative recalculation");
         if (resolvePlaceName) ScheduleReverseLocationLookup(normalised);
-        ScheduleFullRefresh(80);
+        ScheduleObserverRefresh(80);
     }
 
     private void ScheduleReverseLocationLookup(GeoCoordinate coordinate)
@@ -397,57 +552,124 @@ public partial class MainViewModel : ObservableObject
         Settings = settings with
         {
             Units = MeasurementUnits.NormaliseId(settings.Units),
-            CelestialObjects = Settings.EffectiveCelestialObjects
+            CelestialObjects = Settings.EffectiveCelestialObjects,
+            CameraHeightAboveGroundMetres = settings.EffectiveCameraHeightAboveGroundMetres,
+            Equipment = settings.EffectiveEquipment(_session.Lens)
         };
+        LoadEquipmentOptions();
         _suppressChanges = true;
         IsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         ShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
-        _suppressChanges = false;
-        _demDirectory.DirectoryPath = settings.DemDirectory;
         TimeZoneId = _timeZones.GetEffectiveId(settings.SelectedTimeZoneId);
-        ApplyLocalDateTime(true);
+        _suppressChanges = false;
+        ApplyLocalDateTime(false);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
-        await RefreshNowAsync(CancellationToken.None);
+        OnPropertyChanged(nameof(CameraFramingVisibility));
+        OnPropertyChanged(nameof(FramingVisibilityStatus));
+        OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
+        OnPropertyChanged(nameof(TerrainDebugProfile));
+        OnPropertyChanged(nameof(TerrainDebugBearing));
+        OnPropertyChanged(nameof(TerrainDebugHorizontalFieldOfView));
+        OnPropertyChanged(nameof(TerrainDebugText));
+        NotifyObserverElevationProperties();
+        ScheduleObserverRefresh(0);
+        await _activePlannerRefresh;
         await PersistAsync(CancellationToken.None);
     }
 
     private void LoadSettingsEditor()
     {
-        SettingsDemDirectory = Settings.DemDirectory;
         SettingsUnits = MeasurementUnits.NormaliseId(Settings.Units);
         SettingsTimeZoneId = Settings.SelectedTimeZoneId;
+        SettingsCameraHeightAboveGroundMetres = Settings.EffectiveCameraHeightAboveGroundMetres;
         SettingsWeatherCacheDistance = Settings.EffectiveWeather.CacheDistanceKilometres;
         SettingsTimeSnapMinutes = Settings.TimeSnapMinutes;
         SettingsFramingShadingOpacityPercent = Settings.EffectiveCameraFraming.ShadingOpacityPercent;
         SettingsFramingLineThickness = Settings.EffectiveCameraFraming.LineThickness;
+        SettingsTerrainCastAngularDetailDegrees = Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees;
         SettingsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         SettingsShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
+        SettingsTerrainDebugOverlay = Settings.TerrainDebugOverlay;
         WeatherFieldOptions.Clear();
         foreach (var field in Enum.GetValues<WeatherField>())
             WeatherFieldOptions.Add(new WeatherFieldOptionViewModel(field, WeatherFieldLabel(field), Settings.EffectiveWeather.IsEnabled(field)));
+        WeatherFieldGroups.Clear();
+        foreach (var (label, fields) in WeatherFieldGroupDefinitions)
+            WeatherFieldGroups.Add(new WeatherFieldGroupViewModel(label,
+                fields.Select(field => WeatherFieldOptions.Single(option => option.Field == field)).ToArray()));
+        EquipmentCameraEditors.Clear();
+        foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Cameras!)
+            EquipmentCameraEditors.Add(new CameraProfileEditorViewModel(profile, RemoveCameraProfileEditor));
+        EquipmentLensEditors.Clear();
+        foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Lenses!)
+            EquipmentLensEditors.Add(new LensProfileEditorViewModel(profile, RemoveLensProfileEditor));
+    }
+
+    private void LoadEquipmentOptions()
+    {
+        var equipment = Settings.EffectiveEquipment(_session.Lens);
+        Cameras.Clear();
+        foreach (var camera in equipment.Cameras!) Cameras.Add(camera);
+        Lenses.Clear();
+        foreach (var lens in equipment.Lenses!) Lenses.Add(lens);
+
+        var cameraSelection = Cameras.FirstOrDefault(item => item.Id.Equals(_session.CameraProfileId,
+            StringComparison.OrdinalIgnoreCase)) ?? Cameras[0];
+        var lensSelection = Lenses.FirstOrDefault(item => item.Id.Equals(_session.LensProfileId,
+            StringComparison.OrdinalIgnoreCase)) ?? Lenses[0];
+        _suppressChanges = true;
+        SelectedCamera = cameraSelection;
+        SelectedLens = lensSelection;
+        FocalLength = lensSelection.ClampFocalLength(_session.Lens.FocalLengthMillimetres);
+        _suppressChanges = false;
+        ApplyLens();
+        NotifyEquipmentProperties();
     }
 
     [RelayCommand]
     private async Task SaveSettings()
     {
-        var updated = new AppSettings(
-            string.IsNullOrWhiteSpace(SettingsDemDirectory) ? null : SettingsDemDirectory.Trim(),
-            MeasurementUnits.NormaliseId(SettingsUnits),
-            SettingsTimeZoneId,
-            new WeatherSettings(WeatherFieldOptions.Where(item => item.IsEnabled).Select(item => item.Field).ToArray(),
-            Math.Clamp(SettingsWeatherCacheDistance, 0, 100)),
-            Math.Clamp(SettingsTimeSnapMinutes, 1, 30),
-            Settings.EffectiveCelestialObjects,
-            Settings.EffectiveCameraFraming with
+        if (EquipmentCameraEditors.Count == 0 || EquipmentLensEditors.Count == 0)
+        {
+            StatusMessage = "At least one valid camera and lens are required.";
+            return;
+        }
+        var invalidEquipment = EquipmentCameraEditors.Select(item => item.ValidationMessage)
+            .Concat(EquipmentLensEditors.Select(item => item.ValidationMessage))
+            .FirstOrDefault(message => message is not null);
+        if (invalidEquipment is not null)
+        {
+            StatusMessage = invalidEquipment;
+            return;
+        }
+        var updated = Settings with
+        {
+            Units = MeasurementUnits.NormaliseId(SettingsUnits),
+            SelectedTimeZoneId = SettingsTimeZoneId,
+            Weather = new WeatherSettings(
+                WeatherFieldOptions.Where(item => item.IsEnabled).Select(item => item.Field).ToArray(),
+                Math.Clamp(SettingsWeatherCacheDistance, 0, 100)),
+            TimeSnapMinutes = Math.Clamp(SettingsTimeSnapMinutes, 1, 30),
+            CameraHeightAboveGroundMetres =
+                AppSettings.NormaliseCameraHeight(SettingsCameraHeightAboveGroundMetres),
+            TerrainDebugOverlay = SettingsTerrainDebugOverlay,
+            Equipment = new EquipmentSettings(
+                EquipmentCameraEditors.Select(item => item.Profile).ToArray(),
+                EquipmentLensEditors.Select(item => item.Profile).ToArray()),
+            CameraFraming = Settings.EffectiveCameraFraming with
             {
                 IsOverlayVisible = SettingsCameraFramingOverlayVisible,
                 ShowVisibilityLimits = SettingsShowFramingVisibilityLimits,
                 ShadingOpacityPercent = Math.Clamp(SettingsFramingShadingOpacityPercent, 0, 50),
-                LineThickness = Math.Clamp(SettingsFramingLineThickness, .5, 5)
-            });
+                LineThickness = Math.Clamp(SettingsFramingLineThickness, .5, 5),
+                TerrainCastAngularDetailDegrees = Math.Clamp(SettingsTerrainCastAngularDetailDegrees,
+                    CameraFramingSettings.MinimumTerrainCastAngularDetailDegrees,
+                    CameraFramingSettings.MaximumTerrainCastAngularDetailDegrees)
+            }
+        };
         await ApplySettingsAsync(updated);
         StatusMessage = "Settings saved";
     }
@@ -455,11 +677,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand] private void ResetSettingsEditor() => LoadSettingsEditor();
 
     [RelayCommand]
-    private async Task ChooseDemDirectory()
-    {
-        var directory = await _dialogs.ChooseDemDirectoryAsync();
-        if (directory is not null) SettingsDemDirectory = directory;
-    }
+    private void AddCameraProfile() => EquipmentCameraEditors.Add(new CameraProfileEditorViewModel(
+        new CameraProfile(Guid.NewGuid().ToString("N"), "New camera", 36, 24),
+        RemoveCameraProfileEditor));
+
+    [RelayCommand]
+    private void AddLensProfile() => EquipmentLensEditors.Add(new LensProfileEditorViewModel(
+        new LensProfile(Guid.NewGuid().ToString("N"), "New lens", 24, 70),
+        RemoveLensProfileEditor));
+
+    private void RemoveCameraProfileEditor(CameraProfileEditorViewModel profile) =>
+        EquipmentCameraEditors.Remove(profile);
+
+    private void RemoveLensProfileEditor(LensProfileEditorViewModel profile) =>
+        EquipmentLensEditors.Remove(profile);
 
     private bool CanRefreshSavedLocationThumbnails() =>
         !IsRefreshingLocationThumbnails && Locations.Saved.Count > 0;
@@ -467,16 +698,19 @@ public partial class MainViewModel : ObservableObject
     private void OnSavedLocationCardsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         RefreshSavedLocationThumbnailsCommand.NotifyCanExecuteChanged();
-        RefreshSavedLocationBuildingCachesCommand.NotifyCanExecuteChanged();
+        RefreshSavedLocationSettlementCachesCommand.NotifyCanExecuteChanged();
         ReapplySavedLocationMapStylesCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnIsRefreshingLocationThumbnailsChanged(bool value)
     {
         RefreshSavedLocationThumbnailsCommand.NotifyCanExecuteChanged();
-        RefreshSavedLocationBuildingCachesCommand.NotifyCanExecuteChanged();
+        RefreshSavedLocationSettlementCachesCommand.NotifyCanExecuteChanged();
         ReapplySavedLocationMapStylesCommand.NotifyCanExecuteChanged();
     }
+
+    partial void OnSettingsFramingLineThicknessChanged(double value) =>
+        OnPropertyChanged(nameof(CameraFramingMapSettings));
 
     [RelayCommand(CanExecute = nameof(CanRefreshSavedLocationThumbnails))]
     private async Task RefreshSavedLocationThumbnails()
@@ -492,11 +726,11 @@ public partial class MainViewModel : ObservableObject
         "Reapplying saved location map image style...", "map image styles reapplied");
 
     [RelayCommand(CanExecute = nameof(CanRefreshSavedLocationThumbnails))]
-    private async Task RefreshSavedLocationBuildingCaches()
+    private async Task RefreshSavedLocationSettlementCaches()
     {
-        if (!await _dialogs.ConfirmRefreshSavedLocationBuildingCachesAsync(Locations.Saved.Count)) return;
-        await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.RefreshBuildings,
-            "Refreshing saved location building caches...", "building caches refreshed");
+        if (!await _dialogs.ConfirmRefreshSavedLocationSettlementCachesAsync(Locations.Saved.Count)) return;
+        await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.RefreshSettlement,
+            "Refreshing saved location WSF settlement data...", "settlement data refreshed");
     }
 
     private async Task RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode mode,
@@ -512,14 +746,11 @@ public partial class MainViewModel : ObservableObject
         var coreComplete = 0;
         var coreCached = 0;
         var coreFailed = 0;
-        var buildingComplete = 0;
-        var buildingCached = 0;
-        var buildingPartial = 0;
-        var buildingFailed = 0;
-        var regionHits = 0;
-        var regionMisses = 0;
-        var regionDownloads = 0;
-        var regionFailures = 0;
+        var settlementComplete = 0;
+        var settlementCached = 0;
+        var settlementEmpty = 0;
+        var settlementPartial = 0;
+        var settlementFailed = 0;
         var details = new List<string>();
         try
         {
@@ -542,9 +773,6 @@ public partial class MainViewModel : ObservableObject
                 switch (outcome.Status)
                 {
                     case MapFeatureFetchStatus.Complete: coreComplete++; break;
-                    case MapFeatureFetchStatus.PartialWithoutBuildings:
-                        coreComplete++;
-                        break;
                     case MapFeatureFetchStatus.CachedPrevious:
                         coreCached++;
                         break;
@@ -554,23 +782,32 @@ public partial class MainViewModel : ObservableObject
                         break;
                 }
 
-                var building = operation?.Buildings ?? BuildingFeatureFetchOutcome.Unavailable(
-                    "operation_failed", "the requested building operation did not complete");
-                regionHits += building.CacheHitCount;
-                regionMisses += building.CacheMissCount;
-                regionDownloads += building.DownloadedRegionCount;
-                regionFailures += building.FailedRegionCount;
-                switch (building.Status)
+                switch (operation?.SettlementState)
                 {
-                    case BuildingStarStatus.Complete: buildingComplete++; break;
-                    case BuildingStarStatus.Cached: buildingCached++; break;
-                    case BuildingStarStatus.Partial:
-                        buildingPartial++;
-                        details.Add($"{card.Name}: {building.FailureReason ?? "building regions were only partially loaded"}");
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.Available:
+                        settlementComplete++;
+                        break;
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.Cached:
+                        settlementCached++;
+                        break;
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.Empty:
+                        settlementEmpty++;
+                        break;
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.Partial:
+                        settlementPartial++;
+                        details.Add($"{card.Name}: WSF settlement coverage is partial");
+                        break;
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.TileAbsent:
+                        settlementFailed++;
+                        details.Add($"{card.Name}: WSF coverage tile absent");
+                        break;
+                    case Noctaxis.Core.Environment.EnvironmentalDataState.InvalidRaster:
+                        settlementFailed++;
+                        details.Add($"{card.Name}: WSF raster failed scientific validation");
                         break;
                     default:
-                        buildingFailed++;
-                        details.Add($"{card.Name}: {building.FailureReason ?? "building stars unavailable"}");
+                        settlementFailed++;
+                        details.Add($"{card.Name}: WSF source unavailable");
                         break;
                 }
             }
@@ -579,18 +816,16 @@ public partial class MainViewModel : ObservableObject
                 ? $"{succeeded} refreshed, {failed} failed."
                 : $"Raster maps: {rasterComplete} complete, {rasterCached} cached, {rasterFailed} failed.{Environment.NewLine}" +
                   $"Road and water overlays: {coreComplete} complete, {coreCached} cached, {coreFailed} failed.{Environment.NewLine}" +
-                  $"Building stars: {buildingComplete} complete, {buildingCached} cached, " +
-                  $"{buildingPartial} partial, {buildingFailed} failed.{Environment.NewLine}" +
-                  $"Building cache regions: {regionHits} reused, {regionDownloads} downloaded, " +
-                  $"{regionFailures} failed ({regionMisses} misses)." +
+                  $"WSF settlement layers: {settlementComplete} complete, {settlementCached} cached, " +
+                  $"{settlementEmpty} valid empty, {settlementPartial} partial, {settlementFailed} failed." +
                   (details.Count == 0 ? string.Empty : Environment.NewLine + string.Join(Environment.NewLine, details));
-            StatusMessage = failed == 0 && coreFailed == 0 && buildingFailed == 0 && buildingPartial == 0
+            StatusMessage = failed == 0 && coreFailed == 0 && settlementFailed == 0 && settlementPartial == 0
                 ? $"Saved location {completedDescription}"
                 : $"Saved location {completedDescription} with degraded or failed results";
             _logger.LogInformation(
-                "Saved-location map operation {RefreshMode} completed: raster complete {RasterComplete}, cached {RasterCached}, failed {RasterFailed}; core complete {CoreComplete}, cached {CoreCached}, failed {CoreFailed}; buildings complete {BuildingComplete}, cached {BuildingCached}, partial {BuildingPartial}, failed {BuildingFailed}; thumbnails failed {Failed}",
+                "Saved-location map operation {RefreshMode} completed: raster complete {RasterComplete}, cached {RasterCached}, failed {RasterFailed}; core complete {CoreComplete}, cached {CoreCached}, failed {CoreFailed}; WSF settlement complete {SettlementComplete}, cached {SettlementCached}, valid empty {SettlementEmpty}, partial {SettlementPartial}, failed {SettlementFailed}; thumbnails failed {Failed}",
                 mode, rasterComplete, rasterCached, rasterFailed, coreComplete, coreCached, coreFailed,
-                buildingComplete, buildingCached, buildingPartial, buildingFailed, failed);
+                settlementComplete, settlementCached, settlementEmpty, settlementPartial, settlementFailed, failed);
         }
         finally
         {
@@ -603,18 +838,37 @@ public partial class MainViewModel : ObservableObject
         WeatherField.TotalCloudCover => "Total cloud cover", WeatherField.LowCloudCover => "Low cloud cover",
         WeatherField.MediumCloudCover => "Medium cloud cover", WeatherField.HighCloudCover => "High cloud cover",
         WeatherField.PrecipitationProbability => "Precipitation probability", WeatherField.PrecipitationAmount => "Precipitation amount",
-        WeatherField.PrecipitationType => "Precipitation type", WeatherField.RelativeHumidity => "Relative humidity",
+        WeatherField.PrecipitationType => "Precipitation type", WeatherField.Visibility => "Visibility",
+        WeatherField.Temperature => "Temperature", WeatherField.DewPoint => "Dew point", WeatherField.RelativeHumidity => "Relative humidity",
         WeatherField.WindSpeed => "Wind speed", WeatherField.WindGusts => "Wind gusts", WeatherField.WindDirection => "Wind direction",
+        WeatherField.Sunrise => "Sunrise", WeatherField.Sunset => "Sunset",
         WeatherField.CivilTwilight => "Civil twilight", WeatherField.NauticalTwilight => "Nautical twilight",
         WeatherField.AstronomicalTwilight => "Astronomical twilight", WeatherField.AstronomicalDarkness => "Astronomical darkness",
         WeatherField.MoonPhase => "Moon phase", WeatherField.MoonIllumination => "Moon illumination",
+        WeatherField.Moonrise => "Moonrise", WeatherField.Moonset => "Moonset",
         _ => field.ToString()
     };
+
+    private static readonly IReadOnlyList<(string Label, IReadOnlyList<WeatherField> Fields)> WeatherFieldGroupDefinitions =
+    [
+        ("Weather",
+        [
+            WeatherField.TotalCloudCover, WeatherField.LowCloudCover, WeatherField.MediumCloudCover, WeatherField.HighCloudCover,
+            WeatherField.PrecipitationProbability, WeatherField.PrecipitationAmount, WeatherField.PrecipitationType,
+            WeatherField.Visibility, WeatherField.Temperature, WeatherField.DewPoint, WeatherField.RelativeHumidity,
+            WeatherField.WindSpeed, WeatherField.WindGusts, WeatherField.WindDirection
+        ]),
+        ("Sun & darkness",
+        [
+            WeatherField.Sunrise, WeatherField.Sunset, WeatherField.CivilTwilight, WeatherField.NauticalTwilight,
+            WeatherField.AstronomicalTwilight, WeatherField.AstronomicalDarkness
+        ]),
+        ("Moon", [WeatherField.MoonPhase, WeatherField.MoonIllumination, WeatherField.Moonrise, WeatherField.Moonset])
+    ];
 
     public async Task<byte[]> CreateExportPngAsync(CancellationToken cancellationToken)
     {
         if (Snapshot is null) throw new InvalidOperationException("The plan is not ready to export.");
-        IsBusy = true;
         StatusMessage = "Refreshing weather for export…";
         _logger.LogInformation("Starting export weather refresh");
         try
@@ -635,7 +889,6 @@ public partial class MainViewModel : ObservableObject
             StatusMessage = ex.Message;
             throw;
         }
-        finally { IsBusy = false; }
     }
 
     public void ReportExportDestinationFailure(Exception exception)
@@ -646,7 +899,7 @@ public partial class MainViewModel : ObservableObject
 
     public async Task PersistAsync(CancellationToken cancellationToken)
     {
-        var state = new PersistedState(3, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
+        var state = new PersistedState(4, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
         await _store.SaveAsync(state, cancellationToken);
     }
 
@@ -655,7 +908,7 @@ public partial class MainViewModel : ObservableObject
     {
         SelectedPageIndex = 1;
         _logger.LogInformation("Navigated to Planner");
-        if (Snapshot is null) ScheduleFullRefresh(20);
+        if (Snapshot is null) ScheduleObserverRefresh(20);
     }
     [RelayCommand] private void ShowSettings() { SelectedPageIndex = 2; _logger.LogInformation("Navigated to Settings"); }
 
@@ -704,13 +957,12 @@ public partial class MainViewModel : ObservableObject
         var updated = card.Location with { LastUsedUtc = _clock.GetCurrentInstant().ToDateTimeOffset() };
         card.Update(updated);
         ReplaceLocation(updated);
-        if (!string.IsNullOrWhiteSpace(updated.PreferredDemFolder)) _demDirectory.DirectoryPath = updated.PreferredDemFolder;
         _session = _session with
         {
             Observer = updated.Coordinate,
             TimeZoneId = _timeZones.GetEffectiveId(updated.TimeZoneId),
             SavedLocationId = updated.Id,
-            Lens = updated.PreferredSensor.HasValue ? LensConfiguration.ForPreset(updated.PreferredSensor.Value) : _session.Lens
+            ObserverElevation = updated.ObserverElevation
         };
         SyncLocationHomepage();
         LocationName = updated.Name;
@@ -718,7 +970,7 @@ public partial class MainViewModel : ObservableObject
         LoadSessionIntoControls();
         PreviewObserver = updated.Coordinate;
         OnPropertyChanged(nameof(Observer));
-        ScheduleFullRefresh(20);
+        ScheduleObserverRefresh(20);
         await PersistAsync(CancellationToken.None);
     }
 
@@ -793,18 +1045,32 @@ public partial class MainViewModel : ObservableObject
     private void EnsureCelestialSelections()
     {
         var source = Settings.CelestialObjects?.ConfiguredObjects ?? _session.VisibleObjects ?? CelestialObjectSettings.Defaults;
-        var withMandatory = source
+        var recovered = new List<CelestialObjectSelection>();
+        foreach (var item in source)
+        {
+            var resolved = _catalogue.ResolveConfiguredTargetId(item.TargetId);
+            if (resolved is null)
+            {
+                _logger.LogWarning("Discarded unresolved configured celestial target {TargetId}", item.TargetId);
+                continue;
+            }
+            recovered.Add(item with { TargetId = resolved });
+        }
+        var withMandatory = recovered
             .Append(new CelestialObjectSelection("sun", false, int.MaxValue - 1))
             .Append(new CelestialObjectSelection("moon", false, int.MaxValue))
-            .Select(item => (_catalogue.ResolveId(item.TargetId), item))
-            .Where(pair => pair.Item1 is not null)
-            .Select(pair => pair.item with { TargetId = pair.Item1! })
             .DistinctBy(item => item.TargetId, StringComparer.OrdinalIgnoreCase)
             .OrderBy(item => item.Order).ToArray();
         var normalised = CelestialVisibilityPolicy.Normalise(withMandatory);
         if (withMandatory.Count(item => item.IsVisible) > CelestialVisibilityPolicy.MaximumVisibleObjects)
             _logger.LogWarning("Saved celestial configuration exceeded the visible-object limit; extra objects were retained but hidden");
-        var primary = _catalogue.ResolveId(Settings.CelestialObjects?.DefaultPrimaryTargetId ?? _session.TargetId) ?? "sun";
+        var requestedPrimary = Settings.CelestialObjects?.DefaultPrimaryTargetId ?? _session.TargetId;
+        var primary = _catalogue.ResolveConfiguredTargetId(requestedPrimary);
+        if (primary is null)
+        {
+            _logger.LogWarning("Discarded unresolved configured primary celestial target {TargetId}", requestedPrimary);
+            primary = "sun";
+        }
         if (!normalised.Any(item => item.IsVisible && item.TargetId.Equals(primary, StringComparison.OrdinalIgnoreCase)))
             primary = normalised.FirstOrDefault(item => item.IsVisible)?.TargetId ?? "sun";
         if (!normalised.Any(item => item.IsVisible))
@@ -843,7 +1109,7 @@ public partial class MainViewModel : ObservableObject
             if (replacement is null) { item.SetVisibilitySilently(true); return; }
             SetPrimaryTarget(replacement);
         }
-        SaveCelestialSelections(); ScheduleFullRefresh(120);
+        SaveCelestialSelections(); ScheduleAstronomyRefresh(120);
     }
 
     private void MakePrimaryTarget(CelestialObjectItemViewModel item)
@@ -858,7 +1124,7 @@ public partial class MainViewModel : ObservableObject
             item.SetVisibilitySilently(true);
         }
         SetPrimaryTarget(item);
-        SaveCelestialSelections(); ScheduleFullRefresh(40);
+        SaveCelestialSelections(); ScheduleAstronomyRefresh(40);
     }
 
     private void SetPrimaryTarget(CelestialObjectItemViewModel item)
@@ -880,7 +1146,7 @@ public partial class MainViewModel : ObservableObject
             if (!replacement.IsVisible) replacement.SetVisibilitySilently(true);
             SetPrimaryTarget(replacement);
         }
-        SaveCelestialSelections(); ScheduleFullRefresh(80);
+        SaveCelestialSelections(); ScheduleAstronomyRefresh(80);
     }
 
     [RelayCommand]
@@ -894,8 +1160,14 @@ public partial class MainViewModel : ObservableObject
         CelestialObjects.Add(item);
         if (visible) SetPrimaryTarget(item);
         else CelestialLimitMessage = "Object added hidden because eight objects are already visible.";
-        CelestialSearch.ClearResults();
-        SaveCelestialSelections(); ScheduleFullRefresh(80);
+        SaveCelestialSelections(); ScheduleAstronomyRefresh(80);
+    }
+
+    [RelayCommand]
+    private void AddSettingsCelestialObject(AstralTarget target)
+    {
+        AddCelestialObject(target);
+        SettingsCelestialSearch.ClearResults();
     }
 
     private void SaveCelestialSelections()
@@ -923,7 +1195,7 @@ public partial class MainViewModel : ObservableObject
         Settings = Settings with { CelestialObjects = new CelestialObjectSettings(CelestialObjectSettings.Defaults, "sun") };
         BuildCelestialObjectItems();
         CelestialLimitMessage = null;
-        ScheduleFullRefresh(40);
+        ScheduleAstronomyRefresh(40);
     }
 
     private void NotifyCelestialCount()
@@ -949,7 +1221,7 @@ public partial class MainViewModel : ObservableObject
     {
         _session = _session with { Instant = SystemClock.Instance.GetCurrentInstant() };
         LoadTimeControls();
-        ScheduleFullRefresh();
+        ScheduleAstronomyRefresh();
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshWeather))]
@@ -984,12 +1256,6 @@ public partial class MainViewModel : ObservableObject
     private void ToggleInspector() => IsInspectorOpen = !IsInspectorOpen;
 
     [RelayCommand]
-    private void SelectFocalLength(double focalLength) => FocalLength = focalLength;
-
-    [RelayCommand]
-    private void ToggleLensAdvanced() => IsLensAdvancedOpen = !IsLensAdvancedOpen;
-
-    [RelayCommand]
     private async Task SaveLocation()
     {
         var existing = SelectedLocation;
@@ -1002,8 +1268,14 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         var location = existing is null
-            ? new SavedLocation(Guid.NewGuid(), proposedName, _session.Observer, _session.TimeZoneId, PreferredDemFolder: Settings.DemDirectory, PreferredSensor: _session.Lens.Preset, LastUsedUtc: _clock.GetCurrentInstant().ToDateTimeOffset(), SortOrder: SavedLocations.Count, DateAddedUtc: _clock.GetCurrentInstant().ToDateTimeOffset())
-            : existing with { Name = proposedName, Coordinate = _session.Observer, TimeZoneId = _session.TimeZoneId, PreferredDemFolder = Settings.DemDirectory, PreferredSensor = _session.Lens.Preset, LastUsedUtc = _clock.GetCurrentInstant().ToDateTimeOffset() };
+            ? new SavedLocation(Guid.NewGuid(), proposedName, _session.Observer, _session.TimeZoneId,
+                LastUsedUtc: _clock.GetCurrentInstant().ToDateTimeOffset(), SortOrder: SavedLocations.Count,
+                DateAddedUtc: _clock.GetCurrentInstant().ToDateTimeOffset(),
+                ObserverElevation: _session.EffectiveObserverElevation)
+            : existing with { Name = proposedName, Coordinate = _session.Observer,
+                TimeZoneId = _session.TimeZoneId,
+                LastUsedUtc = _clock.GetCurrentInstant().ToDateTimeOffset(),
+                ObserverElevation = _session.EffectiveObserverElevation };
         if (existing is not null) SavedLocations.Remove(existing);
         SavedLocations.Add(location);
         SelectedLocation = location;
@@ -1024,8 +1296,8 @@ public partial class MainViewModel : ObservableObject
             ? $"Location {SavedLocations.Count + 1}"
             : LocationName.Trim());
         var draft = new SavedLocation(Guid.NewGuid(), suggestedName, _session.Observer, _session.TimeZoneId,
-            PreferredDemFolder: Settings.DemDirectory, PreferredSensor: _session.Lens.Preset,
-            SortOrder: SavedLocations.Count, DateAddedUtc: now);
+            SortOrder: SavedLocations.Count, DateAddedUtc: now,
+            ObserverElevation: _session.EffectiveObserverElevation);
         var edit = await _dialogs.ShowSavedLocationEditAsync(draft, isCreateMode: true);
         if (edit is null) return;
         var name = edit.Name.Trim();
@@ -1077,10 +1349,16 @@ public partial class MainViewModel : ObservableObject
         CancelReverseLocationLookup();
         _resolvedPlaceSuggestion = null;
         CurrentLocationAttribution = null;
-        _session = _session with { Observer = value.Coordinate, TimeZoneId = _timeZones.GetEffectiveId(value.TimeZoneId), SavedLocationId = value.Id };
+        _session = _session with
+        {
+            Observer = value.Coordinate,
+            ObserverElevation = value.ObserverElevation,
+            TimeZoneId = _timeZones.GetEffectiveId(value.TimeZoneId),
+            SavedLocationId = value.Id
+        };
         LocationName = value.Name;
         LoadSessionIntoControls();
-        ScheduleFullRefresh();
+        ScheduleObserverRefresh();
     }
 
     partial void OnLocalDateChanged(DateTimeOffset? value)
@@ -1130,29 +1408,90 @@ public partial class MainViewModel : ObservableObject
         ScheduleTemporalCommit();
     }
     partial void OnTimeZoneIdChanged(string value) { if (!_suppressChanges) ApplyLocalDateTime(true); }
-    partial void OnLatitudeChanged(double value) { if (!_suppressChanges) MoveObserver(new GeoCoordinate(value, Longitude, Elevation)); }
-    partial void OnLongitudeChanged(double value) { if (!_suppressChanges) MoveObserver(new GeoCoordinate(Latitude, value, Elevation)); }
-    partial void OnElevationChanged(double value) { if (!_suppressChanges) MoveObserver(new GeoCoordinate(Latitude, Longitude, value)); }
-    partial void OnSelectedSensorChanged(SensorPreset value)
+    partial void OnLatitudeChanged(double value)
     {
         if (_suppressChanges) return;
-        var preset = LensConfiguration.ForPreset(value);
+        var coordinate = new GeoCoordinate(value, Longitude, 0);
+        PreviewObserverLocation(coordinate);
+        CommitUnresolvedObserverLocation(coordinate);
+    }
+    partial void OnLongitudeChanged(double value)
+    {
+        if (_suppressChanges) return;
+        var coordinate = new GeoCoordinate(Latitude, value, 0);
+        PreviewObserverLocation(coordinate);
+        CommitUnresolvedObserverLocation(coordinate);
+    }
+    partial void OnElevationChanged(double value)
+    {
+        if (_suppressChanges) return;
+        var state = _session.EffectiveObserverElevation.WithManualOverride(value);
+        var observer = _session.Observer with { ElevationMetres = state.ResolveGroundElevationAsl(value) };
+        _session = _session with { Observer = observer, ObserverElevation = state };
+        PreviewObserver = observer;
+        SelectedLocation = null;
+        OnPropertyChanged(nameof(Observer));
+        NotifyObserverElevationProperties();
+        ScheduleObserverRefresh();
+    }
+
+    [RelayCommand]
+    private void ResetGroundElevation()
+    {
+        var state = _session.EffectiveObserverElevation.ResetManualOverride();
+        var groundElevation = state.ResolveGroundElevationAsl(_session.Observer.ElevationMetres);
+        var observer = _session.Observer with { ElevationMetres = groundElevation };
+        _session = _session with { Observer = observer, ObserverElevation = state };
         _suppressChanges = true;
-        SensorWidth = preset.SensorWidthMillimetres;
-        SensorHeight = preset.SensorHeightMillimetres;
+        Elevation = groundElevation;
+        PreviewObserver = observer;
         _suppressChanges = false;
+        OnPropertyChanged(nameof(Observer));
+        NotifyObserverElevationProperties();
+        ScheduleObserverRefresh();
+    }
+    partial void OnSelectedCameraChanged(CameraProfile? value) { if (!_suppressChanges) ApplyLens(); }
+    partial void OnSelectedLensChanged(LensProfile? value)
+    {
+        if (_suppressChanges) return;
+        ApplyLens();
+        NotifyEquipmentProperties();
+    }
+    partial void OnSelectedOrientationChanged(CameraOrientation value)
+    {
+        OnPropertyChanged(nameof(IsLandscapeOrientation));
+        OnPropertyChanged(nameof(IsPortraitOrientation));
+        if (!_suppressChanges) ApplyLens();
+    }
+    partial void OnFocalLengthChanged(double value)
+    {
+        if (_suppressChanges || SelectedLens is null) return;
+        var clamped = SelectedLens.ClampFocalLength(value);
+        if (Math.Abs(clamped - value) > 1e-9)
+        {
+            _suppressChanges = true;
+            FocalLength = clamped;
+            _suppressChanges = false;
+        }
         ApplyLens();
     }
-    partial void OnSelectedOrientationChanged(CameraOrientation value) { if (!_suppressChanges) ApplyLens(); }
-    partial void OnSensorWidthChanged(double value) { if (!_suppressChanges) ApplyLens(); }
-    partial void OnSensorHeightChanged(double value) { if (!_suppressChanges) ApplyLens(); }
-    partial void OnFocalLengthChanged(double value) { if (!_suppressChanges) ApplyLens(); }
     partial void OnSnapshotChanged(PlanningSnapshot? value)
     {
         OnPropertyChanged(nameof(CameraFramingGuide));
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
+        NotifyTerrainProperties();
+    }
+    partial void OnPlannerRefreshChanged(PlannerRefreshState value)
+    {
+        OnPropertyChanged(nameof(IsPlannerRefreshing));
+        OnPropertyChanged(nameof(PlannerRefreshProgress));
+        OnPropertyChanged(nameof(PlannerRefreshStatusText));
+        OnPropertyChanged(nameof(PlannerPinActivity));
+        OnPropertyChanged(nameof(CelestialOverlaysReady));
+        OnPropertyChanged(nameof(CameraOverlayReady));
+        NotifyTerrainProperties();
     }
     partial void OnIsCameraFramingOverlayVisibleChanged(bool value)
     {
@@ -1193,7 +1532,7 @@ public partial class MainViewModel : ObservableObject
         if (LocalDate is null || !LocalTimePatternHelper.TryParse(TimeText, out var time)) return;
         var date = NodaTime.LocalDate.FromDateTime(LocalDate.Value.DateTime);
         _session = _session with { Instant = _timeZones.ResolveLocal(date, time, TimeZoneId), TimeZoneId = TimeZoneId };
-        if (fullRefresh) ScheduleFullRefresh(); else UpdateCurrentOnly();
+        if (fullRefresh) ScheduleAstronomyRefresh(); else UpdateCurrentOnly();
     }
 
     private void PreviewTemporalPosition()
@@ -1249,18 +1588,65 @@ public partial class MainViewModel : ObservableObject
         var date = NodaTime.LocalDate.FromDateTime(LocalDate.Value.DateTime);
         _session = _session with { Instant = _timeZones.ResolveLocal(date, time, TimeZoneId) };
         _logger.LogInformation("Date/time preview committed; scheduling authoritative recalculation");
-        ScheduleFullRefresh(50);
+        ScheduleAstronomyRefresh(50);
     }
 
     private void ApplyLens()
     {
-        if (SensorWidth <= 0 || SensorHeight <= 0 || FocalLength <= 0) return;
-        _session = _session with { Lens = new LensConfiguration(SelectedSensor, SensorWidth, SensorHeight, FocalLength, SelectedOrientation) };
+        if (SelectedCamera is null || SelectedLens is null) return;
+        var focalLength = SelectedLens.ClampFocalLength(FocalLength);
+        if (Math.Abs(focalLength - FocalLength) > 1e-9)
+        {
+            _suppressChanges = true;
+            FocalLength = focalLength;
+            _suppressChanges = false;
+        }
+        _session = _session with
+        {
+            CameraProfileId = SelectedCamera.Id,
+            LensProfileId = SelectedLens.Id,
+            Lens = new LensConfiguration(SensorPreset.Custom,
+                SelectedCamera.SensorWidthMillimetres, SelectedCamera.SensorHeightMillimetres,
+                focalLength, SelectedOrientation)
+        };
         if (Snapshot is not null)
         {
             Snapshot = Snapshot with { Session = _session, FieldOfView = _lensCalculator.Calculate(_session.Lens) };
             OnPropertyChanged(nameof(FieldOfViewText));
+            if (!Snapshot.Terrain.IsComplete) _ = PrioritiseCurrentCameraTerrainAsync();
         }
+        NotifyEquipmentProperties();
+    }
+
+    private async Task PrioritiseCurrentCameraTerrainAsync()
+    {
+        var generation = Volatile.Read(ref _refreshGeneration);
+        var token = _refreshCancellation?.Token ?? CancellationToken.None;
+        var requestedSession = _session;
+        try
+        {
+            if (Snapshot is null) return;
+            var guide = _cameraFramingGuideCalculator.Calculate(Snapshot.FieldOfView,
+                Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var horizon = await _planning.PrioritiseTerrainAsync(requestedSession,
+                Settings.EffectiveCameraHeightAboveGroundMetres,
+                CameraTerrainBearings(guide, Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees), token);
+            if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null ||
+                Snapshot.Terrain.IsComplete) return;
+            await _plannerSnapshotCommitGate.WaitAsync(token);
+            try
+            {
+                if (IsCurrentRefresh(generation, requestedSession.Observer) &&
+                    Snapshot is { Terrain: { IsComplete: false } })
+                {
+                    Snapshot = Snapshot with { Terrain = horizon };
+                    NotifySnapshotProperties();
+                }
+            }
+            finally { _plannerSnapshotCommitGate.Release(); }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { _logger.LogDebug(ex, "Camera terrain priority update failed"); }
     }
 
     private async Task PersistCameraFramingPreferenceAsync()
@@ -1288,7 +1674,13 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { StatusMessage = ex.Message; }
     }
 
-    private void ScheduleFullRefresh(int delayMilliseconds = 280)
+    private void ScheduleObserverRefresh(int delayMilliseconds = 80) =>
+        SchedulePlannerRefresh(PlannerRefreshScope.Observer, delayMilliseconds);
+
+    private void ScheduleAstronomyRefresh(int delayMilliseconds = 80) =>
+        SchedulePlannerRefresh(PlannerRefreshScope.Astronomy, delayMilliseconds);
+
+    private void SchedulePlannerRefresh(PlannerRefreshScope scope, int delayMilliseconds)
     {
         if (_refreshCancellation is { IsCancellationRequested: false })
             _logger.LogDebug("Cancelling obsolete planning calculation");
@@ -1296,43 +1688,363 @@ public partial class MainViewModel : ObservableObject
         _refreshCancellation?.Dispose();
         _refreshCancellation = new CancellationTokenSource();
         var token = _refreshCancellation.Token;
-        _ = DebouncedRefreshAsync(delayMilliseconds, token);
+        var generation = Interlocked.Increment(ref _refreshGeneration);
+        PlannerRefresh = scope == PlannerRefreshScope.Observer
+            ? PlannerRefreshState.BeginObserver(generation)
+            : PlannerRefreshState.BeginAstronomy(generation);
+        StatusMessage = PlannerRefresh.StatusText;
+        _activePlannerRefresh = DebouncedRefreshAsync(delayMilliseconds, generation, scope, token);
     }
 
-    private async Task DebouncedRefreshAsync(int delayMilliseconds, CancellationToken token)
+    private async Task DebouncedRefreshAsync(int delayMilliseconds, long generation,
+        PlannerRefreshScope scope, CancellationToken token)
     {
         try
         {
-            await Task.Delay(delayMilliseconds, token);
-            await RefreshNowAsync(token);
+            if (delayMilliseconds > 0) await Task.Delay(delayMilliseconds, token);
+            await RefreshNowAsync(token, generation, scope);
         }
         catch (OperationCanceledException) { }
     }
 
-    private async Task RefreshNowAsync(CancellationToken cancellationToken)
+    private async Task RefreshNowAsync(CancellationToken cancellationToken, long generation,
+        PlannerRefreshScope scope)
     {
         var stopwatch = Stopwatch.StartNew();
-        IsBusy = true;
-        StatusMessage = "Calculating path, terrain and weather…";
+        var requestedSession = _session;
+        var previousSnapshot = Snapshot;
+        UpdateRefresh(generation, state => state with
+        {
+            Phase = PlannerRefreshPhase.CalculatingAstronomy,
+            AstronomyState = PlannerRefreshWorkState.Running,
+            StatusText = "Calculating celestial positions…"
+        });
+
+        var observerWork = scope == PlannerRefreshScope.Observer
+            ? _planning.StartRefresh(requestedSession, Settings.EffectiveWeather,
+                Settings.EffectiveCameraHeightAboveGroundMetres, cancellationToken)
+            : null;
+        var coreTask = observerWork?.Core ??
+                       _planning.CalculateCoreSnapshotAsync(requestedSession, cancellationToken);
+        var environmentTask = observerWork?.Environment;
+        var weatherTask = observerWork?.Weather ??
+                          _planning.LoadWeatherAsync(requestedSession, Settings.EffectiveWeather, cancellationToken);
+        var coreCommit = CommitCoreAsync(coreTask, requestedSession, previousSnapshot, scope,
+            generation, cancellationToken);
+        var environmentCommit = environmentTask is null
+            ? Task.CompletedTask
+            : CommitEnvironmentAsync(environmentTask, coreCommit, requestedSession, generation, cancellationToken);
+        var priorityTerrainCommit = observerWork?.PriorityTerrain is null
+            ? Task.CompletedTask
+            : CommitPriorityTerrainAsync(observerWork.PriorityTerrain, coreCommit, requestedSession,
+                generation, cancellationToken);
+        if (observerWork?.PriorityTerrain is null)
+            UpdateRefresh(generation, state => state with { CameraTerrainState = PlannerRefreshWorkState.NotRequired });
+        var weatherCommit = CommitWeatherAsync(weatherTask, coreCommit, requestedSession, generation,
+            cancellationToken);
+
         try
         {
-            Snapshot = await _planning.CalculateSnapshotAsync(_session, Settings.EffectiveWeather, cancellationToken);
-            StatusMessage = Snapshot.Terrain.HasDemCoverage ? "Plan ready · terrain profile loaded" : "Plan ready · flat terrain fallback";
-            NotifySnapshotProperties();
+            await Task.WhenAll(coreCommit, priorityTerrainCommit, environmentCommit, weatherCommit);
+            if (!IsCurrentRefresh(generation, requestedSession.Observer)) return;
+            var partial = PlannerRefresh.HasOptionalFailure;
+            UpdateRefresh(generation, state => state with
+            {
+                Phase = partial ? PlannerRefreshPhase.Partial : PlannerRefreshPhase.Ready,
+                StatusText = partial
+                    ? "Planner ready · some environmental data unavailable"
+                    : "Planner ready"
+            });
             await PersistAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             _logger.LogDebug("Planning calculation cancelled after {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
         }
-        catch (Exception ex) { StatusMessage = "Plan update failed: " + ex.Message; }
+        catch (Exception ex)
+        {
+            if (IsCurrentRefresh(generation, requestedSession.Observer))
+            {
+                UpdateRefresh(generation, state => state with
+                {
+                    Phase = PlannerRefreshPhase.Error,
+                    AstronomyState = PlannerRefreshWorkState.Error,
+                    StatusText = "Planner update failed: " + ex.Message
+                });
+            }
+            else _logger.LogDebug(ex, "Ignored failure from superseded planning refresh");
+        }
         finally
         {
             stopwatch.Stop();
-            if (!cancellationToken.IsCancellationRequested)
-                _logger.LogInformation("Final planning recalculation completed in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
-            if (!cancellationToken.IsCancellationRequested) IsBusy = false;
+            if (!cancellationToken.IsCancellationRequested && IsCurrentRefresh(generation, requestedSession.Observer))
+                _logger.LogInformation("Staged planning refresh completed in {ElapsedMilliseconds} ms", stopwatch.ElapsedMilliseconds);
         }
+    }
+
+    private async Task CommitPriorityTerrainAsync(
+        Func<IReadOnlyList<double>, CancellationToken, Task<TerrainHorizonProfile>> priorityTerrain,
+        Task coreCommit, PlanningSession requestedSession, long generation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await coreCommit;
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
+            var guide = _cameraFramingGuideCalculator.Calculate(Snapshot.FieldOfView,
+                Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var bearings = CameraTerrainBearings(guide,
+                Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees);
+            UpdateRefresh(generation, state => state with
+            {
+                CameraTerrainState = PlannerRefreshWorkState.Running,
+                StatusText = "Planner ready · calculating current view terrain…"
+            });
+            var horizon = await priorityTerrain(bearings, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await _plannerSnapshotCommitGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
+                if (Snapshot.Terrain.Samples.Count == 0 || !Snapshot.Terrain.IsComplete)
+                {
+                    ApplyResolvedTerrainGround(horizon);
+                    Snapshot = Snapshot with
+                    {
+                        Session = _session,
+                        Terrain = horizon
+                    };
+                    NotifySnapshotProperties();
+                }
+                UpdateRefresh(generation, state => state with
+                {
+                    CameraTerrainState = PlannerRefreshWorkState.Ready,
+                    StatusText = horizon.IsComplete ? EnrichmentStatus(state) :
+                        "Planner ready · refining terrain horizon…"
+                });
+            }
+            finally { _plannerSnapshotCommitGate.Release(); }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            if (!IsCurrentRefresh(generation, requestedSession.Observer)) return;
+            _logger.LogWarning(ex, "Current camera terrain priority calculation failed");
+            UpdateRefresh(generation, state => state with
+            {
+                CameraTerrainState = PlannerRefreshWorkState.Error,
+                StatusText = EnrichmentStatus(state)
+            });
+        }
+    }
+
+    private static IReadOnlyList<double> CameraTerrainBearings(CameraFramingGuide guide,
+        double angularDetailDegrees)
+    {
+        var detail = Math.Clamp(double.IsFinite(angularDetailDegrees) ? angularDetailDegrees :
+                CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees,
+            CameraFramingSettings.MinimumTerrainCastAngularDetailDegrees,
+            CameraFramingSettings.MaximumTerrainCastAngularDetailDegrees);
+        var segments = Math.Max(1, (int)Math.Ceiling(guide.HorizontalFieldOfViewDegrees / detail));
+        var spacing = guide.HorizontalFieldOfViewDegrees / segments;
+        var bearings = new double[segments + 1];
+        var left = guide.CentreBearingDegrees - guide.HorizontalFieldOfViewDegrees / 2;
+        for (var index = 0; index < bearings.Length; index++) bearings[index] = left + index * spacing;
+        return bearings;
+    }
+
+    private async Task CommitCoreAsync(Task<PlanningSnapshot> coreTask, PlanningSession requestedSession,
+        PlanningSnapshot? previousSnapshot, PlannerRefreshScope scope, long generation,
+        CancellationToken cancellationToken)
+    {
+        var core = await coreTask;
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsCurrentRefresh(generation, requestedSession.Observer)) return;
+
+        if (scope == PlannerRefreshScope.Astronomy && previousSnapshot is not null &&
+            Angles.GreatCircleDistanceMetres(previousSnapshot.Session.Observer, requestedSession.Observer) <= 2)
+        {
+            core = core with
+            {
+                Terrain = previousSnapshot.Terrain,
+                TerrainCrossings = TerrainCrossingCalculator.Calculate(core.Path, previousSnapshot.Terrain),
+                Environment = previousSnapshot.Environment
+            };
+        }
+
+        UpdateRefresh(generation, state => state with
+        {
+            AstronomyState = PlannerRefreshWorkState.Ready,
+            Phase = PlannerRefreshPhase.UpdatingCelestialOverlays,
+            StatusText = "Updating target directions…"
+        });
+        Snapshot = core;
+        NotifySnapshotProperties();
+        UpdateRefresh(generation, state => state with
+        {
+            CelestialOverlayState = PlannerRefreshWorkState.Ready,
+            Phase = PlannerRefreshPhase.UpdatingCameraOverlay,
+            StatusText = "Updating camera view…"
+        });
+        UpdateRefresh(generation, state => state with
+        {
+            CameraGeometryState = PlannerRefreshWorkState.Ready,
+            Phase = PlannerRefreshPhase.LoadingEnvironment,
+            StatusText = EnrichmentStatus(state)
+        });
+    }
+
+    private async Task CommitEnvironmentAsync(Task<PlannerEnvironmentSnapshot> environmentTask,
+        Task coreCommit, PlanningSession requestedSession, long generation, CancellationToken cancellationToken)
+    {
+        try
+        {
+            UpdateRefresh(generation, state => state with
+            {
+                GroundTerrainState = PlannerRefreshWorkState.Running,
+                EnvironmentMetadataState = PlannerRefreshWorkState.Running,
+                StatusText = state.IsCoreReady ? "Planner ready · loading terrain…" : state.StatusText
+            });
+            var environment = await environmentTask;
+            await coreCommit;
+            cancellationToken.ThrowIfCancellationRequested();
+            await _plannerSnapshotCommitGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
+                var horizon = environment.HorizonProfile;
+                ApplyResolvedTerrainGround(horizon);
+                Snapshot = Snapshot with
+                {
+                    Session = _session,
+                    Terrain = horizon,
+                    TerrainCrossings = TerrainCrossingCalculator.Calculate(Snapshot.Path, horizon),
+                    Environment = environment
+                };
+                NotifySnapshotProperties();
+                UpdateRefresh(generation, state => state with
+                {
+                    GroundTerrainState = EnvironmentWorkState(horizon.HasTerrainCoverage, horizon.GroundHorizonState),
+                    EnvironmentMetadataState = EnvironmentMetadataWorkState(environment),
+                    StatusText = EnrichmentStatus(state)
+                });
+            }
+            finally
+            {
+                _plannerSnapshotCommitGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            if (IsCurrentRefresh(generation, requestedSession.Observer))
+            {
+                _logger.LogWarning(ex, "Optional Planner environment enrichment failed");
+                UpdateRefresh(generation, state => state with
+                {
+                    GroundTerrainState = PlannerRefreshWorkState.Error,
+                    EnvironmentMetadataState = PlannerRefreshWorkState.Error,
+                    StatusText = EnrichmentStatus(state)
+                });
+            }
+        }
+    }
+
+    private async Task CommitWeatherAsync(Task<WeatherResult> weatherTask, Task coreCommit,
+        PlanningSession requestedSession, long generation, CancellationToken cancellationToken)
+    {
+        try
+        {
+            UpdateRefresh(generation, state => state with
+            {
+                WeatherState = PlannerRefreshWorkState.Running,
+                StatusText = state.IsCoreReady ? "Planner ready · loading weather…" : state.StatusText
+            });
+            var weather = await weatherTask;
+            await coreCommit;
+            cancellationToken.ThrowIfCancellationRequested();
+            await _plannerSnapshotCommitGate.WaitAsync(cancellationToken);
+            try
+            {
+                if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
+                Snapshot = Snapshot with { Weather = weather };
+                NotifySnapshotProperties();
+                UpdateRefresh(generation, state => state with
+                {
+                    WeatherState = WeatherWorkState(weather.State),
+                    StatusText = EnrichmentStatus(state)
+                });
+            }
+            finally
+            {
+                _plannerSnapshotCommitGate.Release();
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+        catch (Exception ex)
+        {
+            if (IsCurrentRefresh(generation, requestedSession.Observer))
+            {
+                _logger.LogWarning(ex, "Optional Planner weather enrichment failed");
+                UpdateRefresh(generation, state => state with
+                {
+                    WeatherState = PlannerRefreshWorkState.Error,
+                    StatusText = EnrichmentStatus(state)
+                });
+            }
+        }
+    }
+
+    private void UpdateRefresh(long generation, Func<PlannerRefreshState, PlannerRefreshState> update)
+    {
+        lock (_plannerRefreshGate)
+        {
+            if (generation != Volatile.Read(ref _refreshGeneration) || PlannerRefresh.Generation != generation) return;
+            PlannerRefresh = update(PlannerRefresh);
+            StatusMessage = PlannerRefresh.StatusText;
+        }
+    }
+
+    private bool IsCurrentRefresh(long generation, GeoCoordinate observer) =>
+        generation == Volatile.Read(ref _refreshGeneration) && PlannerRefresh.Generation == generation &&
+        IsCurrentObserver(observer);
+
+    private static PlannerRefreshWorkState EnvironmentWorkState(bool hasCoverage, EnvironmentalDataState state) =>
+        hasCoverage && state is EnvironmentalDataState.Available or EnvironmentalDataState.Cached or EnvironmentalDataState.Partial
+            ? PlannerRefreshWorkState.Ready
+            : state is EnvironmentalDataState.Error or EnvironmentalDataState.InvalidData
+                ? PlannerRefreshWorkState.Error
+                : PlannerRefreshWorkState.Unavailable;
+
+    private static PlannerRefreshWorkState WeatherWorkState(DataState state) => state switch
+    {
+        DataState.Ready or DataState.Stale => PlannerRefreshWorkState.Ready,
+        DataState.Error => PlannerRefreshWorkState.Error,
+        _ => PlannerRefreshWorkState.Unavailable
+    };
+
+    private static PlannerRefreshWorkState EnvironmentMetadataWorkState(PlannerEnvironmentSnapshot environment)
+    {
+        var states = new[] { environment.LandCover.State, environment.Settlement.State };
+        if (states.Any(state => state is EnvironmentalDataState.Error or EnvironmentalDataState.InvalidData))
+            return PlannerRefreshWorkState.Error;
+        return environment.LandCover.HasValue && environment.Settlement.HasValue
+            ? PlannerRefreshWorkState.Ready
+            : PlannerRefreshWorkState.Unavailable;
+    }
+
+    private static string EnrichmentStatus(PlannerRefreshState state)
+    {
+        if (IsRefreshWorkLoading(state.GroundTerrainState))
+            return state.IsCoreReady
+                ? state.CameraTerrainState == PlannerRefreshWorkState.Ready
+                    ? "Planner ready · refining terrain horizon…"
+                    : "Planner ready · loading terrain…"
+                : state.StatusText;
+        if (IsRefreshWorkLoading(state.WeatherState))
+            return state.IsCoreReady ? "Planner ready · loading weather…" : state.StatusText;
+        return state.IsCoreReady ? "Applying environmental visibility…" : state.StatusText;
     }
 
     private void LoadSessionIntoControls()
@@ -1344,16 +2056,20 @@ public partial class MainViewModel : ObservableObject
         Elevation = _session.Observer.ElevationMetres;
         PreviewObserver = _session.Observer;
         TimeZoneId = _session.TimeZoneId;
-        SelectedSensor = _session.Lens.Preset;
         SelectedOrientation = _session.Lens.Orientation;
-        SensorWidth = _session.Lens.SensorWidthMillimetres;
-        SensorHeight = _session.Lens.SensorHeightMillimetres;
-        FocalLength = _session.Lens.FocalLengthMillimetres;
+        SelectedCamera = Cameras.FirstOrDefault(item => item.Id.Equals(_session.CameraProfileId,
+            StringComparison.OrdinalIgnoreCase)) ?? Cameras.FirstOrDefault();
+        SelectedLens = Lenses.FirstOrDefault(item => item.Id.Equals(_session.LensProfileId,
+            StringComparison.OrdinalIgnoreCase)) ?? Lenses.FirstOrDefault();
+        FocalLength = SelectedLens?.ClampFocalLength(_session.Lens.FocalLengthMillimetres) ??
+            _session.Lens.FocalLengthMillimetres;
         SelectedLocation = SavedLocations.FirstOrDefault(x => x.Id == _session.SavedLocationId);
         if (SelectedLocation is not null) LocationName = SelectedLocation.Name;
         LoadTimeControls();
         _suppressChanges = false;
         OnPropertyChanged(nameof(Observer));
+        ApplyLens();
+        NotifyObserverElevationProperties();
     }
 
     private void LoadTimeControls()
@@ -1372,13 +2088,105 @@ public partial class MainViewModel : ObservableObject
     private void NotifySnapshotProperties()
     {
         OnPropertyChanged(nameof(AzimuthText)); OnPropertyChanged(nameof(AltitudeText)); OnPropertyChanged(nameof(HorizonStatus));
-        OnPropertyChanged(nameof(RiseText)); OnPropertyChanged(nameof(TransitText)); OnPropertyChanged(nameof(SetText)); OnPropertyChanged(nameof(TerrainClearText)); OnPropertyChanged(nameof(TerrainDropText));
-        OnPropertyChanged(nameof(TerrainStatus)); OnPropertyChanged(nameof(WeatherSummary)); OnPropertyChanged(nameof(WeatherDetails));
+        OnPropertyChanged(nameof(HasTargetLocalHorizonDetails)); OnPropertyChanged(nameof(TargetLocalHorizonText));
+        OnPropertyChanged(nameof(TargetTerrainMarginLabel)); OnPropertyChanged(nameof(TargetTerrainMarginText));
+        OnPropertyChanged(nameof(RiseText)); OnPropertyChanged(nameof(TransitText)); OnPropertyChanged(nameof(SetText));
+        NotifyTerrainProperties(); OnPropertyChanged(nameof(WeatherSummary)); OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
         OnPropertyChanged(nameof(MoonDetails)); OnPropertyChanged(nameof(HasMoonDetails)); OnPropertyChanged(nameof(SunDetails)); OnPropertyChanged(nameof(HasSunDetails));
         OnPropertyChanged(nameof(FieldOfViewText)); OnPropertyChanged(nameof(Observer));
         OnPropertyChanged(nameof(CanExport));
     }
+
+    private void NotifyTerrainProperties()
+    {
+        OnPropertyChanged(nameof(TerrainStatus));
+        OnPropertyChanged(nameof(TerrainCurrentLocationText));
+        OnPropertyChanged(nameof(GroundHorizonState));
+        OnPropertyChanged(nameof(GroundHorizonAngleText));
+        OnPropertyChanged(nameof(TerrainDatumText));
+        OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
+        OnPropertyChanged(nameof(TerrainDebugText));
+        OnPropertyChanged(nameof(GroundObstructionText));
+    }
+
+    private void ApplyResolvedTerrainGround(TerrainHorizonProfile horizon)
+    {
+        double? rawTerrainGround = horizon.GroundElevationAtObserver is { HasValue: true } ground
+            ? ground.Value : null;
+        var terrainGround = _session.EffectiveObserverElevation.IsManualOverride
+            ? rawTerrainGround
+            : horizon.ChosenObserverGroundElevationMetres ?? rawTerrainGround;
+        if (!terrainGround.HasValue) return;
+
+        var state = _session.EffectiveObserverElevation.WithTerrainGroundElevation(terrainGround.Value);
+        var resolvedGround = state.ResolveGroundElevationAsl(_session.Observer.ElevationMetres);
+        var observer = _session.Observer with { ElevationMetres = resolvedGround };
+        _session = _session with { Observer = observer, ObserverElevation = state };
+        _suppressChanges = true;
+        Elevation = resolvedGround;
+        PreviewObserver = observer;
+        _suppressChanges = false;
+        if (_lastCustomCoordinate is { } custom &&
+            Angles.GreatCircleDistanceMetres(custom, observer) <= 2)
+            _lastCustomCoordinate = observer;
+        OnPropertyChanged(nameof(Observer));
+        NotifyObserverElevationProperties();
+    }
+
+    private void NotifyObserverElevationProperties()
+    {
+        OnPropertyChanged(nameof(IsElevationManualOverride));
+        OnPropertyChanged(nameof(CanResetGroundElevation));
+        OnPropertyChanged(nameof(GroundElevationSourceText));
+        OnPropertyChanged(nameof(EffectiveObserverAltitudeText));
+    }
+
+    private void NotifyEquipmentProperties()
+    {
+        OnPropertyChanged(nameof(IsFocalLengthEditable));
+        OnPropertyChanged(nameof(FocalLengthMinimum));
+        OnPropertyChanged(nameof(FocalLengthMaximum));
+        OnPropertyChanged(nameof(LensFocalRangeText));
+    }
+
+    private bool IsCurrentObserver(GeoCoordinate coordinate) =>
+        Angles.GreatCircleDistanceMetres(coordinate, _session.Observer) <= 2;
+
+    private static bool IsRefreshWorkLoading(PlannerRefreshWorkState state) => state is
+        PlannerRefreshWorkState.Pending or PlannerRefreshWorkState.Running;
+
+    private string FormatHorizonState(bool isAvailable, EnvironmentalDataState? state)
+    {
+        if (CurrentTerrain is null) return "Loading";
+        if (isAvailable) return "Ready";
+        return state is EnvironmentalDataState.Error or EnvironmentalDataState.InvalidData
+            ? "Error"
+            : "Unavailable";
+    }
+
+    private string FormatObstruction(bool hasData, double? distanceMetres)
+    {
+        if (CurrentTerrain is null || !hasData) return "—";
+        if (!distanceMetres.HasValue) return "Clear";
+        var units = Settings.EffectiveMeasurementSystem;
+        if (units == MeasurementSystem.Metric && distanceMetres.Value < 1_000)
+        {
+            var roundedMetres = Math.Round(distanceMetres.Value / 10,
+                MidpointRounding.AwayFromZero) * 10;
+            return $"{Math.Max(10, roundedMetres):F0} m";
+        }
+        if (units != MeasurementSystem.Metric && distanceMetres.Value < 1_609.344)
+        {
+            var feet = distanceMetres.Value * 3.280839895;
+            var roundedFeet = Math.Round(feet / 50, MidpointRounding.AwayFromZero) * 50;
+            return $"{Math.Max(50, roundedFeet):F0} ft";
+        }
+        return MeasurementUnits.Visibility(distanceMetres.Value / 1_000, units).Format();
+    }
+
+    private static string FormatHorizonAngle(double? angleDegrees) =>
+        angleDegrees.HasValue ? $"{angleDegrees.Value:+0.0;-0.0;0.0}°" : "—";
 
     private string FormatTime(Instant? instant) => instant is null ? "—" : _timeZones.InZone(instant.Value, _session.TimeZoneId).ToString("HH:mm", null);
     private static string Value(double? value, string suffix) => value.HasValue ? $"{value:F0}{suffix}" : "—";
