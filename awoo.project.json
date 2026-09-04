@@ -8,5 +8,7 @@
     "Avalonia",
     "Astronomy",
     "Geospatial"
-  ]
+  ],
+  "image": "images/awoo-card.webp",
+  "content": "docs/awoo.md"
 }
