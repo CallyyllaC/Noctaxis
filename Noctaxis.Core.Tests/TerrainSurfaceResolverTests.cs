@@ -10,6 +10,10 @@ public sealed class TerrainSurfaceResolverTests
     [Theory]
     [InlineData(120, LandCoverClass.Cropland, null, 120, false,
         TerrainSurfaceResolutionReason.RawTerrainLand)]
+    [InlineData(0, LandCoverClass.Cropland, null, 0, false,
+        TerrainSurfaceResolutionReason.RawTerrainLand)]
+    [InlineData(250, LandCoverClass.PermanentWater, TerrainWaterBodyKind.InlandWater, 250, false,
+        TerrainSurfaceResolutionReason.WaterElevationPreserved)]
     [InlineData(-20, LandCoverClass.BareOrSparseVegetation, null, -20, false,
         TerrainSurfaceResolutionReason.RawTerrainLand)]
     [InlineData(-35, LandCoverClass.PermanentWater, null, 0, true,
@@ -133,6 +137,42 @@ public sealed class TerrainSurfaceResolverTests
         Assert.Equal(EnvironmentalDataState.Water, atlantic.State);
         Assert.Equal(LandCoverClass.PermanentWater, atlantic.Value);
         Assert.False(antarctica.HasValue);
+    }
+
+    [Theory]
+    [InlineData(-3000)]
+    [InlineData(0)]
+    [InlineData(120)]
+    public async Task ClassificationUnavailable_PreservesRawTerrainAndFailureDiagnostics(double elevation)
+    {
+        var result = await Resolver(new ConstantTerrain(elevation), new UnavailableCover())
+            .GetSurfaceSampleAsync(new GeoCoordinate(51, -2), default);
+        Assert.True(result.SurfaceElevation.HasValue);
+        Assert.Equal(elevation, result.SurfaceElevation.Value);
+        Assert.False(result.Resolution.WasAdjusted);
+        Assert.Null(result.Resolution.Classification);
+        Assert.Equal(TerrainSurfaceResolutionReason.RawTerrainClassificationUnavailable, result.Resolution.Reason);
+        Assert.Equal(EnvironmentalDataState.Unavailable, result.Classification.State);
+        Assert.Equal("Classification fixture offline", result.Classification.Message);
+    }
+
+    [Fact]
+    public async Task LocalTerrainMap_UsesProductionResolvedOceanSurfaceRatherThanBathymetry()
+    {
+        var service = new TerrainDebugMapService(Resolver(new ConstantTerrain(-3000),
+            new ConstantCover(LandCoverClass.PermanentWater)));
+        var map = await service.GetMapAsync(new GeoCoordinate(53, -1), new TerrainDebugMapRequest(), default);
+        Assert.All(map.RawTerrainElevationsMetres, value => Assert.Equal(-3000, value));
+        Assert.All(map.SurfaceElevationsMetres, value => Assert.Equal(0, value));
+        Assert.All(map.AdjustedSamples, Assert.True);
+        Assert.All(map.SampleStatuses, status => Assert.Equal(TerrainSampleStatus.Water, status));
+    }
+
+    private sealed class UnavailableCover : ILandCoverProvider
+    {
+        public Task<EnvironmentalValue<LandCoverClass>> GetLandCoverAsync(GeoCoordinate coordinate,
+            CancellationToken token) => Task.FromResult(EnvironmentalValue<LandCoverClass>.Unavailable(
+                "worldcover", "test", "Classification fixture offline"));
     }
 
     private static TerrainSurfaceResolver Resolver(ITerrainElevationProvider terrain,

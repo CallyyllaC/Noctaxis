@@ -10,6 +10,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Terrain;
 using Noctaxis.Desktop.Controls;
 using NodaTime;
 using SkiaSharp;
@@ -191,6 +192,38 @@ public sealed class EnvironmentalOverlayTests
     }
 
     [Fact]
+    public void WeatherAndTerrainBoundariesComposeWithoutMovingEachOther()
+    {
+        var sector = Sector(0, 20);
+        var coordinator = new EnvironmentalOverlayStateCoordinator(profileTextureWidth: 32);
+        var terrainBeforeWeather = coordinator.Update(Observer, sector,
+            Visibility(sector, 1_000, (0, 500), (20, 500)), ProfileKey());
+
+        Assert.Equal(EnvironmentalPixelClassification.Clear,
+            EnvironmentalOverlayMath.Classify(terrainBeforeWeather, 0, 250));
+        Assert.Equal(EnvironmentalPixelClassification.TerrainObstructed,
+            EnvironmentalOverlayMath.Classify(terrainBeforeWeather, 0, 750));
+        Assert.Equal(EnvironmentalPixelClassification.TerrainObstructedAndBeyondVisibility,
+            EnvironmentalOverlayMath.Classify(terrainBeforeWeather, 0, 1_250));
+
+        var weatherBeforeTerrain = coordinator.Update(Observer, sector,
+            Visibility(sector, 500, (0, 1_000), (20, 1_000)), ProfileKey());
+        Assert.Equal(EnvironmentalPixelClassification.Clear,
+            EnvironmentalOverlayMath.Classify(weatherBeforeTerrain, 0, 250));
+        Assert.Equal(EnvironmentalPixelClassification.BeyondVisibility,
+            EnvironmentalOverlayMath.Classify(weatherBeforeTerrain, 0, 750));
+        Assert.Equal(EnvironmentalPixelClassification.TerrainObstructedAndBeyondVisibility,
+            EnvironmentalOverlayMath.Classify(weatherBeforeTerrain, 0, 1_250));
+
+        var equal = coordinator.Update(Observer, sector,
+            Visibility(sector, 1_000, (0, 1_000), (20, 1_000)), ProfileKey());
+        Assert.Equal(EnvironmentalPixelClassification.Clear,
+            EnvironmentalOverlayMath.Classify(equal, 0, 999));
+        Assert.Equal(EnvironmentalPixelClassification.TerrainObstructedAndBeyondVisibility,
+            EnvironmentalOverlayMath.Classify(equal, 0, 1_000));
+    }
+
+    [Fact]
     public void ViewportRenderKeysDoNotParticipateInTerrainProfileIdentity()
     {
         var profile = ProfileKey();
@@ -230,17 +263,20 @@ public sealed class EnvironmentalOverlayTests
         Assert.Null(EnvironmentalOverlayRenderer.ValidateShaderSource());
     }
 
-    [AvaloniaFact]
-    public void TerrainHatchPipelineStartsAtProjectedObserverThroughAvaloniaCustomDrawOperation()
+    [AvaloniaTheory]
+    [InlineData(50)]
+    [InlineData(100)]
+    [InlineData(500)]
+    public void TerrainHatchPipelineKeepsObserverSideClearAndDrawsBeyondFirstHit(double hitDistance)
     {
         const int logicalWidth = 928;
         const int logicalHeight = 640;
-        const double resolution = 5;
+        var resolution = hitDistance / 100;
         var observer = Observer;
         var sector = new GeoSector(observer, 105, 40, MapOverlayGeometry.MaximumRangeMetres);
         var coordinator = new EnvironmentalOverlayStateCoordinator(profileTextureWidth: 32);
         var state = coordinator.Update(observer, sector,
-            Visibility(sector, null, (0, 500), (40, 500)), ProfileKey());
+            Visibility(sector, null, (0, hitDistance), (40, hitDistance)), ProfileKey());
         Assert.All(state.ProfileTexels, texel => Assert.True(texel.IsObstructed));
         var world = WebMercator.FromWgs84(observer);
         var viewport = new Viewport(
@@ -290,34 +326,54 @@ public sealed class EnvironmentalOverlayTests
             var distance = Math.Sqrt(Math.Pow(x - renderedPin.X, 2) + Math.Pow(y - renderedPin.Y, 2));
             if (distance < nearest.Distance) nearest = (x, y, distance);
         }
-        Assert.True(observerHatchAlpha > 150,
-            $"Expected terrain hatch at transformed observer {renderedPin}; alpha was {observerHatchAlpha}; " +
-            $"nearest opaque terrain pixel was ({nearest.X}, {nearest.Y}), {nearest.Distance:F2}px away.");
+        Assert.True(observerHatchAlpha < 100,
+            $"Observer-side foreground must contain only the base cone; alpha was {observerHatchAlpha}.");
+        var nearestCoordinate = EnvironmentalOverlayMath.ScreenToGeographic(frame, nearest.X, nearest.Y);
+        var nearestGroundDistance = Angles.GreatCircleDistanceMetres(observer, nearestCoordinate);
+        Assert.InRange(nearestGroundDistance, hitDistance * .9, hitDistance * 1.2);
+    }
 
-        for (var logicalY = 4; logicalY < logicalHeight; logicalY += 8)
-        for (var logicalX = 4; logicalX < logicalWidth; logicalX += 8)
+    [AvaloniaTheory]
+    [InlineData(5000d, 15000d, 2500d, false, false)]
+    [InlineData(5000d, 15000d, 10000d, false, true)]
+    [InlineData(5000d, 15000d, 25000d, true, true)]
+    [InlineData(15000d, 5000d, 10000d, true, false)]
+    [InlineData(15000d, 5000d, 25000d, true, true)]
+    [InlineData(15000d, 15000d, 10000d, false, false)]
+    [InlineData(15000d, 15000d, 25000d, true, true)]
+    [InlineData(null, 20000d, 50000d, true, false)]
+    [InlineData(null, null, 250000d, false, false)]
+    [InlineData(null, 600000d, 490000d, false, false)]
+    public void ShaderInteriorPixels_ComposeWeatherAndTerrainIndependently(double? hit,
+        double? weather, double distance, bool grayscale, bool hatched)
+    {
+        var sector = new GeoSector(Observer, 90, 40, 500000);
+        var state = new EnvironmentalOverlayStateCoordinator(profileTextureWidth: 32)
+            .Update(Observer, sector, Visibility(sector, weather, (0, hit), (40, hit)), ProfileKey());
+        var sample = WebMercator.FromWgs84(Angles.Destination(Observer, 90, distance));
+        var viewport = new Viewport(sample.X, sample.Y, 1, 0, 64, 64);
+        var parameters = EnvironmentalRenderParameters.Default with
+        { HatchSpacingPixels = 3, HatchThicknessPixels = 8 };
+        var frame = EnvironmentalOverlayMath.CreateFrame(viewport, 64, 64, parameters);
+        using var host = new EnvironmentalOverlayTestControl(state, frame, Colors.DeepPink)
+            { Width = 64, Height = 64 };
+        host.Measure(new Size(64, 64));
+        host.Arrange(new Rect(0, 0, 64, 64));
+        using var rendered = new RenderTargetBitmap(new PixelSize(64, 64), new Vector(96, 96));
+        rendered.Render(host);
+        using var pixels = new WriteableBitmap(new PixelSize(64, 64), new Vector(96, 96),
+            PixelFormat.Bgra8888, AlphaFormat.Premul);
+        using var buffer = pixels.Lock();
+        rendered.CopyPixels(buffer);
+        var offset = 32 * buffer.RowBytes + 32 * 4;
+        int Channel(int channel) => System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + channel);
+        Assert.True(Channel(3) > 0);
+        Assert.Equal(hatched, Channel(3) > 150);
+        // Solid hatch deliberately covers the base. Check base colour separately in clear regions.
+        if (!hatched)
         {
-            var coordinate = EnvironmentalOverlayMath.ScreenToGeographic(frame, logicalX, logicalY);
-            var bearing = Angles.InitialBearing(observer, coordinate);
-            var separation = Math.Abs(Angles.NormaliseSignedDegrees(bearing - sector.CentreBearingDegrees));
-            var distance = Angles.GreatCircleDistanceMetres(observer, coordinate);
-            if (distance < 100) continue;
-            if (Math.Abs(separation - sector.HorizontalFovDegrees / 2) < 5) continue;
-            var expectedTerrain = separation < sector.HorizontalFovDegrees / 2 &&
-                                  distance <= sector.DistanceMetres;
-            var physicalX = logicalX;
-            var physicalY = logicalY;
-            byte maximumAlpha = 0;
-            for (var sampleY = physicalY - 2; sampleY <= physicalY + 2; sampleY++)
-            for (var sampleX = physicalX - 2; sampleX <= physicalX + 2; sampleX++)
-            {
-                var physicalOffset = sampleY * framebuffer.RowBytes + sampleX * 4;
-                maximumAlpha = Math.Max(maximumAlpha,
-                    System.Runtime.InteropServices.Marshal.ReadByte(framebuffer.Address, physicalOffset + 3));
-            }
-            Assert.True(expectedTerrain ? maximumAlpha > 150 : maximumAlpha == 0,
-                $"Terrain mask mismatch at logical ({logicalX}, {logicalY}), bearing {bearing:F2}, " +
-                $"distance {distance:F0}m: expected {expectedTerrain}, maximum alpha {maximumAlpha}.");
+            if (grayscale) Assert.InRange(Math.Abs(Channel(2) - Channel(1)), 0, 1);
+            else Assert.True(Channel(2) > Channel(1) + 10);
         }
     }
 
@@ -382,11 +438,19 @@ public sealed class EnvironmentalOverlayTests
         using var framebuffer = pixels.Lock();
         rendered.CopyPixels(framebuffer);
 
+        var foregroundRadians = (guide.CentreBearingDegrees + 5) * Math.PI / 180;
+        var foregroundX = (int)Math.Round(pin.X + 80 * Math.Sin(foregroundRadians));
+        var foregroundY = (int)Math.Round(pin.Y - 80 * Math.Cos(foregroundRadians));
+        var foregroundAlpha = System.Runtime.InteropServices.Marshal.ReadByte(framebuffer.Address,
+            foregroundY * framebuffer.RowBytes + foregroundX * 4 + 3);
+        Assert.True(foregroundAlpha < 100,
+            $"Observer-side foreground must be unhatched; alpha was {foregroundAlpha}.");
+
         var coveredBearings = new List<int>();
         for (var bearing = 0; bearing < 360; bearing++)
         {
             var hatchPixels = 0;
-            for (var radius = 35; radius <= 80; radius++)
+            for (var radius = 190; radius <= 240; radius++)
             {
                 var radians = bearing * Math.PI / 180;
                 var x = (int)Math.Round(pin.X + radius * Math.Sin(radians));
@@ -471,15 +535,27 @@ public sealed class EnvironmentalOverlayTests
         var second = new TerrainHorizonProfile(new GeoCoordinate(53, 1), [], false,
             "Second", Instant.FromUtc(2026, 1, 1, 0, 1));
         var observed = new List<TerrainHorizonProfile?>();
+        var observedBearings = new List<double>();
+        var observedFields = new List<double>();
+        var observedWeather = new List<double?>();
         var control = new TerrainDebugMiniMap();
         using var subscription = control.GetObservable(TerrainDebugMiniMap.ProfileProperty)
-            .Subscribe(new ProfileObserver(observed));
+            .Subscribe(new ValueObserver<TerrainHorizonProfile?>(observed));
+        using var bearingSubscription = control.GetObservable(TerrainDebugMiniMap.CentreBearingDegreesProperty)
+            .Subscribe(new ValueObserver<double>(observedBearings));
+        using var fieldSubscription = control.GetObservable(TerrainDebugMiniMap.HorizontalFieldOfViewDegreesProperty)
+            .Subscribe(new ValueObserver<double>(observedFields));
+        using var weatherSubscription = control.GetObservable(TerrainDebugMiniMap.WeatherVisibilityDistanceMetresProperty)
+            .Subscribe(new ValueObserver<double?>(observedWeather));
 
         control.Observer = first.Observer;
         control.Generation = 1;
         control.Profile = first;
         control.Observer = second.Observer;
         control.Generation = 2;
+        control.CentreBearingDegrees = 95;
+        control.HorizontalFieldOfViewDegrees = 42;
+        control.WeatherVisibilityDistanceMetres = 8_000;
         control.Profile = null;
         control.Profile = second;
 
@@ -489,6 +565,43 @@ public sealed class EnvironmentalOverlayTests
         Assert.Contains(first, observed);
         Assert.Contains(null, observed);
         Assert.Same(second, observed[^1]);
+        Assert.Equal(95, observedBearings[^1]);
+        Assert.Equal(42, observedFields[^1]);
+        Assert.Equal(8_000, observedWeather[^1]);
+    }
+
+    [AvaloniaFact]
+    public void LocalTerrainMapUsesNorthUpBearingAndReactiveMapIdentity()
+    {
+        var centre = new Point(100, 100);
+        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 0).Y < centre.Y);
+        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 90).X > centre.X);
+        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 180).Y > centre.Y);
+        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 270).X < centre.X);
+
+        var first = DebugMap(new GeoCoordinate(51, -1));
+        var second = DebugMap(new GeoCoordinate(53, 1));
+        var observed = new List<TerrainDebugMapSnapshot?>();
+        var control = new LocalTerrainMap();
+        using var subscription = control.GetObservable(LocalTerrainMap.MapProperty)
+            .Subscribe(new ValueObserver<TerrainDebugMapSnapshot?>(observed));
+        control.Map = first;
+        control.Map = null;
+        control.Observer = second.Observer;
+        control.Generation = 2;
+        control.CentreBearingDegrees = 90;
+        control.HorizontalFieldOfViewDegrees = 40;
+        control.Map = second;
+
+        var left = LocalTerrainMap.BearingPoint(centre, 80,
+            control.CentreBearingDegrees - control.HorizontalFieldOfViewDegrees / 2);
+        var right = LocalTerrainMap.BearingPoint(centre, 80,
+            control.CentreBearingDegrees + control.HorizontalFieldOfViewDegrees / 2);
+        Assert.True(left.X > centre.X && left.Y < centre.Y);
+        Assert.True(right.X > centre.X && right.Y > centre.Y);
+        Assert.Contains(null, observed);
+        Assert.Same(second, observed[^1]);
+        Assert.Equal(second.Observer, control.Observer);
     }
 
     [Fact]
@@ -512,13 +625,18 @@ public sealed class EnvironmentalOverlayTests
         Assert.Empty(overlay.TerrainHatchRegions);
     }
 
-    private sealed class ProfileObserver(List<TerrainHorizonProfile?> values)
-        : IObserver<TerrainHorizonProfile?>
+    private sealed class ValueObserver<T>(List<T> values) : IObserver<T>
     {
         public void OnCompleted() { }
         public void OnError(Exception error) => throw error;
-        public void OnNext(TerrainHorizonProfile? value) => values.Add(value);
+        public void OnNext(T value) => values.Add(value);
     }
+
+    private static TerrainDebugMapSnapshot DebugMap(GeoCoordinate observer) => new(observer,
+        20_000, 1, 1, [observer], [10], [10], [Noctaxis.Core.Environment.LandCoverClass.Grassland],
+        [false], [TerrainSampleStatus.Valid], ["12/1/1"],
+        Noctaxis.Core.Environment.EnvironmentalDataState.Available,
+        Instant.FromUtc(2026, 1, 1, 0, 0), "Synthetic");
 
     private static PlanningSnapshot Snapshot(GeoCoordinate observer)
     {

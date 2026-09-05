@@ -91,21 +91,48 @@ evaluated separately.
 
 ## Diagnostics
 
-Enable **Terrain debug overlay** in Settings. The overlay shows a local plan-view
-resolved-surface map centred on the observer, elevation ramp, water/adjustment
-colouring, camera FOV wedge,
-cardinal bearings, winning horizon samples, zoom-12 tile grid, observer tile ID,
-range and missing samples. It is built from the production horizon profile and
-does not perform independent terrain I/O.
+Enable **Terrain debug overlay** in Settings. The overlay deliberately presents
+two different views:
 
-The copyable text report contains raw Terrarium elevation, WorldCover class,
+- **Local terrain map** is a north-up geographic grid centred on the canonical
+  observer. It shows the resolved physical surface, WorldCover water and
+  bathymetry adjustments, the camera FOV wedge, selected bearing, winning
+  horizon samples, scale and range. The default grid is a bounded 128 x 128
+  sample over a 20 km radius. It is sampled in one bulk pass through the same
+  production `TerrainSurfaceResolver` used by the horizon service, so Terrarium
+  and WorldCover tile decoding and request coalescing continue to use their
+  existing caches.
+- **Terrain horizon polar view** is the existing circular bearing/distance
+  diagnostic derived from the production horizon profile. Its rings are radial
+  horizon-profile distance, not map geography.
+
+Changing the observer immediately clears both stale products. Local-map work is
+cancellable and guarded by the observer coordinate plus a generation number, so
+a late result for an older pin cannot replace the current map. Changing only the
+selected bearing or FOV redraws the overlays without resampling the terrain grid.
+
+The copyable text report has separate **Local terrain map** and **Polar horizon
+profile** sections, and contains raw Terrarium elevation, WorldCover class,
 resolved surface, correction reason, provider/tile/pixel/interpolation details
 and the current bearing's winning sample. The UI snapshot also includes observer
 coordinates, refresh generation, profile timestamp, selected-bearing horizon,
 pitch-independent zero-degree obstruction distance, target altitude and target
 occultation. Plan-view hatching uses only that zero-degree geometric obstruction;
 astronomical visibility separately compares the target altitude with the terrain
-horizon. The console harness emits the same
+horizon.
+
+The Planner FoV is composited as three independent layers. Its base cone always
+extends to the existing fixed 500 km limit. Current-weather visibility changes
+the underlying cone to grayscale beyond the reported distance without shortening
+it. For each sampled FoV bearing, terrain hatching begins only at the first
+intersection of the observer's horizontal ray and continues on the far side to
+the fixed cone edge. Adjacent hit distances are linearly interpolated; a clear
+bearing remains clear and is not replaced by a synthetic hit at maximum range.
+The local terrain map draws this first-hit frontier as a thin red diagnostic line.
+The copied diagnostics include the selected-bearing first hit, weather boundary,
+fixed cone maximum, terrain horizon, target altitude and target occultation.
+
+The console harness emits the same
 observer summary followed by JSON:
 
 ```powershell

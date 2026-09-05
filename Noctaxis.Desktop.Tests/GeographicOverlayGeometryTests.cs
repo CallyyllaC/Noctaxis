@@ -149,7 +149,8 @@ public sealed class GeographicOverlayGeometryTests
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
         Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.All(overlay.TerrainHatchRegions, hatch => Assert.Equal(40_000, hatch.EndDistanceMetres));
+        Assert.All(overlay.TerrainHatchRegions,
+            hatch => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, hatch.EndDistanceMetres));
         Assert.Contains(overlay.FillRegions, region =>
             region.Effect == CameraOverlayEffect.WeatherDesaturated && region.StartDistanceMetres == 40_000);
     }
@@ -177,7 +178,7 @@ public sealed class GeographicOverlayGeometryTests
     }
 
     [Fact]
-    public void TerrainCrossingWeatherBoundarySplitsAtTheTransitionOrderingChange()
+    public void TerrainFrontierCrossingWeatherBoundaryDoesNotSplitOrShortenHatch()
     {
         var sector = Sector();
         var visibility = VisibilityWithTerrain(
@@ -190,9 +191,138 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.Contains(overlay.TerrainHatchRegions, hatch => hatch.EndDistanceMetres == 40_000);
-        Assert.Contains(overlay.TerrainHatchRegions,
-            hatch => hatch.EndDistanceMetres == MapOverlayGeometry.MaximumRangeMetres);
+        Assert.NotEmpty(overlay.TerrainHatchRegions);
+        Assert.All(overlay.TerrainHatchRegions,
+            hatch => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, hatch.EndDistanceMetres));
+    }
+
+    [Theory]
+    [InlineData(50)]
+    [InlineData(500)]
+    [InlineData(2000)]
+    public void NearQuarryWallLeavesForegroundClearAndHatchesFarSide(double distance)
+    {
+        var sector = Sector();
+        var overlay = _builder.BuildCameraOverlay(sector, VisibilityWithTerrain(
+            TerrainSample(sector, 0, distance),
+            TerrainSample(sector, 30, distance),
+            TerrainSample(sector, 60, distance)));
+
+        Assert.False(IsHatched(overlay, 30, distance / 2));
+        Assert.True(IsHatched(overlay, 30, distance * 1.5));
+        Assert.All(overlay.TerrainHatchRegions,
+            region => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres));
+    }
+
+    [Theory]
+    [InlineData(490000)]
+    [InlineData(499000)]
+    public void DistantObstructionHatchesOnlySmallFarRegion(double obstruction)
+    {
+        var sector = Sector();
+        var overlay = _builder.BuildCameraOverlay(sector, VisibilityWithTerrain(
+            TerrainSample(sector, 0, obstruction),
+            TerrainSample(sector, 30, obstruction),
+            TerrainSample(sector, 60, obstruction)));
+
+        Assert.False(IsHatched(overlay, 30, obstruction - 1_000));
+        Assert.True(IsHatched(overlay, 30, obstruction + 500));
+    }
+
+    [Fact]
+    public void MixedFirstHitsFormInterpolatedFarSideFrontier()
+    {
+        var sector = Sector();
+        var overlay = _builder.BuildCameraOverlay(sector, VisibilityWithTerrain(
+            TerrainSample(sector, 0, 500),
+            TerrainSample(sector, 20, 2_000),
+            TerrainSample(sector, 40, 5_000),
+            TerrainSample(sector, 60, 1_000)));
+
+        Assert.False(IsHatched(overlay, 10, 1_200));
+        Assert.True(IsHatched(overlay, 10, 1_300));
+        Assert.False(IsHatched(overlay, 30, 3_400));
+        Assert.True(IsHatched(overlay, 30, 3_600));
+        Assert.False(IsHatched(overlay, 50, 2_900));
+        Assert.True(IsHatched(overlay, 50, 3_100));
+    }
+
+    [Fact]
+    public void MixedHitAndNoHitRaysKeepClearSectorOpenToConeLimit()
+    {
+        var sector = Sector();
+        var overlay = _builder.BuildCameraOverlay(sector, VisibilityWithTerrain(
+            TerrainSample(sector, 0, 1_000),
+            TerrainSample(sector, 20, null),
+            TerrainSample(sector, 40, null),
+            TerrainSample(sector, 60, 3_000)));
+
+        Assert.True(IsHatched(overlay, 5, 2_000));
+        Assert.False(IsHatched(overlay, 20, sector.DistanceMetres - 1_000));
+        Assert.False(IsHatched(overlay, 30, sector.DistanceMetres - 1_000));
+        Assert.False(IsHatched(overlay, 40, sector.DistanceMetres - 1_000));
+        Assert.True(IsHatched(overlay, 55, 4_000));
+    }
+
+    [Fact]
+    public void WeatherBeyondConeLeavesEntireBaseConeNormal()
+    {
+        var overlay = _builder.BuildCameraOverlay(Sector(),
+            WeatherLimit(MapOverlayGeometry.MaximumRangeMetres + 1));
+
+        var fill = Assert.Single(overlay.FillRegions);
+        Assert.Equal(CameraOverlayEffect.None, fill.Effect);
+        Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, fill.EndDistanceMetres);
+    }
+
+    [Fact]
+    public void VeryPoorWeatherOnlyChangesColourAfterVisibilityDistance()
+    {
+        var overlay = _builder.BuildCameraOverlay(Sector(), WeatherLimit(50));
+
+        Assert.Equal(2, overlay.FillRegions.Count);
+        Assert.Equal(50, overlay.FillRegions[0].EndDistanceMetres);
+        Assert.Equal(CameraOverlayEffect.WeatherDesaturated, overlay.FillRegions[1].Effect);
+        Assert.Equal(50, overlay.FillRegions[1].StartDistanceMetres);
+        Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, overlay.FillRegions[1].EndDistanceMetres);
+        Assert.Empty(overlay.TerrainHatchRegions);
+    }
+
+    [Fact]
+    public void EqualTerrainAndWeatherBoundariesMeetWithoutChangingEitherExtent()
+    {
+        const double boundary = 10_000;
+        var sector = Sector();
+        var visibility = VisibilityWithTerrain(
+            TerrainSample(sector, 0, boundary),
+            TerrainSample(sector, 30, boundary),
+            TerrainSample(sector, 60, boundary)) with
+        {
+            WeatherVisibilityDistanceMetres = boundary
+        };
+
+        var overlay = _builder.BuildCameraOverlay(sector, visibility);
+
+        Assert.Equal(boundary, overlay.FillRegions[0].EndDistanceMetres);
+        Assert.Equal(boundary, overlay.FillRegions[1].StartDistanceMetres);
+        Assert.All(overlay.TerrainHatchRegions, region =>
+        {
+            Assert.Equal(boundary, region.StartDistanceMetres);
+            Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres);
+        });
+    }
+
+    [Fact]
+    public void FullObstructionIncludesBothFovSideEdges()
+    {
+        var sector = Sector();
+        var overlay = _builder.BuildCameraOverlay(sector, VisibilityWithTerrain(
+            TerrainSample(sector, 0, 500),
+            TerrainSample(sector, 30, 2_000),
+            TerrainSample(sector, 60, 1_000)));
+
+        Assert.True(IsHatched(overlay, .1, 3_000));
+        Assert.True(IsHatched(overlay, 59.9, 3_000));
     }
 
     [Fact]

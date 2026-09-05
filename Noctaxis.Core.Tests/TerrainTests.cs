@@ -99,6 +99,119 @@ public sealed class TerrainTests
         Assert.True(curved.GroundAltitudeAt(0) < -0.03);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(0, 1.7)]
+    [InlineData(-20, 0)]
+    [InlineData(-20, 2.5)]
+    [InlineData(120, 2.5)]
+    public async Task ObserverGroundAndCameraHeight_ResolveExactlyOnce(double ground, double camera)
+    {
+        var profile = await new HorizonService(new ConstantTerrain(ground), NullLogger<HorizonService>.Instance)
+            .GetProfileAsync(new GeoCoordinate(51, 0, 999), new TerrainProfileRequest(8, 500, 500,
+                ObserverHeightAboveGroundMetres: camera), default);
+        Assert.Equal(ground, profile.ChosenObserverGroundElevationMetres);
+        Assert.Equal(ground + camera, profile.ObserverAbsoluteElevationMetres);
+    }
+
+    [Fact]
+    public async Task ManualObserverOverride_RemainsResolvedWhenTerrainUnavailable()
+    {
+        var profile = await new HorizonService(new MissingTerrain(), NullLogger<HorizonService>.Instance)
+            .GetProfileAsync(new GeoCoordinate(51, 0), new TerrainProfileRequest(8, 500, 500,
+                ObserverHeightAboveGroundMetres: 2, ManualGroundElevationOverrideMetres: -20), default);
+        Assert.Equal(-20, profile.ChosenObserverGroundElevationMetres);
+        Assert.Equal(-18, profile.ObserverAbsoluteElevationMetres);
+        Assert.False(profile.HasTerrainCoverage);
+    }
+
+    [Fact]
+    public async Task ProfileCacheIdentity_AllSamplingInputsInvalidateAndSubMetreCoordinatesRemainDistinct()
+    {
+        var terrain = new CountingTerrain();
+        var service = new HorizonService(terrain, NullLogger<HorizonService>.Instance);
+        var observer = new GeoCoordinate(51, -1);
+        var request = new TerrainProfileRequest(8, 1000, 500, false, 0);
+        var baseline = await service.GetProfileAsync(observer, request, default);
+        var variants = new[] { request with { AzimuthSampleCount = 16 },
+            request with { MaximumDistanceMetres = 1500 }, request with { DistanceStepMetres = 250 },
+            request with { AccountForEarthCurvature = true }, request with { ObserverHeightAboveGroundMetres = 2 },
+            request with { ManualGroundElevationOverrideMetres = 25 },
+            request with { DistanceStepMetres = null, AdaptiveSampling = new(MinimumDistanceMetres: 10) } };
+        foreach (var variant in variants)
+        {
+            var before = terrain.BatchRequests;
+            var changed = await service.GetProfileAsync(observer, variant, default);
+            Assert.NotSame(baseline, changed);
+            Assert.Equal(before + 1, terrain.BatchRequests);
+            Assert.Same(changed, await service.GetProfileAsync(observer, variant, default));
+        }
+        foreach (var offset in new[] { 0.000001, 0.000002 })
+        {
+            var moved = observer with { Longitude = observer.Longitude + offset };
+            Assert.InRange(Angles.GreatCircleDistanceMetres(observer, moved), 0.01, 1);
+            var changed = await service.GetProfileAsync(moved, request, default);
+            Assert.NotSame(baseline, changed);
+            Assert.Equal(moved, changed.Observer);
+        }
+    }
+
+    [Theory]
+    [InlineData(5000)]
+    [InlineData(50000)]
+    [InlineData(250000)]
+    [InlineData(500000)]
+    public async Task DistantFlatHorizon_UsesDocumentedCurvatureAndStandardRefraction(double distance)
+    {
+        var profile = await new HorizonService(new ConstantTerrain(0), NullLogger<HorizonService>.Instance)
+            .GetProfileAsync(new GeoCoordinate(53, -1), new TerrainProfileRequest(8, distance, distance,
+                ObserverHeightAboveGroundMetres: 0), default);
+        var drop = distance * distance / (2 * 6371008.8 * (7d / 6));
+        var expected = Math.Atan(-drop / distance) * 180 / Math.PI;
+        Assert.Equal(expected, profile.GroundAltitudeAt(0)!.Value, 9);
+        Assert.Equal(distance, profile.Samples[0].TerrainHorizonFeatureDistanceMetres);
+        Assert.Null(profile.TerrainObstructionAt(0).EffectiveFirstObstructionDistanceMetres);
+    }
+
+    [Theory]
+    [InlineData(50)]
+    [InlineData(500)]
+    [InlineData(2000)]
+    public void HorizontalFirstHit_IsIndependentOfHighestAndFinalHorizonSample(double firstHit)
+    {
+        var line = new[] { new TerrainSightlineSample(firstHit, 10, 10, 1),
+            new TerrainSightlineSample(4000, 1000, 1000, 20),
+            new TerrainSightlineSample(12000, 2000, 2000, 10) };
+        var profile = new TerrainHorizonProfile(new GeoCoordinate(51, 0),
+            [new TerrainHorizonSample(0, 20, 4000, Sightline: line)], true, "Fixture",
+            NodaTime.Instant.FromUtc(2026, 1, 1, 0, 0));
+        Assert.Equal(firstHit, profile.TerrainObstructionAt(0).EffectiveFirstObstructionDistanceMetres);
+        Assert.Equal(20, profile.GroundAltitudeAt(0));
+    }
+
+    [Theory]
+    [InlineData(0, 0, 0, 1000, 0)]
+    [InlineData(10, 40, 90, 3000, .03)]
+    [InlineData(-10, -40, -90, 1000, -.01)]
+    [InlineData(100, 20, 30, 1000, .1)]
+    [InlineData(10, 20, 600, 3000, .2)]
+    [InlineData(100, 400, 300, 2000, .2)]
+    [InlineData(-100, -100, -100, 3000, -1d / 30)]
+    public async Task SyntheticTerrain_HorizonSelectsWinningAngularSample(double near, double middle,
+        double far, double winningDistance, double expectedSlope)
+    {
+        var origin = new GeoCoordinate(53, -1);
+        var heights = new[] { near, middle, far };
+        var terrain = new FunctionTerrain(origin, (distance, _) => heights[(int)Math.Round(distance / 1000) - 1]);
+        var profile = await new HorizonService(terrain, NullLogger<HorizonService>.Instance)
+            .GetProfileAsync(origin, new TerrainProfileRequest(8, 3000, 1000, false, 0), default);
+        Assert.All(profile.Samples, sample =>
+        {
+            Assert.Equal(winningDistance, sample.TerrainHorizonFeatureDistanceMetres);
+            Assert.Equal(Math.Atan(expectedSlope) * 180 / Math.PI, sample.AltitudeDegrees, 9);
+        });
+    }
+
     private sealed class ConstantTerrain(double elevation) : ITerrainElevationProvider
     {
         public Task<EnvironmentalValue<double>> GetElevationAsync(GeoCoordinate coordinate, CancellationToken token) =>

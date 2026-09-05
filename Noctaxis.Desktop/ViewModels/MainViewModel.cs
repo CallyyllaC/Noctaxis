@@ -37,15 +37,19 @@ public partial class MainViewModel : ObservableObject
     private readonly IClock _clock;
     private readonly IPlannerDialogService _dialogs;
     private readonly IReverseGeocodingProvider _reverseGeocoding;
+    private readonly ITerrainDebugMapService? _terrainDebugMaps;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _temporalCommitCancellation;
     private CancellationTokenSource? _temporalPreviewCancellation;
     private CancellationTokenSource? _reverseLookupCancellation;
+    private CancellationTokenSource? _terrainDebugMapCancellation;
     private Task _activePlannerRefresh = Task.CompletedTask;
+    private Task _activeTerrainDebugMapRefresh = Task.CompletedTask;
     private readonly SemaphoreSlim _plannerSnapshotCommitGate = new(1, 1);
     private readonly object _plannerRefreshGate = new();
     private long _refreshGeneration;
     private long _reverseLookupGeneration;
+    private long _terrainDebugMapGeneration;
     private string? _resolvedPlaceSuggestion;
     private PlanningSession _session;
     private bool _suppressChanges;
@@ -61,7 +65,8 @@ public partial class MainViewModel : ObservableObject
         LocationSearchViewModel locationSearch, ILocationResolver locationResolver,
         IDeviceLocationAvailabilityService deviceLocationAvailability, ITargetSearchService targetSearch,
         IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
-        ILocationMapThumbnailService? locationMapThumbnails = null)
+        ILocationMapThumbnailService? locationMapThumbnails = null,
+        ITerrainDebugMapService? terrainDebugMaps = null)
     {
         _planning = planning;
         _catalogue = catalogue;
@@ -76,6 +81,7 @@ public partial class MainViewModel : ObservableObject
         _clock = clock;
         _dialogs = dialogs;
         _reverseGeocoding = reverseGeocoding;
+        _terrainDebugMaps = terrainDebugMaps;
         _session = PlanningSession.Default(SystemClock.Instance.GetCurrentInstant(), timeZones.MachineTimeZoneId);
         Targets = catalogue.Targets;
         _selectedTarget = Targets[0];
@@ -162,6 +168,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _settingsCameraFramingOverlayVisible = true;
     [ObservableProperty] private bool _settingsShowFramingVisibilityLimits = true;
     [ObservableProperty] private bool _settingsTerrainDebugOverlay;
+    [ObservableProperty] private TerrainDebugMapSnapshot? _terrainDebugMap;
+    [ObservableProperty] private TerrainDebugMapLoadState _terrainDebugMapLoadState =
+        TerrainDebugMapLoadState.Disabled;
     [ObservableProperty] private bool _isRefreshingLocationThumbnails;
     [ObservableProperty] private string? _locationThumbnailRefreshStatus;
     public bool CanExport => !IsLocationInteracting && Snapshot is not null;
@@ -178,6 +187,7 @@ public partial class MainViewModel : ObservableObject
     public bool ShowTerrainDebugOverlay => Settings.TerrainDebugOverlay;
     public TerrainHorizonProfile? TerrainDebugProfile => CurrentTerrain;
     public long TerrainDebugGeneration => PlannerRefresh.Generation;
+    public long TerrainDebugMapGeneration => Volatile.Read(ref _terrainDebugMapGeneration);
     public double? TerrainDebugTargetAltitude => CurrentTerrain is not null
         ? CurrentSnapshot?.Position.Horizontal.AltitudeDegrees
         : null;
@@ -186,10 +196,12 @@ public partial class MainViewModel : ObservableObject
     public string TerrainDebugText => CurrentTerrain is { } terrain
         ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
             CurrentCameraBearing ?? CurrentSnapshot?.Position.Horizontal.AzimuthDegrees ?? 0,
-            TerrainDebugTargetAltitude, TerrainDebugGeneration)
+            TerrainDebugTargetAltitude, TerrainDebugGeneration,
+            TerrainDebugMap, TerrainDebugMapGeneration,
+            CameraFramingVisibility?.WeatherVisibilityDistanceMetres)
         : $"TERRAIN DEBUG\nObserver\nLatitude: {_session.Observer.Latitude:F6}\n" +
           $"Longitude: {_session.Observer.Longitude:F6}\nGeneration: {TerrainDebugGeneration}\n" +
-          "State: Resolving terrain profile";
+          $"State: Resolving terrain profile\nLocal terrain map: {TerrainDebugMapLoadState}";
     public bool IsElevationManualOverride => _session.EffectiveObserverElevation.IsManualOverride;
     public TerrainElevationResolutionState TerrainElevationResolutionState =>
         _session.EffectiveObserverElevation.ResolutionState;
@@ -449,6 +461,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     internal Task WaitForPlannerRefreshAsync() => _activePlannerRefresh;
+    internal Task WaitForTerrainDebugMapRefreshAsync() => _activeTerrainDebugMapRefresh;
 
     public void PreviewObserverLocation(GeoCoordinate coordinate)
     {
@@ -1689,8 +1702,11 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { StatusMessage = ex.Message; }
     }
 
-    private void ScheduleObserverRefresh(int delayMilliseconds = 80) =>
+    private void ScheduleObserverRefresh(int delayMilliseconds = 80)
+    {
         SchedulePlannerRefresh(PlannerRefreshScope.Observer, delayMilliseconds);
+        ScheduleTerrainDebugMapRefresh();
+    }
 
     private void ScheduleAstronomyRefresh(int delayMilliseconds = 80) =>
         SchedulePlannerRefresh(PlannerRefreshScope.Astronomy, delayMilliseconds);
@@ -2123,6 +2139,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
         OnPropertyChanged(nameof(TerrainDebugProfile));
         OnPropertyChanged(nameof(TerrainDebugGeneration));
+        OnPropertyChanged(nameof(TerrainDebugMapGeneration));
         OnPropertyChanged(nameof(TerrainDebugTargetAltitude));
         OnPropertyChanged(nameof(TerrainDebugBearing));
         OnPropertyChanged(nameof(TerrainDebugHorizontalFieldOfView));
@@ -2131,6 +2148,63 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraFramingGuide));
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
+    }
+
+    partial void OnTerrainDebugMapChanged(TerrainDebugMapSnapshot? value)
+    {
+        OnPropertyChanged(nameof(TerrainDebugText));
+    }
+
+    partial void OnTerrainDebugMapLoadStateChanged(TerrainDebugMapLoadState value)
+    {
+        OnPropertyChanged(nameof(TerrainDebugText));
+    }
+
+    private void ScheduleTerrainDebugMapRefresh()
+    {
+        _terrainDebugMapCancellation?.Cancel();
+        _terrainDebugMapCancellation?.Dispose();
+        _terrainDebugMapCancellation = null;
+        Interlocked.Increment(ref _terrainDebugMapGeneration);
+        TerrainDebugMap = null;
+        OnPropertyChanged(nameof(TerrainDebugMapGeneration));
+        if (!Settings.TerrainDebugOverlay || _terrainDebugMaps is null)
+        {
+            TerrainDebugMapLoadState = TerrainDebugMapLoadState.Disabled;
+            _activeTerrainDebugMapRefresh = Task.CompletedTask;
+            return;
+        }
+
+        TerrainDebugMapLoadState = TerrainDebugMapLoadState.Resolving;
+        _terrainDebugMapCancellation = new CancellationTokenSource();
+        var generation = TerrainDebugMapGeneration;
+        var observer = _session.Observer;
+        _activeTerrainDebugMapRefresh = ResolveTerrainDebugMapAsync(
+            observer, generation, _terrainDebugMapCancellation.Token);
+    }
+
+    private async Task ResolveTerrainDebugMapAsync(GeoCoordinate observer, long generation,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var map = await _terrainDebugMaps!.GetMapAsync(observer,
+                new TerrainDebugMapRequest(), cancellationToken);
+            if (generation != TerrainDebugMapGeneration ||
+                !SameObserverPosition(observer, _session.Observer)) return;
+            TerrainDebugMap = map;
+            TerrainDebugMapLoadState = TerrainDebugMapLoadState.Ready;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+        catch (Exception ex)
+        {
+            if (generation == TerrainDebugMapGeneration &&
+                SameObserverPosition(observer, _session.Observer))
+            {
+                TerrainDebugMapLoadState = TerrainDebugMapLoadState.Unavailable;
+                _logger.LogWarning(ex, "Terrain diagnostic map sampling failed");
+            }
+        }
     }
 
     private void ApplyResolvedTerrainGround(TerrainHorizonProfile horizon)

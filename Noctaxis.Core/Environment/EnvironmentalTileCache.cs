@@ -34,6 +34,11 @@ public sealed record EnvironmentalAcquisitionResult(
 
 public interface IEnvironmentalTileCache
 {
+    long TerrainGeneration => 0;
+    void RegisterTerrainInvalidation(Action callback) { }
+    Task<IDisposable?> LeaseTerrainAsync(EnvironmentalTileDescriptor descriptor, long generation,
+        CancellationToken token) => Task.FromResult<IDisposable?>(null);
+    void TouchTerrain(EnvironmentalTileDescriptor descriptor) { }
     string RootDirectory { get; }
     Task<EnvironmentalCacheResult> GetOrCreateAsync(
         EnvironmentalTileDescriptor descriptor,
@@ -51,14 +56,25 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
 {
     private readonly ILogger<EnvironmentalTileCache> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TerrainDiskCache? _terrain;
 
-    public EnvironmentalTileCache(IUserDataPathProvider paths, ILogger<EnvironmentalTileCache> logger)
+    public EnvironmentalTileCache(IUserDataPathProvider paths, ILogger<EnvironmentalTileCache> logger,
+        TerrainDiskCache? terrain = null)
     {
         _logger = logger;
+        _terrain = terrain;
         RootDirectory = Path.Combine(paths.GetApplicationDataDirectory(), "EnvironmentalData");
     }
 
     public string RootDirectory { get; }
+    public long TerrainGeneration => _terrain?.Generation ?? 0;
+    public void RegisterTerrainInvalidation(Action callback)
+    { if (_terrain is not null) _terrain.Invalidated += callback; }
+    public async Task<IDisposable?> LeaseTerrainAsync(EnvironmentalTileDescriptor descriptor,
+        long generation, CancellationToken token) => _terrain is not null && TerrainDiskCache.Governs(descriptor)
+        ? await _terrain.LeaseAsync(descriptor, token, generation).ConfigureAwait(false) : null;
+    public void TouchTerrain(EnvironmentalTileDescriptor descriptor)
+    { if (TerrainDiskCache.Governs(descriptor)) _terrain?.Touch(descriptor); }
 
     public async Task<EnvironmentalCacheResult> GetOrCreateAsync(
         EnvironmentalTileDescriptor descriptor,
@@ -80,6 +96,7 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
         CancellationToken cancellationToken)
     {
         var path = GetPath(descriptor);
+        using var lease = await LeaseTerrainAsync(descriptor, TerrainGeneration, cancellationToken).ConfigureAwait(false);
         var gate = _locks.GetOrAdd(path, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
@@ -139,6 +156,8 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
                         "Downloaded environmental tile failed validation.");
                 }
                 File.Move(temporary, path, true);
+                if (_terrain is not null && TerrainDiskCache.Governs(descriptor))
+                    await _terrain.InsertedAsync(descriptor).ConfigureAwait(false);
                 _logger.LogInformation("Environmental tile committed for {Source}/{Layer}/{Tile} at {Path}",
                     descriptor.SourceId, descriptor.Layer, descriptor.TileId, path);
                 return new EnvironmentalCacheResult(EnvironmentalDataState.Available, path, false,

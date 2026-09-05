@@ -5,6 +5,23 @@ namespace Noctaxis.Core.Tests;
 public sealed class EquipmentAndObserverTests
 {
     [Fact]
+    public void ObserverState_UnresolvedZeroAndManualRemainDistinctDuringTerrainResolution()
+    {
+        var unresolved = new ObserverElevationState();
+        Assert.Equal(TerrainElevationResolutionState.Unresolved, unresolved.ResolutionState);
+        Assert.Null(unresolved.ResolvedGroundElevationAslMetres);
+        var zero = unresolved.WithTerrainGroundElevation(0);
+        Assert.Equal(TerrainElevationResolutionState.TerrainResolved, zero.ResolutionState);
+        Assert.Equal(0, zero.ResolvedGroundElevationAslMetres);
+        var manual = unresolved.WithManualOverride(-20);
+        Assert.Equal(TerrainElevationResolutionState.ManualOverride, manual.ResolutionState);
+        Assert.Equal(-20, manual.WithTerrainGroundElevation(120).ResolvedGroundElevationAslMetres);
+        Assert.Equal(-20, manual.EffectiveObserverAltitudeAsl(999, 0));
+        Assert.Equal(-17.5, manual.EffectiveObserverAltitudeAsl(999, 2.5));
+        Assert.Null(manual.ResetManualOverride().ResolvedGroundElevationAslMetres);
+    }
+
+    [Fact]
     public void ObserverElevation_ResolvesTerrainOverrideResetAndEffectiveAltitude()
     {
         var automatic = new ObserverElevationState().WithTerrainGroundElevation(120);

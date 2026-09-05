@@ -166,19 +166,33 @@ public sealed class EnvironmentalIntelligenceTests
             NullLogger<EnvironmentalTileCache>.Instance);
         var descriptor = new EnvironmentalTileDescriptor("source", "v1", "layer", "shared", "bin");
         var attempts = 0;
+        var acquired = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         async Task<byte[]?> Acquire(CancellationToken token)
         {
             Interlocked.Increment(ref attempts);
-            await Task.Delay(30, token);
+            acquired.TrySetResult();
+            await release.Task.WaitAsync(token);
             return [4, 2];
         }
 
-        var concurrent = await Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
+        var pending = Task.WhenAll(Enumerable.Range(0, 12).Select(_ =>
             cache.GetOrCreateAsync(descriptor, Acquire,
                 path => File.ReadAllBytes(path).SequenceEqual(new byte[] { 4, 2 }), default)));
+        await acquired.Task;
+        Assert.False(pending.IsCompleted);
+        release.SetResult();
+        var concurrent = await pending;
 
         Assert.Equal(1, attempts);
         Assert.All(concurrent, result => Assert.True(result.IsAvailable));
+        var reopened = new EnvironmentalTileCache(new TestPaths(directory.Path),
+            NullLogger<EnvironmentalTileCache>.Instance);
+        var offline = await reopened.GetOrCreateAsync(descriptor,
+            _ => throw new InvalidOperationException("Persistent cache must not access network"),
+            path => File.ReadAllBytes(path).SequenceEqual(new byte[] { 4, 2 }), default);
+        Assert.True(offline.CacheHit);
+        Assert.True(offline.IsAvailable);
 
         var failureDescriptor = descriptor with { TileId = "retry" };
         var failure = await cache.GetOrCreateAsync(failureDescriptor,

@@ -298,6 +298,56 @@ public sealed class MainViewModelTests
         Assert.Equal("0.7°", viewModel.TargetTerrainMarginText);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WeatherVisibility_TimeChange_CommitsCurrentBoundaryAndRejectsStaleWeather(bool outOfOrder)
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new StagedPlanning(catalogue);
+        var viewModel = CreateViewModel(planning, catalogue,
+            new FakeStore(new PersistedState(3, new AppSettings(), [],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 14, 0), "UTC"), null)), new FakeExporter());
+        await viewModel.InitializeAsync();
+        viewModel.CommitObserverLocation(new GeoCoordinate(53, -1));
+        await planning.WeatherStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        planning.CompleteCore(0);
+        planning.CompleteEnvironment(0, true, 10);
+        planning.CompleteWeather(0, DataState.Ready);
+        await viewModel.WaitForPlannerRefreshAsync();
+        var terrain = viewModel.Snapshot!.Terrain;
+        var obstruction = viewModel.CameraFramingVisibility!.EffectiveTerrainObstructions.ToArray();
+        Assert.All(obstruction, sample => Assert.Equal(1000, sample.FirstObstructionDistanceMetres));
+
+        viewModel.TimeText = "15:00";
+        await planning.WeatherStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        var oldRefresh = viewModel.WaitForPlannerRefreshAsync();
+        planning.CompleteCore(1);
+        if (!outOfOrder)
+        {
+            planning.CompleteWeather(1, DataState.Ready, 25);
+            await oldRefresh;
+            Assert.Equal(25000, viewModel.CameraFramingVisibility!.WeatherVisibilityDistanceMetres);
+        }
+        viewModel.TimeText = "16:00";
+        await planning.WeatherStarted.WaitAsync(TimeSpan.FromSeconds(5));
+        planning.CompleteCore(2);
+        planning.CompleteWeather(2, DataState.Ready, 10);
+        await viewModel.WaitForPlannerRefreshAsync();
+        if (outOfOrder)
+        {
+            planning.CompleteWeather(1, DataState.Ready, 25);
+            await oldRefresh;
+        }
+        Assert.Equal(Instant.FromUtc(2024, 1, 1, 16, 0), viewModel.Snapshot!.Session.Instant);
+        Assert.Equal(10, viewModel.Snapshot.Weather.Conditions!.VisibilityKilometres);
+        Assert.Equal(10000, viewModel.CameraFramingVisibility!.WeatherVisibilityDistanceMetres);
+        Assert.Same(terrain, viewModel.Snapshot.Terrain);
+        Assert.Equal(obstruction, viewModel.CameraFramingVisibility.EffectiveTerrainObstructions);
+        Assert.Equal(1, planning.EnvironmentRequestCount);
+        Assert.Equal(500000, MapOverlayGeometry.MaximumRangeMetres);
+    }
+
     [Fact]
     public async Task DateTimeRefreshReusesStaticEnvironmentAndCameraSettingsDoNotReloadIt()
     {
@@ -404,6 +454,95 @@ public sealed class MainViewModelTests
         Assert.Equal(observers[3], viewModel.Observer);
         Assert.Equal(observers[3], viewModel.TerrainDebugProfile!.Observer);
         Assert.Equal(observers[3], viewModel.Snapshot!.Terrain.Observer);
+    }
+
+    [Fact]
+    public async Task ObserverMove_ABCD_OnlyDCommitsElevationHorizonDebugMapAndObstruction()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new StagedPlanning(catalogue);
+        var maps = new ControllableTerrainDebugMapService();
+        var viewModel = CreateViewModel(planning, catalogue,
+            new FakeStore(new PersistedState(4, new AppSettings(TerrainDebugOverlay: true), [],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
+            new FakeExporter(), terrainDebugMaps: maps);
+        await viewModel.InitializeAsync();
+        var refreshes = new List<Task>();
+        var mapRefreshes = new List<Task>();
+        for (var index = 0; index < 4; index++)
+        {
+            viewModel.CommitUnresolvedObserverLocation(new GeoCoordinate(53 + index * .000001, -1));
+            Assert.Null(viewModel.ResolvedGroundElevationMetres);
+            Assert.Null(viewModel.TerrainDebugProfile);
+            Assert.Null(viewModel.CameraFramingVisibility);
+            Assert.Null(viewModel.TerrainDebugMap);
+            await planning.WeatherStarted.WaitAsync(TimeSpan.FromSeconds(5));
+            await maps.Started.WaitAsync(TimeSpan.FromSeconds(5));
+            refreshes.Add(viewModel.WaitForPlannerRefreshAsync());
+            mapRefreshes.Add(viewModel.WaitForTerrainDebugMapRefreshAsync());
+        }
+        foreach (var index in new[] { 3, 1, 0, 2 })
+        {
+            planning.CompleteCore(index);
+            planning.CompleteEnvironment(index, true, 10 + index);
+            planning.CompleteWeather(index, DataState.Ready);
+            maps.Complete(index);
+            await Task.WhenAll(refreshes[index], mapRefreshes[index]);
+            Assert.Equal(53.000003, viewModel.Observer.Latitude, 10);
+            Assert.Equal(13, viewModel.ResolvedGroundElevationMetres);
+            Assert.Equal(53.000003, viewModel.Snapshot!.Terrain.Observer.Latitude, 10);
+            Assert.Same(viewModel.Snapshot.Terrain, viewModel.TerrainDebugProfile);
+            Assert.Equal(53.000003, viewModel.TerrainDebugMap!.Observer.Latitude, 10);
+            Assert.All(viewModel.CameraFramingVisibility!.EffectiveTerrainObstructions,
+                sample => Assert.Equal(1300, sample.FirstObstructionDistanceMetres));
+        }
+        var currentMap = viewModel.TerrainDebugMap;
+        var mapCalls = maps.RequestCount;
+        viewModel.FocalLength = 85;
+        Assert.Same(currentMap, viewModel.TerrainDebugMap);
+        Assert.Equal(mapCalls, maps.RequestCount);
+    }
+
+    [Fact]
+    public async Task TerrainMapInvalidatesOnMoveAndRejectsLatePreviousObserver()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var maps = new ControllableTerrainDebugMapService();
+        var settings = new AppSettings(TerrainDebugOverlay: true);
+        var viewModel = CreateViewModel(new ControllablePlanning(catalogue), catalogue,
+            new FakeStore(new PersistedState(3, settings, [],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
+            new FakeExporter(), terrainDebugMaps: maps);
+        await viewModel.InitializeAsync();
+        var baseline = new GeoCoordinate(51, -1);
+        var superseded = new GeoCoordinate(52, 0);
+        var current = new GeoCoordinate(53, 1);
+
+        viewModel.CommitObserverLocation(baseline);
+        await WaitUntilAsync(() => maps.RequestCount == 1, TimeSpan.FromSeconds(1));
+        maps.Complete(0);
+        await viewModel.WaitForTerrainDebugMapRefreshAsync();
+        Assert.Equal(baseline, viewModel.TerrainDebugMap!.Observer);
+
+        viewModel.CommitObserverLocation(superseded);
+        Assert.Null(viewModel.TerrainDebugMap);
+        Assert.Equal(TerrainDebugMapLoadState.Resolving, viewModel.TerrainDebugMapLoadState);
+        await WaitUntilAsync(() => maps.RequestCount == 2, TimeSpan.FromSeconds(1));
+        var obsoleteRefresh = viewModel.WaitForTerrainDebugMapRefreshAsync();
+
+        viewModel.CommitObserverLocation(current);
+        Assert.Null(viewModel.TerrainDebugMap);
+        await WaitUntilAsync(() => maps.RequestCount == 3, TimeSpan.FromSeconds(1));
+        var currentGeneration = viewModel.TerrainDebugMapGeneration;
+        maps.Complete(2);
+        await viewModel.WaitForTerrainDebugMapRefreshAsync();
+        Assert.Equal(current, viewModel.TerrainDebugMap!.Observer);
+        Assert.Equal(TerrainDebugMapLoadState.Ready, viewModel.TerrainDebugMapLoadState);
+        Assert.Equal(currentGeneration, viewModel.TerrainDebugMapGeneration);
+
+        maps.Complete(1);
+        await obsoleteRefresh;
+        Assert.Equal(current, viewModel.TerrainDebugMap.Observer);
     }
 
     [Fact]
@@ -1503,7 +1642,8 @@ public sealed class MainViewModelTests
 
     private static MainViewModel CreateViewModel(IPlanningService planning, ITargetCatalogue catalogue, IUserDataStore store, FakeExporter exporter,
         IPlannerDialogService? dialogs = null, IDeviceLocationAvailabilityService? availability = null,
-        ILocationMapThumbnailService? thumbnails = null, IReverseGeocodingProvider? reverseGeocoding = null)
+        ILocationMapThumbnailService? thumbnails = null, IReverseGeocodingProvider? reverseGeocoding = null,
+        ITerrainDebugMapService? terrainDebugMaps = null)
     {
         var locationSearch = new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance);
         var resolver = new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance);
@@ -1514,7 +1654,7 @@ public sealed class MainViewModelTests
             SystemClock.Instance,
             locationSearch, resolver, availability ?? new UnavailableDeviceLocationProvider(),
             new LocalTargetSearchService(catalogue), dialogs ?? new FakeDialogs(),
-            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails);
+            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps);
     }
 
     private sealed class FakeLocationSearchProvider : ILocationSearchProvider
@@ -1716,8 +1856,38 @@ public sealed class MainViewModelTests
         }
     }
 
+    private sealed class ControllableTerrainDebugMapService : ITerrainDebugMapService
+    {
+        public SemaphoreSlim Started { get; } = new(0);
+        private readonly List<(GeoCoordinate Observer,
+            TaskCompletionSource<TerrainDebugMapSnapshot> Completion)> _requests = [];
+        private readonly object _gate = new();
+        public int RequestCount { get { lock (_gate) return _requests.Count; } }
+
+        public Task<TerrainDebugMapSnapshot> GetMapAsync(GeoCoordinate observer,
+            TerrainDebugMapRequest request, CancellationToken cancellationToken)
+        {
+            var completion = new TaskCompletionSource<TerrainDebugMapSnapshot>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_gate) _requests.Add((observer, completion));
+            Started.Release();
+            return completion.Task; // Deliberately ignores cancellation to test generation rejection.
+        }
+
+        public void Complete(int index)
+        {
+            (GeoCoordinate Observer, TaskCompletionSource<TerrainDebugMapSnapshot> Completion) request;
+            lock (_gate) request = _requests[index];
+            request.Completion.TrySetResult(new TerrainDebugMapSnapshot(request.Observer,
+                20_000, 1, 1, [request.Observer], [10], [10], [LandCoverClass.Grassland],
+                [false], [TerrainSampleStatus.Valid], ["12/1/1"], EnvironmentalDataState.Available,
+                SystemClock.Instance.GetCurrentInstant(), "Synthetic"));
+        }
+    }
+
     private sealed class StagedPlanning(ITargetCatalogue catalogue) : IPlanningService
     {
+        public SemaphoreSlim WeatherStarted { get; } = new(0);
         private readonly List<(PlanningSession Session, TaskCompletionSource<PlanningSnapshot> Completion)> _core = [];
         private readonly List<(PlanningSession Session, TaskCompletionSource<PlannerEnvironmentSnapshot> Completion)> _environment = [];
         private readonly List<(PlanningSession Session, TaskCompletionSource<WeatherResult> Completion)> _weather = [];
@@ -1751,6 +1921,7 @@ public sealed class MainViewModelTests
         {
             var completion = new TaskCompletionSource<WeatherResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             lock (_gate) _weather.Add((session, completion));
+            WeatherStarted.Release();
             return completion.Task;
         }
 
@@ -1789,15 +1960,20 @@ public sealed class MainViewModelTests
                 new WeatherResult(DataState.Loading, null, "Loading"), new AstronomyContext(position, position)));
         }
 
-        public void CompleteEnvironment(int index, bool hasTerrain)
+        public void CompleteEnvironment(int index, bool hasTerrain, double? ground = null)
         {
             (PlanningSession Session, TaskCompletionSource<PlannerEnvironmentSnapshot> Completion) request;
             lock (_gate) request = _environment[index];
             var samples = Enumerable.Range(0, 8).Select(point => new TerrainHorizonSample(point * 45,
-                hasTerrain ? 5 : null, hasTerrain ? 450 : null)).ToArray();
+                hasTerrain ? 5 : null, hasTerrain ? 450 : null,
+                Sightline: ground.HasValue ? [new TerrainSightlineSample(ground.Value * 100, 100, 100, 5)] : null)).ToArray();
             var horizon = new TerrainHorizonProfile(request.Session.Observer, samples, hasTerrain, "Synthetic",
                 request.Session.Instant,
-                HorizonState: hasTerrain ? EnvironmentalDataState.Available : EnvironmentalDataState.Unavailable);
+                HorizonState: hasTerrain ? EnvironmentalDataState.Available : EnvironmentalDataState.Unavailable,
+                ChosenObserverGroundElevationMetres: ground,
+                ObserverAbsoluteElevationMetres: ground + 1.7,
+                TerrainElevationAtObserver: ground.HasValue ? new EnvironmentalValue<double>(
+                    EnvironmentalDataState.Available, ground.Value, TerrainSurfaceResolver.SourceId, "test", "Fixture") : null);
             request.Completion.SetResult(new PlannerEnvironmentSnapshot(request.Session.Observer,
                 hasTerrain
                     ? new EnvironmentalValue<double>(EnvironmentalDataState.Available, 200, "mapzen-terrarium", "test", "Ready")
@@ -1829,11 +2005,14 @@ public sealed class MainViewModelTests
             completion.SetException(new IOException("Synthetic environment failure"));
         }
 
-        public void CompleteWeather(int index, DataState state)
+        public void CompleteWeather(int index, DataState state, double visibility = 20)
         {
             (PlanningSession Session, TaskCompletionSource<WeatherResult> Completion) request;
             lock (_gate) request = _weather[index];
-            request.Completion.SetResult(Weather(request.Session.Instant, state));
+            var weather = Weather(request.Session.Instant, state);
+            if (weather.Conditions is { } conditions)
+                weather = weather with { Conditions = conditions with { VisibilityKilometres = visibility } };
+            request.Completion.SetResult(weather);
         }
 
         private TargetPosition Position(PlanningSession session) => new(catalogue.Get(session.TargetId),

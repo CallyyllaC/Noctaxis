@@ -65,6 +65,8 @@ public sealed class FramingVisibilityTests
     [InlineData(3, 1, true)]
     [InlineData(1, 3, false)]
     [InlineData(2, 2, true)]
+    [InlineData(2, 1.999999999, true)]
+    [InlineData(2, 2.000000001, false)]
     public void AstronomicalOccultationComparesTargetAltitudeWithTerrainHorizon(
         double terrainHorizon, double targetAltitude, bool expectedObstructed)
     {

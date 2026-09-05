@@ -15,6 +15,11 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
     [InlineData(128, 100, 128, 100.5)]
     [InlineData(127, 255, 0, -1)]
     [InlineData(85, 8, 0, -11000)]
+    [InlineData(0, 0, 0, -32768)]
+    [InlineData(255, 255, 255, 32767.99609375)]
+    [InlineData(127, 255, 255, -0.00390625)]
+    [InlineData(128, 0, 1, 0.00390625)]
+    [InlineData(167, 16, 0, 10000)]
     public void DecodeElevationUsesDocumentedTerrariumFormula(
         byte red, byte green, byte blue, double expected) =>
         Assert.Equal(expected, TerrariumTerrainProvider.DecodeElevation(red, green, blue));
@@ -164,6 +169,68 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
         Assert.False(TerrariumTile.IsValid(path));
         Assert.Throws<InvalidDataException>(() => TerrariumTile.Load(path));
     }
+
+    [Theory]
+    [InlineData(256, 255.75, 50)]
+    [InlineData(256, 256, 100)]
+    [InlineData(256, 256.25, 150)]
+    public async Task NorthSouthBoundary_InterpolatesContinuously(double x, double y, double expected)
+    {
+        Seed(new TerrariumTileKey(1, 0, 0), 0);
+        Seed(new TerrariumTileKey(1, 1, 0), 0);
+        Seed(new TerrariumTileKey(1, 0, 1), 200);
+        Seed(new TerrariumTileKey(1, 1, 1), 200);
+        var sample = await Provider(1).GetElevationAsync(CoordinateAtGlobalPixel(1, x, y), default);
+        Assert.True(sample.HasValue);
+        Assert.Equal(expected, sample.Value, 7);
+    }
+
+    [Fact]
+    public async Task DatelineInterpolation_JoinsLastAndFirstTile()
+    {
+        Seed(new TerrariumTileKey(1, 1, 1), 0);
+        Seed(new TerrariumTileKey(1, 0, 1), 100);
+        var provider = Provider(1);
+        foreach (var longitude in new[] { -180d, 180d, 540d, -540d })
+        {
+            var sample = await provider.GetElevationAsync(new GeoCoordinate(-1, longitude), default);
+            Assert.True(sample.HasValue);
+            Assert.Equal(50, sample.Value, 7);
+        }
+        Assert.Equal(2, provider.Metrics.TileLoads);
+    }
+
+    [Fact]
+    public async Task InteriorFractionalSample_ReusesDecodedTileUntilNeighbourIsRequired()
+    {
+        SeedGradient(new TerrariumTileKey(1, 1, 1));
+        var cache = new FixtureCache(_directory);
+        var provider = new TerrariumTerrainProvider(new HttpClient(), cache,
+            NullLogger<TerrariumTerrainProvider>.Instance, new TerrariumTerrainOptions(1, 8));
+        for (var index = 0; index < 30; index++)
+        {
+            var sample = await provider.GetElevationAsync(CoordinateAtGlobalPixel(1, 266.75, 276.75), default);
+            Assert.Equal(2035.25, sample.Value, 7);
+        }
+        Assert.Equal(1, cache.Lookups);
+        Assert.Equal(1, provider.Metrics.TileLoads);
+        Seed(new TerrariumTileKey(1, 0, 1), 0);
+        await provider.GetElevationAsync(CoordinateAtGlobalPixel(1, 256, 276.75), default);
+        Assert.Equal(2, cache.Lookups);
+        Assert.Equal(2, provider.Metrics.TileLoads);
+    }
+
+    [Theory]
+    [InlineData(0, 0, 2, 2)]
+    [InlineData(60, 0, 2, 1)]
+    [InlineData(-60, 0, 2, 2)]
+    [InlineData(85, 179.999, 3, 0)]
+    [InlineData(-85, -179.999, 0, 3)]
+    [InlineData(0, -0.000001, 1, 2)]
+    [InlineData(0, 0.000001, 2, 2)]
+    public void GeographicAddressing_PreservesHemisphereAndBoundary(double latitude,
+        double longitude, int x, int y) => Assert.Equal(new TerrariumTileKey(2, x, y),
+        TerrariumTerrainProvider.LocatePixel(new GeoCoordinate(latitude, longitude), 2).Tile);
 
     private TerrariumTerrainProvider Provider(int zoom) => new(new HttpClient(),
         new FixtureCache(_directory), NullLogger<TerrariumTerrainProvider>.Instance,

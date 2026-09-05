@@ -16,6 +16,19 @@ namespace Noctaxis.Desktop.Tests;
 public sealed class TerrariumPlannerIntegrationTests
 {
     [AvaloniaFact]
+    public async Task ProductionArchitecture_RegistersExactlyOneCanonicalElevationProvider()
+    {
+        await using var services = App.ConfigureServices();
+        Assert.IsType<TerrariumTerrainProvider>(Assert.Single(services.GetServices<ITerrainElevationProvider>()));
+        Assert.IsType<TerrainSurfaceResolver>(services.GetRequiredService<ITerrainSurfaceResolver>());
+        Assert.IsType<HorizonService>(services.GetRequiredService<IHorizonService>());
+        Assert.IsType<MainViewModel>(services.GetRequiredService<MainViewModel>());
+        var providers = typeof(ITerrainElevationProvider).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(ITerrainElevationProvider).IsAssignableFrom(type));
+        Assert.Equal(typeof(TerrariumTerrainProvider), Assert.Single(providers));
+    }
+
+    [AvaloniaFact]
     public async Task ProductionCompositionMovesBetweenTerrariumLocationsWithoutElevationLeak()
     {
         using var fixture = new TerrariumFixtureCache();

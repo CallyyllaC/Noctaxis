@@ -55,6 +55,7 @@ public partial class App : Application
         services.AddSingleton<IFramingVisibilityCalculator, FramingVisibilityCalculator>();
         services.AddSingleton<ILocalHorizonCalculator, LocalHorizonCalculator>();
         services.AddSingleton<IEnvironmentalTileCache, EnvironmentalTileCache>();
+        services.AddSingleton<TerrainDiskCache>();
         services.AddSingleton(new TerrariumTerrainOptions());
         services.AddHttpClient<ITerrainElevationProvider, TerrariumTerrainProvider>(client =>
         {
@@ -64,9 +65,14 @@ public partial class App : Application
         });
         services.AddHttpClient<ILandCoverProvider, WorldCoverLandCoverProvider>();
         services.AddSingleton<ITerrainSurfaceResolver, TerrainSurfaceResolver>();
-        services.AddSingleton<IHorizonService>(provider => new HorizonService(
-            provider.GetRequiredService<ITerrainSurfaceResolver>(),
-            provider.GetRequiredService<ILogger<HorizonService>>()));
+        services.AddSingleton<ITerrainDebugMapService, TerrainDebugMapService>();
+        services.AddSingleton<IHorizonService>(provider =>
+        {
+            var horizon = new HorizonService(provider.GetRequiredService<ITerrainSurfaceResolver>(),
+                provider.GetRequiredService<ILogger<HorizonService>>());
+            provider.GetRequiredService<TerrainDiskCache>().Invalidated += horizon.InvalidateCache;
+            return horizon;
+        });
         services.AddHttpClient<IWsfCoverageSource, DlrWsfCoverageSource>(client =>
         {
             client.Timeout = TimeSpan.FromSeconds(60);

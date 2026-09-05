@@ -35,6 +35,8 @@ public sealed class TerrariumLiveIntegrationTests(ITestOutputHelper output)
         var resolver = new TerrainSurfaceResolver(provider, worldCover,
             NullLogger<TerrainSurfaceResolver>.Instance);
         var result = await resolver.GetSurfaceSampleAsync(new GeoCoordinate(latitude, longitude), default);
+        output.WriteLine($"{name}: terrain={result.RawTerrain.State}; classification={result.Classification.State}; " +
+            $"classification detail={result.Classification.Message}; resolution={result.Resolution.Reason}");
 
         Assert.True(result.RawTerrain.HasValue, $"{name}: {result.RawTerrain.State}: {result.RawTerrain.Message}");
         Assert.InRange(result.RawTerrain.Value, minimum, maximum);

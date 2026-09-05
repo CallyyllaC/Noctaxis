@@ -109,6 +109,21 @@ public sealed class HorizonService : IHorizonService
     private readonly ConcurrentDictionary<string, ProgressiveSession> _active = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, TerrainHorizonProfile> _completed = new(StringComparer.Ordinal);
     private readonly int _degreeOfParallelism;
+    private long _generation;
+    private CancellationTokenSource _cacheLifetime = new();
+    private readonly object _generationGate = new();
+
+    public void InvalidateCache()
+    {
+        lock (_generationGate)
+        {
+            _cacheLifetime.Cancel();
+            _cacheLifetime = new();
+            _generation++;
+            _completed.Clear();
+            _active.Clear();
+        }
+    }
 
     [ActivatorUtilitiesConstructor]
     public HorizonService(ITerrainSurfaceResolver surface, ILogger<HorizonService> logger,
@@ -134,9 +149,16 @@ public sealed class HorizonService : IHorizonService
             return new TerrainHorizonWork(Task.FromResult(complete), (_, token) =>
                 Task.FromResult(complete), _degreeOfParallelism);
 
-        var session = _active.GetOrAdd(key, _ => new ProgressiveSession(normalised, request, _surface,
-            _logger, cancellationToken, _degreeOfParallelism));
-        _ = CompleteAndCacheAsync(key, session);
+        ProgressiveSession session;
+        long generation;
+        lock (_generationGate)
+        {
+            generation = _generation;
+            session = _active.GetOrAdd(key, _ => new ProgressiveSession(normalised, request, _surface,
+                _logger, CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cacheLifetime.Token).Token,
+                _degreeOfParallelism));
+        }
+        _ = CompleteAndCacheAsync(key, session, generation);
         return session.Work;
     }
 
@@ -148,12 +170,12 @@ public sealed class HorizonService : IHorizonService
         TerrainProfileRequest request, IReadOnlyList<double> bearings, CancellationToken cancellationToken) =>
         StartProfile(observer, request, cancellationToken).PrioritiseBearingsAsync(bearings, cancellationToken);
 
-    private async Task CompleteAndCacheAsync(string key, ProgressiveSession session)
+    private async Task CompleteAndCacheAsync(string key, ProgressiveSession session, long generation)
     {
         try
         {
             var result = await session.Work.CompleteProfile.ConfigureAwait(false);
-            _completed.TryAdd(key, result);
+            lock (_generationGate) { if (_generation == generation) _completed.TryAdd(key, result); }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _logger.LogDebug(ex, "Progressive terrain profile failed"); }

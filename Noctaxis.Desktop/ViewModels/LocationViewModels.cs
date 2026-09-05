@@ -14,6 +14,7 @@ public sealed record SavedLocationEdit(string Name, string? Description);
 
 public interface IPlannerDialogService
 {
+    Task<bool> ConfirmClearTerrainCacheAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
     Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default);
     Task<SavedLocationEdit?> ShowSavedLocationEditAsync(SavedLocation location, bool isCreateMode = false,
         CancellationToken cancellationToken = default);

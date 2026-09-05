@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
 using Noctaxis.Core.Terrain;
@@ -25,10 +26,13 @@ public sealed class TerrainDebugMiniMap : Control
         AvaloniaProperty.Register<TerrainDebugMiniMap, double>(nameof(CentreBearingDegrees));
     public static readonly StyledProperty<double> HorizontalFieldOfViewDegreesProperty =
         AvaloniaProperty.Register<TerrainDebugMiniMap, double>(nameof(HorizontalFieldOfViewDegrees), 60);
+    public static readonly StyledProperty<double?> WeatherVisibilityDistanceMetresProperty =
+        AvaloniaProperty.Register<TerrainDebugMiniMap, double?>(nameof(WeatherVisibilityDistanceMetres));
 
     static TerrainDebugMiniMap() =>
         AffectsRender<TerrainDebugMiniMap>(ProfileProperty, ObserverProperty, GenerationProperty,
-            TargetAltitudeDegreesProperty, CentreBearingDegreesProperty, HorizontalFieldOfViewDegreesProperty);
+            TargetAltitudeDegreesProperty, CentreBearingDegreesProperty, HorizontalFieldOfViewDegreesProperty,
+            WeatherVisibilityDistanceMetresProperty);
 
     public TerrainHorizonProfile? Profile
     {
@@ -66,6 +70,12 @@ public sealed class TerrainDebugMiniMap : Control
         set => SetValue(HorizontalFieldOfViewDegreesProperty, value);
     }
 
+    public double? WeatherVisibilityDistanceMetres
+    {
+        get => GetValue(WeatherVisibilityDistanceMetresProperty);
+        set => SetValue(WeatherVisibilityDistanceMetresProperty, value);
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -101,6 +111,11 @@ public sealed class TerrainDebugMiniMap : Control
             centre, 4, 4);
         DrawLabel(context, $"Terrarium z12  {minimum:F0}..{maximum:F0} m", new Point(7, 6),
             Color.Parse("#D9E5F2"));
+        DrawLabel(context, $"polar profile  radius {displayDistance / 1000:0.#} km", new Point(7, 30),
+            Color.Parse("#B7C7D9"));
+        DrawLabel(context,
+            $"weather {Distance(WeatherVisibilityDistanceMetres)}  cone {LocalHorizonCalculator.MaximumTerrainCastDistanceMetres / 1000:0} km",
+            new Point(7, 42), Color.Parse("#91A4B8"));
         var observerDiagnostics = profile.ObserverDiagnostics;
         DrawLabel(context,
             $"raw {observerDiagnostics?.TerrainSample.InterpolatedElevationMetres:0.0}  surface {observerDiagnostics?.ResolvedSurfaceElevationMetres:0.0}  {observerDiagnostics?.Classification?.ToString() ?? "unknown"}{(observerDiagnostics?.SurfaceWasAdjusted == true ? " adjusted" : string.Empty)}",

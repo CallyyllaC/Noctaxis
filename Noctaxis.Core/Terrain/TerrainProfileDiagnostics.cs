@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Domain;
 
 namespace Noctaxis.Core.Terrain;
@@ -104,7 +105,9 @@ public static class TerrainProfileDiagnostics
     }
 
     public static string CreateDebugSnapshot(TerrainHorizonProfile profile, double bearingDegrees,
-        double? targetAltitudeDegrees = null, long? generation = null)
+        double? targetAltitudeDegrees = null, long? generation = null,
+        TerrainDebugMapSnapshot? map = null, long? mapGeneration = null,
+        double? weatherVisibilityDistanceMetres = null)
     {
         var bearing = NearestBearingSample(profile, bearingDegrees);
         var line = bearing?.Sightline ?? [];
@@ -133,6 +136,19 @@ public static class TerrainProfileDiagnostics
             profile.Observer.Latitude, profile.Observer.Longitude);
         text.AppendLine($"Profile generation: {(generation.HasValue ? generation.Value.ToString(Invariant) : "Unavailable")}");
         text.AppendLine($"Profile generated: {profile.GeneratedAt}");
+        text.AppendLine();
+        text.AppendLine("Local terrain map");
+        text.AppendLine($"State: {map?.State.ToString() ?? "Resolving or unavailable"}");
+        text.AppendLine($"Generation: {(mapGeneration.HasValue ? mapGeneration.Value.ToString(Invariant) : "Unavailable")}");
+        text.AppendLine($"Range: {(map is null ? "Unavailable" : Value(map.RangeMetres) + " m radius")}");
+        text.AppendLine($"Grid resolution: {(map is null ? "Unavailable" : $"{map.Width} x {map.Height}")}");
+        text.AppendLine($"Terrarium tiles: {(map is null ? "Unavailable" : string.Join(", ", map.TerrariumTiles))}");
+        text.AppendLine($"Generated: {map?.GeneratedAt.ToString() ?? "Unavailable"}");
+        text.AppendLine();
+        text.AppendLine("Polar horizon profile");
+        text.AppendLine($"Range: {Value(profile.MaximumAnalysisDistanceMetres)} m radius");
+        text.AppendLine($"Bearing count: {profile.Samples.Count}");
+        text.AppendLine($"Selected bearing: {Angles.NormaliseDegrees(bearingDegrees):F1} degrees");
         text.AppendLine($"DEM provider: {ground?.Provider ?? profile.GroundElevationAtObserver?.SourceId ?? "Unavailable"}");
         text.AppendLine($"DEM tile: {ground?.Tile ?? "Unavailable"}");
         text.AppendLine($"DEM cell: {ground?.Cell ?? "Unavailable"}");
@@ -182,6 +198,9 @@ public static class TerrainProfileDiagnostics
             ? profile.OccultationAt(bearingDegrees, targetAltitudeDegrees.Value)
             : default;
         text.AppendLine($"Plan-view terrain obstruction distance (horizontal 0 degree altitude ray): {Value(planObstruction.EffectiveFirstObstructionDistanceMetres)} m");
+        text.AppendLine($"Weather visibility distance: {Value(weatherVisibilityDistanceMetres)} m");
+        text.AppendLine($"Fixed plan-view cone maximum: {Value(LocalHorizonCalculator.MaximumTerrainCastDistanceMetres)} m");
+        text.AppendLine("Plan-view mask: observer side clear; far side after first horizontal hit hatched");
         text.AppendLine($"Target/view altitude: {Value(targetAltitudeDegrees)} degrees");
         text.AppendLine($"Target occulted: {(targetAltitudeDegrees.HasValue ? targetOccultation.EffectiveFirstObstructionDistanceMetres.HasValue.ToString() : "Unavailable")}");
         return text.ToString().TrimEnd();

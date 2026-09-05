@@ -101,7 +101,7 @@ public sealed class GeographicOverlayGeometryBuilder
         };
         var weatherDistance = ValidWeatherDistance(visibility, normalised.DistanceMetres);
         var fills = BuildFillRegions(normalised, weatherDistance);
-        var terrain = BuildTerrainHatchGeometry(normalised, visibility, weatherDistance);
+        var terrain = BuildTerrainHatchGeometry(normalised, visibility);
 
         return new GeographicCameraOverlay(
             normalised,
@@ -202,8 +202,7 @@ public sealed class GeographicOverlayGeometryBuilder
 
     private static TerrainHatchGeometry BuildTerrainHatchGeometry(
         GeoSector sector,
-        FramingVisibilityAssessment? visibility,
-        double? weatherDistanceMetres)
+        FramingVisibilityAssessment? visibility)
     {
         if (visibility is null || visibility.EffectiveTerrainObstructions.Count < 2)
             return new TerrainHatchGeometry([], []);
@@ -233,9 +232,9 @@ public sealed class GeographicOverlayGeometryBuilder
 
             if (left.IsObstructed && right.IsObstructed)
             {
-                AddOrderedTerrainCells(sector, left.UnwrappedBearingDegrees, right.UnwrappedBearingDegrees,
+                AddTerrainCells(sector, left.UnwrappedBearingDegrees, right.UnwrappedBearingDegrees,
                     left.ObstructionDistanceMetres!.Value, right.ObstructionDistanceMetres!.Value,
-                    weatherDistanceMetres, regions);
+                    regions);
                 continue;
             }
 
@@ -245,15 +244,15 @@ public sealed class GeographicOverlayGeometryBuilder
             var transitionBearing = (left.UnwrappedBearingDegrees + right.UnwrappedBearingDegrees) / 2;
             if (left.IsObstructed)
             {
-                AddOrderedTerrainCells(sector, left.UnwrappedBearingDegrees, transitionBearing,
+                AddTerrainCells(sector, left.UnwrappedBearingDegrees, transitionBearing,
                     left.ObstructionDistanceMetres!.Value, left.ObstructionDistanceMetres.Value,
-                    weatherDistanceMetres, regions);
+                    regions);
             }
             else
             {
-                AddOrderedTerrainCells(sector, transitionBearing, right.UnwrappedBearingDegrees,
+                AddTerrainCells(sector, transitionBearing, right.UnwrappedBearingDegrees,
                     right.ObstructionDistanceMetres!.Value, right.ObstructionDistanceMetres.Value,
-                    weatherDistanceMetres, regions);
+                    regions);
             }
         }
         return new TerrainHatchGeometry(regions, samples);
@@ -273,73 +272,37 @@ public sealed class GeographicOverlayGeometryBuilder
     }
 
     /// <summary>
-    /// Terrain and weather are sequential distance transitions, rather than permanently stacked effects.
-    /// The later transition along a bearing owns the cone treatment from that point onwards.
+    /// Builds the terrain shadow independently of weather: the observer side of the interpolated
+    /// first-hit frontier is clear and every cell extends from that frontier to the fixed cone edge.
     /// </summary>
-    private static void AddOrderedTerrainCells(
+    private static void AddTerrainCells(
         GeoSector sector,
         double leftBearingDegrees,
         double rightBearingDegrees,
         double leftStartDistanceMetres,
         double rightStartDistanceMetres,
-        double? weatherDistanceMetres,
         ICollection<GeographicOverlayRegion> regions)
     {
-        if (weatherDistanceMetres is not double weather)
+        var sweep = rightBearingDegrees - leftBearingDegrees;
+        if (sweep <= 1e-7) return;
+        var count = Math.Max(1, (int)Math.Ceiling(sweep /
+                                                  MapOverlayGeometry.SectorBearingSampleStepDegrees));
+        for (var index = 0; index < count; index++)
         {
-            AddCells(leftBearingDegrees, rightBearingDegrees, leftStartDistanceMetres,
-                rightStartDistanceMetres, sector.DistanceMetres);
-            return;
-        }
-
-        var leftBeforeWeather = leftStartDistanceMetres < weather;
-        var rightBeforeWeather = rightStartDistanceMetres < weather;
-        if (leftBeforeWeather == rightBeforeWeather)
-        {
-            AddCells(leftBearingDegrees, rightBearingDegrees, leftStartDistanceMetres,
-                rightStartDistanceMetres, leftBeforeWeather ? weather : sector.DistanceMetres);
-            return;
-        }
-
-        var fraction = (weather - leftStartDistanceMetres) /
-                       (rightStartDistanceMetres - leftStartDistanceMetres);
-        var sweep = Angles.NormaliseDegrees(rightBearingDegrees - leftBearingDegrees);
-        var crossingBearing = leftBearingDegrees + sweep * fraction;
-
-        if (leftBeforeWeather)
-        {
-            AddCells(leftBearingDegrees, crossingBearing, leftStartDistanceMetres, weather, weather);
-            AddCells(crossingBearing, rightBearingDegrees, weather, rightStartDistanceMetres,
-                sector.DistanceMetres);
-        }
-        else
-        {
-            AddCells(leftBearingDegrees, crossingBearing, leftStartDistanceMetres, weather,
-                sector.DistanceMetres);
-            AddCells(crossingBearing, rightBearingDegrees, weather, rightStartDistanceMetres, weather);
-        }
-
-        void AddCells(double startBearing, double endBearing, double leftStart, double rightStart, double endDistance)
-        {
-            var sweep = endBearing - startBearing;
-            if (sweep <= 1e-7 || endDistance <= Math.Min(leftStart, rightStart)) return;
-            var count = Math.Max(1, (int)Math.Ceiling(sweep /
-                                                      MapOverlayGeometry.SectorBearingSampleStepDegrees));
-            for (var index = 0; index < count; index++)
-            {
-                var firstFraction = index / (double)count;
-                var secondFraction = (index + 1d) / count;
-                var firstBearing = startBearing + sweep * firstFraction;
-                var secondBearing = startBearing + sweep * secondFraction;
-                var firstDistance = leftStart + (rightStart - leftStart) * firstFraction;
-                var secondDistance = leftStart + (rightStart - leftStart) * secondFraction;
-                regions.Add(new GeographicOverlayRegion(
-                    CameraOverlayEffect.TerrainHatch,
-                    SampleTerrainCell(sector.Origin, firstBearing, secondBearing,
-                        firstDistance, secondDistance, endDistance),
-                    Math.Min(firstDistance, secondDistance),
-                    endDistance));
-            }
+            var firstFraction = index / (double)count;
+            var secondFraction = (index + 1d) / count;
+            var firstBearing = leftBearingDegrees + sweep * firstFraction;
+            var secondBearing = leftBearingDegrees + sweep * secondFraction;
+            var firstDistance = leftStartDistanceMetres +
+                                (rightStartDistanceMetres - leftStartDistanceMetres) * firstFraction;
+            var secondDistance = leftStartDistanceMetres +
+                                 (rightStartDistanceMetres - leftStartDistanceMetres) * secondFraction;
+            regions.Add(new GeographicOverlayRegion(
+                CameraOverlayEffect.TerrainHatch,
+                SampleTerrainCell(sector.Origin, firstBearing, secondBearing,
+                    firstDistance, secondDistance, sector.DistanceMetres),
+                Math.Min(firstDistance, secondDistance),
+                sector.DistanceMetres));
         }
     }
 

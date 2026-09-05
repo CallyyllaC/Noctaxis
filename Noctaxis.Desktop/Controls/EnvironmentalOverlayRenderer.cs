@@ -294,6 +294,10 @@ public static class EnvironmentalOverlayShader
             return half4(0.0);
         }
 
+        half4 over(half4 foreground, half4 background) {
+            return foreground + background * (1.0 - foreground.a);
+        }
+
         half4 main(float2 p) {
             float2 screenOffset = p - float2(observerScreenX, observerScreenY);
             float2 worldOffset = float2(
@@ -333,14 +337,26 @@ public static class EnvironmentalOverlayShader
             float centralAngle = atan(length(float2(bearingX, bearingY)),
                                       clamp(centralCosine, -1.0, 1.0));
             float distance = EARTH_RADIUS * centralAngle;
-            if (distance > maximumDistance) return half4(0.0);
-            bool weatherReached = visibilityDistance > 0.0 && distance >= visibilityDistance;
-
             float bearing = centreBearing;
             if (length(screenOffset) >= 1.0) {
                 bearing = atan(bearingY, bearingX);
                 if (bearing < 0.0) bearing += TWO_PI;
             }
+
+            // Single-precision spherical terms lose bearing stability in the first few hundred
+            // metres. Web Mercator is locally conformal, so use its observer-relative tangent
+            // scale nearby; retain the spherical solution for the long-range cone.
+            if (length(worldOffset) < 20000.0) {
+                float2 localOffset = worldOffset * cosObserverLatitude;
+                distance = length(localOffset);
+                if (length(localOffset) >= 0.01) {
+                    bearing = atan(localOffset.x, localOffset.y);
+                    if (bearing < 0.0) bearing += TWO_PI;
+                }
+            }
+            if (distance > maximumDistance) return half4(0.0);
+            bool weatherReached = visibilityDistance > 0.0 && distance >= visibilityDistance;
+
             float signedOffset = atan(sin(bearing - centreBearing), cos(bearing - centreBearing));
             if (abs(signedOffset) > halfFov) return half4(0.0);
 
@@ -350,19 +366,11 @@ public static class EnvironmentalOverlayShader
             float terrainDistance = float(terrain.r) * maximumDistance;
             bool terrainReached = hasTerrain && distance >= terrainDistance;
 
-            // An obstructed angular slice is hatched from the observer so the visual cone remains
-            // anchored to the planning pin. The measured obstruction distance is still retained to
-            // decide whether terrain or weather owns the treatment after the weather boundary.
-            bool drawTerrain = hasTerrain && (!weatherReached ||
-                (terrainReached && terrainDistance >= visibilityDistance));
-            if (drawTerrain) {
-                return terrainHatch(p);
-            }
-
             half luminance = dot(coneColour.rgb, half3(0.2126, 0.7152, 0.0722));
-            if (weatherReached)
-                return premul(half3(luminance), half(coneOpacity * weatherOpacityScale));
-            return half4(0.0);
+            half4 cone = weatherReached
+                ? premul(half3(luminance), half(coneOpacity * weatherOpacityScale))
+                : premul(coneColour.rgb, half(coneOpacity));
+            return terrainReached ? over(terrainHatch(p), cone) : cone;
         }
         """;
 }

@@ -724,9 +724,12 @@ public sealed record AppSettings(
     CameraFramingSettings? CameraFraming = null,
     double CameraHeightAboveGroundMetres = 1.7,
     EquipmentSettings? Equipment = null,
-    bool TerrainDebugOverlay = false)
+    bool TerrainDebugOverlay = false,
+    long TerrainCacheLimitBytes = 2L * 1024 * 1024 * 1024)
 {
     public const string UseSystemTimeZoneId = "system";
+    [JsonIgnore]
+    public long EffectiveTerrainCacheLimitBytes => Math.Clamp(TerrainCacheLimitBytes, 0, 1024L * 1024 * 1024 * 1024);
     public const double DefaultCameraHeightAboveGroundMetres = 1.7;
 
     [JsonIgnore]

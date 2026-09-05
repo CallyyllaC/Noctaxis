@@ -618,7 +618,9 @@ public sealed class NoctaxisMapView : UserControl
             var colour = CelestialPalette.Colour(snapshot.Position.Target,
                 CelestialPalette.OrderFor(snapshot, snapshot.Position.Target));
             var settings = framingSettings.Normalised();
-            if (baseFill is not null && settings.ShadingOpacityPercent > 0)
+            // The environmental shader owns the complete base/weather/terrain composition when
+            // state is available. The geographic fallback fill is used only before that state exists.
+            if (baseFill is not null && _environmentalState is null && settings.ShadingOpacityPercent > 0)
             {
                 var geometry = CreateProjectedGeometry(baseFill, currentViewport, close: true);
                 if (geometry is not null)

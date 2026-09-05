@@ -60,6 +60,8 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
     private readonly ILogger<TerrariumTerrainProvider> _logger;
     private readonly TerrariumTerrainOptions _options;
     private readonly BoundedDecodedRasterCache<TerrariumTileKey, TerrariumTileLoad> _tiles;
+    private long _cacheGeneration;
+    private readonly object _generationGate = new();
     private readonly System.Collections.Concurrent.ConcurrentDictionary<TerrariumTileKey,
         (TerrariumTileLoad Failure, DateTimeOffset RetryAt)> _recentFailures = new();
     private long _tileLoads;
@@ -79,6 +81,7 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
         _options.Validate();
         _tiles = new BoundedDecodedRasterCache<TerrariumTileKey, TerrariumTileLoad>(
             _options.DecodedTileCapacity);
+        cache.RegisterTerrainInvalidation(() => { _tiles.Clear(); _recentFailures.Clear(); });
     }
 
     public TerrariumTerrainOptions Options => _options;
@@ -251,6 +254,13 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
     private async Task<TerrariumTileLoad?> GetTileAsync(TerrariumTileKey key,
         CancellationToken cancellationToken)
     {
+        var generation = _cache.TerrainGeneration;
+        lock (_generationGate)
+        {
+            if (_cacheGeneration != generation)
+            { _tiles.Clear(); _recentFailures.Clear(); _cacheGeneration = generation; }
+        }
+        _cache.TouchTerrain(Descriptor(key));
         Interlocked.Increment(ref _decodedCacheRequests);
         if (_tiles.TryGetValue(key, out var cached))
         {
@@ -262,19 +272,22 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
             if (DateTimeOffset.UtcNow < failure.RetryAt) return failure.Failure;
             _recentFailures.TryRemove(key, out _);
         }
-        var loaded = await _tiles.GetOrCreateAsync(key, _ => LoadTileAsync(key, CancellationToken.None),
+        var loaded = await _tiles.GetOrCreateAsync(key, _ => LoadTileAsync(key, generation, CancellationToken.None),
             cancellationToken).ConfigureAwait(false);
         return loaded ?? (_recentFailures.TryGetValue(key, out var currentFailure)
             ? currentFailure.Failure : null);
     }
 
-    private async Task<TerrariumTileLoad?> LoadTileAsync(TerrariumTileKey key,
+    private static EnvironmentalTileDescriptor Descriptor(TerrariumTileKey key) => new(SourceId, SourceVersion,
+        $"z{key.Zoom}", $"{key.X}-{key.Y}", "png");
+
+    private async Task<TerrariumTileLoad?> LoadTileAsync(TerrariumTileKey key, long generation,
         CancellationToken cancellationToken)
     {
         Interlocked.Increment(ref _tileLoads);
         _logger.LogInformation("Terrarium tile requested: {Tile}", key.Id);
-        var descriptor = new EnvironmentalTileDescriptor(SourceId, SourceVersion,
-            $"z{key.Zoom}", $"{key.X}-{key.Y}", "png");
+        var descriptor = Descriptor(key);
+        using var lease = await _cache.LeaseTerrainAsync(descriptor, generation, cancellationToken).ConfigureAwait(false);
         var result = await _cache.GetOrCreateDetailedAsync(descriptor,
             token => EnvironmentalHttpDownloader.DownloadDetailedAsync(_http,
                 new Uri(new Uri(_options.BaseUrl), $"{key.Zoom}/{key.X}/{key.Y}.png"),

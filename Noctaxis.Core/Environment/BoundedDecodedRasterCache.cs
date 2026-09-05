@@ -28,6 +28,7 @@ public sealed class BoundedDecodedRasterCache<TKey, TValue> where TKey : notnull
     }
 
     public int Count => _entries.Count;
+    public void Clear() => _entries.Clear();
     public int Capacity => _capacity;
 
     public bool TryGetValue(TKey key, out TValue? value)

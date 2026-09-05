@@ -169,11 +169,17 @@ public sealed class WsfSettlementDataProvider(
     }
 }
 
-public sealed class WorldCoverLandCoverProvider(
-    HttpClient http,
-    IEnvironmentalTileCache cache,
-    ILogger<WorldCoverLandCoverProvider> logger) : ILandCoverProvider
+public sealed class WorldCoverLandCoverProvider : ILandCoverProvider
 {
+    private readonly HttpClient http;
+    private readonly IEnvironmentalTileCache cache;
+    private readonly ILogger<WorldCoverLandCoverProvider> logger;
+    public WorldCoverLandCoverProvider(HttpClient http, IEnvironmentalTileCache cache,
+        ILogger<WorldCoverLandCoverProvider> logger)
+    {
+        this.http = http; this.cache = cache; this.logger = logger;
+        cache.RegisterTerrainInvalidation(_tiles.Clear);
+    }
     public const string SourceId = "esa-worldcover";
     public const string SourceVersion = "2021-v200";
     private readonly ConcurrentDictionary<string, Lazy<Task<WorldCoverTileResult>>> _tiles = new(StringComparer.Ordinal);
@@ -202,6 +208,9 @@ public sealed class WorldCoverLandCoverProvider(
         {
             cancellationToken.ThrowIfCancellationRequested();
             var items = group.ToArray();
+            using var lease = await cache.LeaseTerrainAsync(
+                new EnvironmentalTileDescriptor(SourceId, SourceVersion, "land-cover", group.Key, "tif"),
+                cache.TerrainGeneration, cancellationToken).ConfigureAwait(false);
             var tileResult = await GetTileAsync(group.Key, cancellationToken).ConfigureAwait(false);
             if (tileResult.State == EnvironmentalDataState.TileAbsent)
             {
@@ -246,9 +255,16 @@ public sealed class WorldCoverLandCoverProvider(
 
     private async Task<WorldCoverTileResult> GetTileAsync(string tile, CancellationToken cancellationToken)
     {
+        var generation = cache.TerrainGeneration;
+        if (Interlocked.Exchange(ref _generation, generation) != generation) _tiles.Clear();
         var lazy = _tiles.GetOrAdd(tile,
-            _ => new Lazy<Task<WorldCoverTileResult>>(() => LoadTileAsync(tile, CancellationToken.None)));
+            _ => new Lazy<Task<WorldCoverTileResult>>(() => LoadTileAsync(tile, cancellationToken)));
         var result = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        if (result.Path is not null && !File.Exists(result.Path))
+        {
+            _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<WorldCoverTileResult>>>(tile, lazy));
+            return await GetTileAsync(tile, cancellationToken).ConfigureAwait(false);
+        }
         if (result.State != EnvironmentalDataState.TileAbsent && result.Path is null)
             _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<WorldCoverTileResult>>>(tile, lazy));
         return result;
@@ -277,5 +293,5 @@ public sealed class WorldCoverLandCoverProvider(
     }
 
     private sealed record WorldCoverTileResult(EnvironmentalDataState State, string? Path);
+    private long _generation;
 }
-
