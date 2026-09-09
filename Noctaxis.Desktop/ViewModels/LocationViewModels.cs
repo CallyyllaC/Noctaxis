@@ -51,6 +51,8 @@ public partial class SavedLocationEditorViewModel : ObservableObject
 public partial class LocationSearchViewModel(ILocationSearchProvider provider, ILogger<LocationSearchViewModel> logger) : ObservableObject
 {
     private CancellationTokenSource? _searchCancellation;
+    private Task _activeSearch = Task.CompletedTask;
+    internal Task WaitForSearchAsync() => _activeSearch;
     public ObservableCollection<LocationSearchResult> Results { get; } = [];
     public string Attribution => provider.Attribution;
     [ObservableProperty] private string _query = string.Empty;
@@ -62,7 +64,7 @@ public partial class LocationSearchViewModel(ILocationSearchProvider provider, I
         _searchCancellation?.Cancel();
         _searchCancellation?.Dispose();
         _searchCancellation = new CancellationTokenSource();
-        _ = SearchDebouncedAsync(value, _searchCancellation.Token);
+        _activeSearch = SearchDebouncedAsync(value, _searchCancellation.Token);
     }
 
     public void Reset()
@@ -75,18 +77,21 @@ public partial class LocationSearchViewModel(ILocationSearchProvider provider, I
 
     private async Task SearchDebouncedAsync(string query, CancellationToken cancellationToken)
     {
-        Results.Clear(); ErrorMessage = null;
+        Results.Clear(); ErrorMessage = null; IsSearching = false;
         if (query.Trim().Length < 2) return;
         try
         {
             await Task.Delay(350, cancellationToken);
             IsSearching = true;
             var results = await provider.SearchAsync(query, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             foreach (var result in results) Results.Add(result);
             if (results.Count == 0) ErrorMessage = "No matching locations found.";
         }
         catch (OperationCanceledException) { logger.LogDebug("Obsolete location search cancelled"); }
-        catch (Exception ex) { ErrorMessage = ex.Message; logger.LogWarning(ex, "Location search failed"); }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        { ErrorMessage = ex.Message; logger.LogWarning(ex, "Location search failed"); }
+        catch (Exception) when (cancellationToken.IsCancellationRequested) { }
         finally { if (!cancellationToken.IsCancellationRequested) IsSearching = false; }
     }
 }
@@ -98,7 +103,7 @@ public sealed class AddLocationCardViewModel(Func<Task> addLocation) : ILocation
     public IAsyncRelayCommand AddCommand { get; } = new AsyncRelayCommand(addLocation);
 }
 
-public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
+public partial class LocationCardViewModel : ObservableObject, ILocationGridItem, IDisposable
 {
     private readonly Func<LocationCardViewModel, Task> _open;
     private readonly Func<LocationCardViewModel, Task> _edit;
@@ -107,6 +112,7 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     private readonly ILocationMapThumbnailService _mapThumbnails;
     private readonly Func<DateTimeOffset> _now;
     private CancellationTokenSource? _thumbnailCancellation;
+    private bool _disposed;
 
     public LocationCardViewModel(SavedLocation location, bool isSelected,
         ILocationMapThumbnailService mapThumbnails, Func<DateTimeOffset> now,
@@ -239,6 +245,7 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
 
     private async Task<bool> LoadMapThumbnailAsync(SavedLocationMapRefreshMode mode)
     {
+        if (_disposed) return false;
         LastThumbnailResult = null;
         _thumbnailCancellation?.Cancel();
         _thumbnailCancellation?.Dispose();
@@ -277,6 +284,19 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
         {
             if (!cancellationToken.IsCancellationRequested) IsMapThumbnailLoading = false;
         }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _thumbnailCancellation?.Cancel();
+        _thumbnailCancellation?.Dispose();
+        _thumbnailCancellation = null;
+        var bitmap = MapThumbnail;
+        MapThumbnail = null;
+        bitmap?.Dispose();
+        IsMapThumbnailLoading = false;
     }
 
     internal static string? FormatLastUsed(DateTimeOffset? value, DateTimeOffset now)
@@ -347,9 +367,24 @@ public partial class LocationsViewModel : ObservableObject
     public void Load(IEnumerable<SavedLocation> locations, GeoCoordinate? lastCustomCoordinate, Guid? selectedLocationId = null)
     {
         _lastCustomCoordinate = lastCustomCoordinate;
+        var previous = Saved.ToDictionary(card => card.Id);
+        var incoming = locations.ToArray();
         Saved.Clear();
-        foreach (var location in locations)
-            Saved.Add(CreateCard(location, location.Id == selectedLocationId));
+        foreach (var location in incoming)
+        {
+            if (previous.Remove(location.Id, out var card))
+            {
+                card.Update(location);
+                card.IsSelected = location.Id == selectedLocationId;
+            }
+            else card = CreateCard(location, location.Id == selectedLocationId);
+            Saved.Add(card);
+        }
+        foreach (var removed in previous.Values)
+        {
+            removed.PropertyChanged -= OnCardPropertyChanged;
+            removed.Dispose();
+        }
         ApplySort();
         RefreshThumbnailAttributions();
         OnPropertyChanged(nameof(HasSavedLocations)); OnPropertyChanged(nameof(IsFirstRun));
@@ -390,11 +425,13 @@ public partial class LocationsViewModel : ObservableObject
     {
         var card = new LocationCardViewModel(location, isSelected, _mapThumbnails, _now,
             _openSaved, _edit, _delete, _toggleFavourite);
-        card.PropertyChanged += (_, args) =>
-        {
-            if (args.PropertyName == nameof(LocationCardViewModel.ThumbnailMetadata)) RefreshThumbnailAttributions();
-        };
+        card.PropertyChanged += OnCardPropertyChanged;
         return card;
+    }
+
+    private void OnCardPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(LocationCardViewModel.ThumbnailMetadata)) RefreshThumbnailAttributions();
     }
 
     public void RefreshThumbnailAttributions()

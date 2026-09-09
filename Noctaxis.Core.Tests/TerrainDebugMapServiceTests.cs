@@ -74,8 +74,58 @@ public sealed class TerrainDebugMapServiceTests
         Assert.False(map.RawTerrainElevationsMetres is double?[]);
     }
 
+    [Fact]
+    public async Task RepeatedMapReusesOneImmutableSnapshotAndGenerationInvalidatesIt()
+    {
+        var resolver = new CountingSurfaceResolver();
+        var cache = new GenerationCache();
+        var service = new TerrainDebugMapService(resolver, cache);
+        var observer = new GeoCoordinate(53, -1);
+        var first = await service.GetMapAsync(observer, new(), default);
+        resolver.LastValues![0] = -999;
+        Assert.Same(first, await service.GetMapAsync(observer, new(), default));
+        Assert.Equal(25, first.SurfaceElevationsMetres[0]);
+        Assert.Equal(1, resolver.ElevationCalls);
+        cache.Generation++;
+        Assert.NotSame(first, await service.GetMapAsync(observer, new(), default));
+        Assert.Equal(2, resolver.ElevationCalls);
+        await service.GetMapAsync(observer with { Latitude = 54 }, new(), default);
+        await service.GetMapAsync(observer, new(), default);
+        Assert.Equal(4, resolver.ElevationCalls); // Only the most recent map is retained.
+        await service.GetMapAsync(observer, new(10000, 16, 16), default);
+        Assert.Equal(5, resolver.ElevationCalls);
+    }
+
+    private sealed class GenerationCache : IEnvironmentalTileCache
+    {
+        public long Generation;
+        public long TerrainGeneration => Generation;
+        public string RootDirectory => "unused";
+        public Task<EnvironmentalCacheResult> GetOrCreateAsync(EnvironmentalTileDescriptor descriptor,
+            Func<CancellationToken, Task<byte[]?>> acquire, Func<string, bool> validate, CancellationToken token) =>
+            throw new NotSupportedException();
+        public Task<EnvironmentalCacheResult> GetOrCreateDetailedAsync(EnvironmentalTileDescriptor descriptor,
+            Func<CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire, Func<string, bool> validate, CancellationToken token) =>
+            throw new NotSupportedException();
+    }
+
+    [Fact]
+    public async Task MapWithUnavailableClassificationRemainsRetryable()
+    {
+        var resolver = new CountingSurfaceResolver { ClassificationState = EnvironmentalDataState.Unavailable };
+        var service = new TerrainDebugMapService(resolver);
+        var observer = new GeoCoordinate(53, -1);
+        var incomplete = await service.GetMapAsync(observer, new(), default);
+        resolver.ClassificationState = EnvironmentalDataState.Available;
+        var complete = await service.GetMapAsync(observer, new(), default);
+        Assert.NotSame(incomplete, complete);
+        Assert.Equal(2, resolver.ClassificationCalls);
+        Assert.Same(complete, await service.GetMapAsync(observer, new(), default));
+    }
+
     private sealed class CountingSurfaceResolver : ITerrainSurfaceResolver
     {
+        public EnvironmentalDataState ClassificationState { get; set; } = EnvironmentalDataState.Available;
         public double?[]? LastValues { get; private set; }
         public int PreloadCalls { get; private set; }
         public int ClassificationCalls { get; private set; }
@@ -93,7 +143,7 @@ public sealed class TerrainDebugMapServiceTests
             IReadOnlyList<GeoCoordinate> coordinates, CancellationToken cancellationToken)
         {
             ClassificationCalls++;
-            return Task.FromResult(new TerrainSurfaceClassificationBatch(EnvironmentalDataState.Available,
+            return Task.FromResult(new TerrainSurfaceClassificationBatch(ClassificationState,
                 Enumerable.Repeat<LandCoverClass?>(LandCoverClass.Grassland, coordinates.Count).ToArray(),
                 new TerrainWaterBodyKind[coordinates.Count], "Synthetic"));
         }

@@ -97,8 +97,8 @@ public sealed class PlanningService(
         CalculateCoreSnapshotAsync(session, cancellationToken),
         LoadEnvironmentAsync(session, cameraHeightAboveGroundMetres, cancellationToken),
         LoadWeatherAsync(session, weatherSettings, cancellationToken),
-        (bearings, token) => environment.GetPriorityHorizonAsync(session.Observer,
-            CreateTerrainRequest(session, cameraHeightAboveGroundMetres), bearings, token));
+        session.EnableTerrainCalculations ? (bearings, token) => environment.GetPriorityHorizonAsync(session.Observer,
+            CreateTerrainRequest(session, cameraHeightAboveGroundMetres), bearings, token) : null);
 
     public async Task<PlanningSnapshot> CalculateCoreSnapshotAsync(
         PlanningSession session,
@@ -133,8 +133,10 @@ public sealed class PlanningService(
         var objectPlans = new List<CelestialObjectPlan>(targets.Length);
         foreach (var target in targets)
             objectPlans.Add(new CelestialObjectPlan(positions[target.Id], await pathTasks[target.Id].ConfigureAwait(false)));
-        var pendingHorizon = new TerrainHorizonProfile(session.Observer, [], false,
-            "Environmental horizon loading", session.Instant);
+        var pendingHorizon = session.EnableTerrainCalculations
+            ? new TerrainHorizonProfile(session.Observer, [], false, "Environmental horizon loading", session.Instant)
+            : TerrainHorizonProfile.Disabled(session.Observer, session.Instant, 0,
+                session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres);
         return new PlanningSnapshot(session, position, path, lenses.Calculate(session.Lens), pendingHorizon,
             new TerrainCrossings(null, null), new WeatherResult(DataState.Loading, null, "Loading weather…"),
             new AstronomyContext(sun, moon), objectPlans);
@@ -179,6 +181,7 @@ public sealed class PlanningService(
     {
         ObserverHeightAboveGroundMetres = AppSettings.NormaliseCameraHeight(cameraHeightAboveGroundMetres),
         ManualGroundElevationOverrideMetres =
-            session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres
+            session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres,
+        EnableTerrainCalculations = session.EnableTerrainCalculations
     };
 }

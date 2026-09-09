@@ -180,10 +180,8 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
         _uniforms.Add("coneColour", ToColor(colour));
         _uniforms.Add("coneOpacity", parameters.ConeOpacity);
         _uniforms.Add("weatherOpacityScale", parameters.WeatherOpacityScale);
-        _uniforms.Add("hatchOpacity", parameters.HatchOpacity);
-        _uniforms.Add("hatchSpacing", parameters.HatchSpacingPixels);
-        _uniforms.Add("hatchThickness", parameters.HatchThicknessPixels);
-        _uniforms.Add("hatchHighlightOffset", parameters.HatchHighlightOffsetPixels);
+        _uniforms.Add("terrainColour", ToColor(Color.FromUInt32(parameters.TerrainColourArgb)));
+        _uniforms.Add("terrainTintOpacity", parameters.TerrainTintOpacity);
 
         _children.Reset();
         _children.Add("terrainProfile", profile.Shader);
@@ -230,7 +228,7 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
                     ? Math.Clamp((float)(texel.ObstructionDistanceMetres / maximumDistanceMetres), 0, 1)
                     : 0;
                 pixels[pixel + 1] = texel.IsObstructed ? 1 : 0;
-                pixels[pixel + 2] = 0;
+                pixels[pixel + 2] = texel.IsObstructed ? Math.Clamp(texel.EffectiveCoverage, 0, 1) : 0;
                 pixels[pixel + 3] = 1;
             }
             bitmap.NotifyPixelsChanged();
@@ -267,31 +265,17 @@ public static class EnvironmentalOverlayShader
         uniform half4 coneColour;
         uniform float coneOpacity;
         uniform float weatherOpacityScale;
-        uniform float hatchOpacity;
-        uniform float hatchSpacing;
-        uniform float hatchThickness;
-        uniform float hatchHighlightOffset;
+        uniform half4 terrainColour;
+        uniform float terrainTintOpacity;
         uniform shader terrainProfile;
 
         const float TWO_PI = 6.28318530717958647692;
         const float MERCATOR_RADIUS = 6378137.0;
         const float EARTH_RADIUS = 6371008.8;
+        const half TERRAIN_FRONTIER_OPACITY = 0.60;
 
         half4 premul(half3 rgb, half alpha) {
             return half4(rgb * alpha, alpha);
-        }
-
-        half4 terrainHatch(float2 p) {
-            float diagonal = p.x + p.y;
-            float dark = 1.0 - step(hatchThickness / hatchSpacing,
-                                    fract(diagonal / hatchSpacing));
-            float light = 1.0 - step((hatchThickness * 0.5) / hatchSpacing,
-                                     fract((diagonal - hatchHighlightOffset) / hatchSpacing));
-            if (light > 0.0)
-                return premul(half3(0.925, 0.945, 0.97), half(hatchOpacity * 0.82));
-            if (dark > 0.0)
-                return premul(half3(0.015, 0.02, 0.028), half(hatchOpacity));
-            return half4(0.0);
         }
 
         half4 over(half4 foreground, half4 background) {
@@ -368,9 +352,18 @@ public static class EnvironmentalOverlayShader
 
             half luminance = dot(coneColour.rgb, half3(0.2126, 0.7152, 0.0722));
             half4 cone = weatherReached
-                ? premul(half3(luminance), half(coneOpacity * weatherOpacityScale))
-                : premul(coneColour.rgb, half(coneOpacity));
-            return terrainReached ? over(terrainHatch(p), cone) : cone;
+                ? premul(half3(luminance * 0.55), half(min(0.7, coneOpacity * 1.6 * weatherOpacityScale)))
+                : premul(coneColour.rgb, half(min(0.7, coneOpacity * 1.8)));
+            // Presentation only: preserve the Pass C physical coverage and sqrt curve.
+            half displayStrength = sqrt(clamp(terrain.b, half(0.0), half(1.0)));
+            half4 result = terrainReached
+                ? over(premul(terrainColour.rgb, half(terrainTintOpacity) * displayStrength), cone) : cone;
+            // A one-pixel radial frontier with a soft edge, in screen-relative ground metres.
+            // The profile distance is the meaningful camera-frame frontier, not a new raycast.
+            float groundPixel = max(0.001, length(float2(worldStepXX, worldStepXY)) * cosObserverLatitude);
+            half frontier = half(clamp(1.0 - abs(distance - terrainDistance) / groundPixel, 0.0, 1.0));
+            return hasTerrain && displayStrength > 0.0
+                ? over(premul(terrainColour.rgb, TERRAIN_FRONTIER_OPACITY * frontier), result) : result;
         }
         """;
 }

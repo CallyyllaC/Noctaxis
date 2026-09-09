@@ -75,7 +75,7 @@ public sealed class CalculationTests
             TerrainCastAngularDetailDegrees: 100).Normalised();
         Assert.Equal(50, settings.ShadingOpacityPercent);
         Assert.Equal(.5, settings.LineThickness);
-        Assert.Equal(45, settings.TerrainCastAngularDetailDegrees);
-        Assert.Equal(10, new CameraFramingSettings().TerrainCastAngularDetailDegrees);
+        Assert.Equal(1, settings.TerrainCastAngularDetailDegrees);
+        Assert.Equal(1, new CameraFramingSettings().TerrainCastAngularDetailDegrees);
     }
 }

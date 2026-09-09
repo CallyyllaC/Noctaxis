@@ -111,7 +111,7 @@ public sealed class TerrainSurfaceResolverTests
     public async Task FullProfileClassifiesInBatchesRatherThanPerTerrainSample()
     {
         var cover = new CountingCover(LandCoverClass.Grassland);
-        var horizon = new HorizonService(Resolver(new ConstantTerrain(10), cover),
+        var horizon = new HorizonService(Resolver(new ConstantTerrain(-10), cover),
             NullLogger<HorizonService>.Instance, 6);
 
         var profile = await horizon.GetProfileAsync(new GeoCoordinate(53, -1),
@@ -119,9 +119,70 @@ public sealed class TerrainSurfaceResolverTests
 
         var terrainSamples = profile.Samples.Sum(sample => sample.Sightline?.Count ?? 0);
         Assert.Equal(24_120, terrainSamples);
-        Assert.Equal(1, cover.BatchCalls);
+        Assert.Equal(15, cover.BatchCalls); // One negative-only classification per bounded 24-bearing batch.
         Assert.Equal(terrainSamples, cover.BatchCoordinates);
         Assert.Equal(1, cover.SingleCalls);
+    }
+
+    [Theory]
+    [InlineData(10000, 0)]
+    [InlineData(1000, 50)]
+    [InlineData(1000, 1000)]
+    public async Task CalculationClassifiesOnlyNegativeCoordinatesInOriginalOrder(int count, int negatives)
+    {
+        var coordinates = Enumerable.Range(0, count).Select(i => new GeoCoordinate(51, i / 1000d)).ToArray();
+        double Height(GeoCoordinate point)
+        {
+            var index = Math.Round(point.Longitude * 1000);
+            return index < negatives ? -index - 1 : index;
+        }
+        var cover = new CountingCover(LandCoverClass.Grassland);
+        var result = await Resolver(new FunctionTerrain(Height), cover).GetSurfaceElevationsAsync(coordinates, default);
+        Assert.Equal(negatives, cover.BatchCoordinates);
+        Assert.Equal(negatives == 0 ? 0 : 1, cover.BatchCalls);
+        Assert.Equal(coordinates.Select(Height).Select(x => (double?)x), result.SurfaceElevationsMetres);
+        Assert.Equal(coordinates.Take(negatives), cover.Requested);
+    }
+
+    [Fact]
+    public async Task NegativeDuplicatesAndUnavailableClassificationPreserveOrderAndFallback()
+    {
+        GeoCoordinate[] coordinates = [new(-3, 0), new(4, 0), new(-3, 0), new(0, 0), new(-7, 0)];
+        var result = await Resolver(new FunctionTerrain(p => p.Latitude), new UnavailableCover())
+            .GetSurfaceElevationsAsync(coordinates, default);
+        Assert.Equal(coordinates.Select(p => (double?)p.Latitude), result.SurfaceElevationsMetres);
+        foreach (var index in new[] { 0, 2, 4 })
+        {
+            Assert.Null(result.Classifications[index]);
+            Assert.Equal(TerrainSurfaceResolutionReason.RawTerrainClassificationUnavailable, result.ResolutionReasons[index]);
+            Assert.False(result.AdjustedSamples[index]);
+        }
+    }
+
+    [Fact]
+    public async Task PositiveWaterCalculationSkipsLabelsButExplicitDebugRequestRetainsThem()
+    {
+        var cover = new CountingCover(LandCoverClass.PermanentWater);
+        var resolver = Resolver(new ConstantTerrain(120), cover);
+        var coordinate = new GeoCoordinate(51, -2);
+        var calculation = await resolver.GetCalculationSampleAsync(coordinate, default);
+        Assert.Equal(120, calculation.SurfaceElevation.Value);
+        Assert.Equal(0, cover.SingleCalls);
+        var debug = await resolver.GetSurfaceSampleAsync(coordinate, default);
+        Assert.Equal(120, debug.SurfaceElevation.Value);
+        Assert.Equal(LandCoverClass.PermanentWater, debug.Resolution.Classification);
+        Assert.Equal(1, cover.SingleCalls);
+    }
+
+    [Fact]
+    public async Task PositiveHorizonDoesNotRequestDebugClassification()
+    {
+        var cover = new CountingCover(LandCoverClass.PermanentWater);
+        var profile = await new HorizonService(Resolver(new ConstantTerrain(10), cover),
+            NullLogger<HorizonService>.Instance).GetProfileAsync(new(51, -2), new(MaximumDistanceMetres: 1000), default);
+        Assert.True(profile.HasTerrainCoverage);
+        Assert.Equal(0, cover.SingleCalls);
+        Assert.Equal(0, cover.BatchCoordinates);
     }
 
     [Fact]
@@ -210,6 +271,7 @@ public sealed class TerrainSurfaceResolverTests
 
     private sealed class CountingCover(LandCoverClass classification) : FunctionCover(_ => classification)
     {
+        public List<GeoCoordinate> Requested { get; } = [];
         private int _singleCalls;
         private int _batchCalls;
         private int _batchCoordinates;
@@ -229,6 +291,7 @@ public sealed class TerrainSurfaceResolverTests
         {
             Interlocked.Increment(ref _batchCalls);
             Interlocked.Add(ref _batchCoordinates, coordinates.Count);
+            lock (Requested) Requested.AddRange(coordinates);
             return base.GetLandCoversAsync(coordinates, cancellationToken);
         }
     }

@@ -21,7 +21,8 @@ public enum TerrainElevationResolutionState
 {
     Unresolved,
     TerrainResolved,
-    ManualOverride
+    ManualOverride,
+    TerrainDisabledFallback
 }
 
 public sealed record ObserverElevationState(
@@ -29,22 +30,24 @@ public sealed record ObserverElevationState(
     double? ManualGroundElevationOverrideAslMetres = null)
 {
     [JsonIgnore]
+    public bool TerrainCalculationsEnabled { get; init; } = true;
+    [JsonIgnore]
     public bool IsManualOverride => ManualGroundElevationOverrideAslMetres.HasValue;
 
     [JsonIgnore]
     public TerrainElevationResolutionState ResolutionState => ManualGroundElevationOverrideAslMetres.HasValue
         ? TerrainElevationResolutionState.ManualOverride
+        : !TerrainCalculationsEnabled ? TerrainElevationResolutionState.TerrainDisabledFallback
         : TerrainGroundElevationAslMetres.HasValue
             ? TerrainElevationResolutionState.TerrainResolved
             : TerrainElevationResolutionState.Unresolved;
 
     [JsonIgnore]
     public double? ResolvedGroundElevationAslMetres =>
-        ManualGroundElevationOverrideAslMetres ?? TerrainGroundElevationAslMetres;
+        ManualGroundElevationOverrideAslMetres ?? (!TerrainCalculationsEnabled ? 0 : TerrainGroundElevationAslMetres);
 
     public double ResolveGroundElevationAsl(double fallbackGroundElevationAslMetres) =>
-        ManualGroundElevationOverrideAslMetres ?? TerrainGroundElevationAslMetres ??
-        fallbackGroundElevationAslMetres;
+        ResolvedGroundElevationAslMetres ?? fallbackGroundElevationAslMetres;
 
     public double EffectiveObserverAltitudeAsl(double fallbackGroundElevationAslMetres,
         double cameraHeightAboveGroundMetres) =>
@@ -266,24 +269,35 @@ public sealed record CameraFramingSettings(
     bool ShowVisibilityLimits = true,
     double ShadingOpacityPercent = 10,
     double LineThickness = 1.25,
-    double TerrainCastAngularDetailDegrees = 10)
+    double TerrainCastAngularDetailDegrees = 1,
+    double CameraPitchDegrees = 0,
+    double MinimumTerrainFrameCoveragePercent = 5,
+    string TerrainObstructionColour = "#9A6F9E",
+    double TerrainTintStrengthPercent = 40)
 {
-    public const double DefaultTerrainCastAngularDetailDegrees = 10;
+    public const string DefaultTerrainObstructionColour = "#9A6F9E";
+    public const double DefaultTerrainCastAngularDetailDegrees = 1;
     public const double MinimumTerrainCastAngularDetailDegrees = 1;
     public const double MaximumTerrainCastAngularDetailDegrees = 45;
 
     public CameraFramingSettings Normalised() => this with
     {
+        TerrainObstructionColour = NormaliseTerrainColour(TerrainObstructionColour),
+        TerrainTintStrengthPercent = Math.Clamp(double.IsFinite(TerrainTintStrengthPercent) ? TerrainTintStrengthPercent : 40, 15, 55),
         ShadingOpacityPercent = Math.Clamp(
             double.IsFinite(ShadingOpacityPercent) ? ShadingOpacityPercent : 10, 0, 50),
         LineThickness = Math.Clamp(double.IsFinite(LineThickness) ? LineThickness : 1.25, 0.5, 5),
-        TerrainCastAngularDetailDegrees = Math.Clamp(
-            double.IsFinite(TerrainCastAngularDetailDegrees)
-                ? TerrainCastAngularDetailDegrees
-                : DefaultTerrainCastAngularDetailDegrees,
-            MinimumTerrainCastAngularDetailDegrees,
-            MaximumTerrainCastAngularDetailDegrees)
+        // Retain the serialized field for old settings files, but never apply coarse detail.
+        TerrainCastAngularDetailDegrees = DefaultTerrainCastAngularDetailDegrees,
+        CameraPitchDegrees = Math.Clamp(double.IsFinite(CameraPitchDegrees) ? CameraPitchDegrees : 0, -90, 90),
+        MinimumTerrainFrameCoveragePercent = Math.Clamp(double.IsFinite(MinimumTerrainFrameCoveragePercent) ? MinimumTerrainFrameCoveragePercent : 5, 0, 50)
     };
+
+    private static string NormaliseTerrainColour(string? value) =>
+        value is { Length: 7 } && value[0] == '#' &&
+        uint.TryParse(value.AsSpan(1), System.Globalization.NumberStyles.HexNumber,
+            System.Globalization.CultureInfo.InvariantCulture, out _)
+            ? value.ToUpperInvariant() : DefaultTerrainObstructionColour;
 }
 
 public sealed record CameraFramingGuide(
@@ -297,7 +311,11 @@ public sealed record FramingTerrainObstructionSample(
     double BearingDegrees,
     bool IsObstructed,
     double? FirstObstructionDistanceMetres = null,
-    IReadOnlyList<HorizonVisibilitySegment>? VisibilitySegments = null)
+    IReadOnlyList<HorizonVisibilitySegment>? VisibilitySegments = null,
+    double EffectiveCoverage = 1,
+    double RawCoverage = 0,
+    double? FrameTerrainHorizonDegrees = null,
+    double? ThresholdAltitudeDegrees = null)
 {
     public double? GroundFirstObstructionDistanceMetres => FirstObstructionDistanceMetres;
     [JsonIgnore]
@@ -343,7 +361,8 @@ public sealed record FramingVisibilityAssessment(
     double? TerrainHorizonDegrees,
     double? WeatherVisibilityDistanceMetres,
     string Status,
-    IReadOnlyList<FramingTerrainObstructionSample>? TerrainObstructions = null)
+    IReadOnlyList<FramingTerrainObstructionSample>? TerrainObstructions = null,
+    CameraTerrainDepth? CameraDepth = null)
 {
     [JsonIgnore]
     public IReadOnlyList<FramingTerrainObstructionSample> EffectiveTerrainObstructions =>
@@ -479,8 +498,16 @@ public sealed record TerrainHorizonProfile(
     bool IsComplete = true,
     int CompletedBearingCount = -1,
     Noctaxis.Core.Terrain.TerrainPipelineTimings? PipelineTimings = null,
-    Noctaxis.Core.Terrain.TerrainObserverDiagnostics? ObserverDiagnostics = null)
+    Noctaxis.Core.Terrain.TerrainObserverDiagnostics? ObserverDiagnostics = null,
+    bool TerrainCalculationsEnabled = true)
 {
+    public static TerrainHorizonProfile Disabled(GeoCoordinate observer, Instant instant,
+        double cameraHeight, double? manualGround = null) => new(observer, [], false,
+            "Terrain calculations disabled", instant, ObserverHeightAboveGroundMetres: cameraHeight,
+            ChosenObserverGroundElevationMetres: manualGround ?? 0,
+            ObserverAbsoluteElevationMetres: (manualGround ?? 0) + AppSettings.NormaliseCameraHeight(cameraHeight),
+            ObserverDatumMessage: manualGround.HasValue ? "Manual ground-elevation override" : "Terrain disabled: 0 m MSL fallback",
+            TerrainCalculationsEnabled: false);
     public bool HasTerrainCoverage => HasDemCoverage;
     public Noctaxis.Core.Environment.EnvironmentalValue<double>? GroundElevationAtObserver =>
         TerrainElevationAtObserver;
@@ -500,10 +527,10 @@ public sealed record TerrainHorizonProfile(
     public double VisibleAltitudeAt(double azimuthDegrees) => TerrainAltitudeAt(azimuthDegrees) ?? 0;
 
     public HorizonObstruction TerrainObstructionAt(double bearingDegrees) =>
-        FindObstructionAtAngle(bearingDegrees, 0);
+        TerrainCalculationsEnabled ? FindObstructionAtAngle(bearingDegrees, 0) : default;
 
     public HorizonObstruction OccultationAt(double bearingDegrees, double sightlineElevationDegrees) =>
-        FindObstructionAtAngle(bearingDegrees, sightlineElevationDegrees);
+        TerrainCalculationsEnabled ? FindObstructionAtAngle(bearingDegrees, sightlineElevationDegrees) : default;
 
     [Obsolete("Use TerrainObstructionAt for plan-view obstruction or OccultationAt for a vertical sightline.")]
     public HorizonObstruction ObstructionAt(double bearingDegrees, double sightlineElevationDegrees) =>
@@ -725,12 +752,16 @@ public sealed record AppSettings(
     double CameraHeightAboveGroundMetres = 1.7,
     EquipmentSettings? Equipment = null,
     bool TerrainDebugOverlay = false,
-    long TerrainCacheLimitBytes = 2L * 1024 * 1024 * 1024)
+    long TerrainCacheLimitBytes = 2L * 1024 * 1024 * 1024,
+      bool EnableTerrainCalculations = true,
+      double TerrainMinimapContext = 2.5)
 {
     public const string UseSystemTimeZoneId = "system";
     [JsonIgnore]
     public long EffectiveTerrainCacheLimitBytes => Math.Clamp(TerrainCacheLimitBytes, 0, 1024L * 1024 * 1024 * 1024);
-    public const double DefaultCameraHeightAboveGroundMetres = 1.7;
+      public const double DefaultCameraHeightAboveGroundMetres = 1.7;
+      public const double DefaultTerrainMinimapContext = 2.5;
+      public double EffectiveTerrainMinimapContext => Math.Clamp(double.IsFinite(TerrainMinimapContext) ? TerrainMinimapContext : DefaultTerrainMinimapContext, 1.0, 2.5);
 
     [JsonIgnore]
     public WeatherSettings EffectiveWeather => Weather ?? new();
@@ -773,7 +804,8 @@ public sealed record PlanningSession(
     IReadOnlyList<CelestialObjectSelection>? VisibleObjects = null,
     string? CameraProfileId = null,
     string? LensProfileId = null,
-    ObserverElevationState? ObserverElevation = null)
+    ObserverElevationState? ObserverElevation = null,
+    bool EnableTerrainCalculations = true)
 {
     public static PlanningSession Default(Instant now, string timeZoneId) => new(
         new GeoCoordinate(51.5074, -0.1278, 15), now, timeZoneId, "sun",
@@ -786,7 +818,20 @@ public sealed record PlanningSession(
         : [new CelestialObjectSelection("sun", true, 0), new CelestialObjectSelection("moon", true, 1), new CelestialObjectSelection(TargetId, true, 2)];
 
     [JsonIgnore]
-    public ObserverElevationState EffectiveObserverElevation => ObserverElevation ?? new();
+    public ObserverElevationState EffectiveObserverElevation => (ObserverElevation ?? new()) with
+        { TerrainCalculationsEnabled = EnableTerrainCalculations };
+
+    public PlanningSession WithTerrainCalculationMode(bool enabled)
+    {
+        var state = EffectiveObserverElevation with
+        {
+            TerrainCalculationsEnabled = enabled,
+            TerrainGroundElevationAslMetres = enabled == EnableTerrainCalculations
+                ? EffectiveObserverElevation.TerrainGroundElevationAslMetres : null
+        };
+        return this with { EnableTerrainCalculations = enabled, ObserverElevation = state,
+            Observer = Observer with { ElevationMetres = state.ResolveGroundElevationAsl(enabled ? Observer.ElevationMetres : 0) } };
+    }
 }
 
 public sealed record PlanningSnapshot(

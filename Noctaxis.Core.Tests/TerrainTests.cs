@@ -212,6 +212,21 @@ public sealed class TerrainTests
         });
     }
 
+    [Fact]
+    public async Task InvalidateCache_RebuildsSameObserverProfile()
+    {
+        var terrain = new CountingTerrain();
+        var service = new HorizonService(terrain, NullLogger<HorizonService>.Instance);
+        var observer = new GeoCoordinate(53, -1);
+        var request = new TerrainProfileRequest(8, 500, 500);
+        var before = await service.GetProfileAsync(observer, request, default);
+        service.InvalidateCache();
+        var after = await service.GetProfileAsync(observer, request, default);
+        Assert.NotSame(before, after);
+        Assert.Equal(2, terrain.BatchRequests);
+        Assert.Equal(before.GroundAltitudeAt(0), after.GroundAltitudeAt(0));
+    }
+
     private sealed class ConstantTerrain(double elevation) : ITerrainElevationProvider
     {
         public Task<EnvironmentalValue<double>> GetElevationAsync(GeoCoordinate coordinate, CancellationToken token) =>

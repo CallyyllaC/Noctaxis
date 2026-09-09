@@ -258,8 +258,15 @@ public sealed class WorldCoverLandCoverProvider : ILandCoverProvider
         var generation = cache.TerrainGeneration;
         if (Interlocked.Exchange(ref _generation, generation) != generation) _tiles.Clear();
         var lazy = _tiles.GetOrAdd(tile,
-            _ => new Lazy<Task<WorldCoverTileResult>>(() => LoadTileAsync(tile, cancellationToken)));
-        var result = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+            _ => new Lazy<Task<WorldCoverTileResult>>(() => LoadTileAsync(tile, CancellationToken.None)));
+        WorldCoverTileResult result;
+        try { result = await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false); }
+        catch
+        {
+            if (lazy.IsValueCreated && lazy.Value.IsCompleted && !lazy.Value.IsCompletedSuccessfully)
+                _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<WorldCoverTileResult>>>(tile, lazy));
+            throw;
+        }
         if (result.Path is not null && !File.Exists(result.Path))
         {
             _tiles.TryRemove(new KeyValuePair<string, Lazy<Task<WorldCoverTileResult>>>(tile, lazy));

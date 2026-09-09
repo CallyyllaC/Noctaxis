@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Domain;
@@ -11,15 +10,44 @@ namespace Noctaxis.Core.Environment;
 /// Builds the observer-scoped static environmental snapshot used by Planner. The snapshot is
 /// independent of date, weather, map viewport and camera bearing, and is therefore safe to reuse.
 /// </summary>
-public sealed class PlannerEnvironmentService(
-    IHorizonService horizons,
-    ISettlementDataProvider settlement,
-    ILogger<PlannerEnvironmentService> logger) : IPlannerEnvironmentService
+public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
 {
+    private readonly IHorizonService horizons;
+    private readonly ISettlementDataProvider settlement;
+    private readonly ILogger<PlannerEnvironmentService> logger;
+    public PlannerEnvironmentService(IHorizonService horizons, ISettlementDataProvider settlement,
+        ILogger<PlannerEnvironmentService> logger, IEnvironmentalTileCache? terrainCache = null)
+    {
+        this.horizons = horizons;
+        this.settlement = settlement;
+        this.logger = logger;
+        terrainCache?.RegisterTerrainInvalidation(InvalidateCache);
+    }
+
     public static readonly TerrainProfileRequest DefaultHorizonRequest = new();
     private const double SettlementSampleHalfSizeDegrees = 0.001;
-    private readonly ConcurrentDictionary<EnvironmentCacheKey, Lazy<Task<PlannerEnvironmentSnapshot>>> _snapshots =
-        new();
+    public const int CompletedSnapshotCapacity = 4;
+    private readonly object _gate = new();
+    private long _generation;
+    private readonly Dictionary<EnvironmentCacheKey, BuildEntry> _snapshots = new();
+    private readonly CompletedResultCache<EnvironmentCacheKey, PlannerEnvironmentSnapshot> _completed =
+        new(CompletedSnapshotCapacity, snapshot => HorizonService.EstimateProfileBytes(snapshot.HorizonProfile) +
+            (snapshot.Settlement.Value is { } raster ?
+                ((long)raster.BuildingFraction.Length + raster.BuildingHeightMetres.Length) * sizeof(float) : 0));
+    public CompletedResultCacheDiagnostics CompletedCacheDiagnostics => _completed.Diagnostics;
+    public int ActiveBuildCount { get { lock (_gate) return _snapshots.Count; } }
+
+    private sealed class BuildEntry
+    {
+        public BuildEntry(Func<BuildEntry, Task<PlannerEnvironmentSnapshot>> build) =>
+            Task = new(() => build(this), LazyThreadSafetyMode.ExecutionAndPublication);
+        public Lazy<Task<PlannerEnvironmentSnapshot>> Task { get; }
+    }
+
+    public void InvalidateCache()
+    {
+        lock (_gate) { _generation++; _completed.Clear(); _snapshots.Clear(); }
+    }
 
     public async Task<PlannerEnvironmentSnapshot> GetSnapshotAsync(GeoCoordinate observer,
         CancellationToken cancellationToken) =>
@@ -30,19 +58,34 @@ public sealed class PlannerEnvironmentService(
     {
         var normalised = observer.Normalised();
         var key = new EnvironmentCacheKey(normalised, terrainRequest);
-        var lazy = _snapshots.GetOrAdd(key, _ => new Lazy<Task<PlannerEnvironmentSnapshot>>(
-            () => BuildAsync(normalised, terrainRequest, CancellationToken.None),
-            LazyThreadSafetyMode.ExecutionAndPublication));
+        BuildEntry entry;
+        lock (_gate)
+        {
+            if (_completed.TryGetValue(key, out var cached)) return cached;
+            if (!_snapshots.TryGetValue(key, out entry!))
+            {
+                var generation = _generation;
+                entry = new BuildEntry(current => BuildAndCacheAsync(key, current, generation, normalised, terrainRequest));
+                _snapshots.Add(key, entry);
+            }
+        }
+        return await entry.Task.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<PlannerEnvironmentSnapshot> BuildAndCacheAsync(EnvironmentCacheKey key,
+        BuildEntry entry, long generation, GeoCoordinate observer, TerrainProfileRequest request)
+    {
         try
         {
-            return await lazy.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+            var result = await BuildAsync(observer, request, CancellationToken.None).ConfigureAwait(false);
+            lock (_gate) { if (_generation == generation) _completed.TryAdd(key, result); }
+            return result;
         }
-        catch
+        finally
         {
-            if (lazy.IsValueCreated && lazy.Value.IsCompleted && !lazy.Value.IsCompletedSuccessfully)
-                _snapshots.TryRemove(new KeyValuePair<EnvironmentCacheKey,
-                    Lazy<Task<PlannerEnvironmentSnapshot>>>(key, lazy));
-            throw;
+            lock (_gate)
+                if (_snapshots.TryGetValue(key, out var current) && ReferenceEquals(current, entry))
+                    _snapshots.Remove(key);
         }
     }
 
@@ -53,13 +96,19 @@ public sealed class PlannerEnvironmentService(
     public Task<TerrainHorizonProfile> GetPriorityHorizonAsync(GeoCoordinate observer,
         TerrainProfileRequest terrainRequest, IReadOnlyList<double> bearings,
         CancellationToken cancellationToken) =>
+        !terrainRequest.EnableTerrainCalculations ? Task.FromResult(TerrainHorizonProfile.Disabled(observer,
+            SystemClock.Instance.GetCurrentInstant(), terrainRequest.ObserverHeightAboveGroundMetres,
+            terrainRequest.ManualGroundElevationOverrideMetres)) :
         horizons.GetPriorityProfileAsync(observer.Normalised(), terrainRequest, bearings,
             cancellationToken);
 
     private async Task<PlannerEnvironmentSnapshot> BuildAsync(GeoCoordinate observer,
         TerrainProfileRequest terrainRequest, CancellationToken cancellationToken)
     {
-        var horizonTask = horizons.GetProfileAsync(observer, terrainRequest, cancellationToken);
+        var horizonTask = terrainRequest.EnableTerrainCalculations
+            ? horizons.GetProfileAsync(observer, terrainRequest, cancellationToken)
+            : Task.FromResult(TerrainHorizonProfile.Disabled(observer, SystemClock.Instance.GetCurrentInstant(),
+                terrainRequest.ObserverHeightAboveGroundMetres, terrainRequest.ManualGroundElevationOverrideMetres));
         var settlementTask = TimedSettlementAsync(observer, cancellationToken);
         var horizon = await horizonTask.ConfigureAwait(false);
 

@@ -1,0 +1,14 @@
+[
+  {
+    "bearing": 90,
+    "milliseconds": 10.630984999999999,
+    "allocatedBytes": 776146,
+    "providerCalls": 0
+  },
+  {
+    "bearing": 90.35,
+    "milliseconds": 6.30802,
+    "allocatedBytes": 11192130,
+    "providerCalls": 0
+  }
+]

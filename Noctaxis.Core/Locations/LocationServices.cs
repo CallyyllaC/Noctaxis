@@ -23,10 +23,12 @@ public sealed class OpenMeteoLocationSearchProvider(
     private sealed record CacheEntry(Instant RetrievedAt, IReadOnlyList<LocationSearchResult> Results);
     private readonly Dictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
+    internal const int MaximumCachedQueries = 128;
     public string Attribution => "Location data: Open-Meteo / GeoNames";
 
     public async Task<IReadOnlyList<LocationSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         query = query.Trim();
         if (query.Length < 2) return [];
         lock (_gate)
@@ -48,11 +50,20 @@ public sealed class OpenMeteoLocationSearchProvider(
                 item.Id.ToString(CultureInfo.InvariantCulture), item.Name,
                 new GeoCoordinate(item.Latitude, item.Longitude, item.Elevation ?? 0),
                 JoinRegion(item.Admin1, item.Country), item.Country, item.TimeZone, Attribution)).ToArray() ?? [];
-            lock (_gate) _cache[query] = new CacheEntry(clock.GetCurrentInstant(), results);
+            lock (_gate)
+            {
+                var now = clock.GetCurrentInstant();
+                foreach (var expired in _cache.Where(item => now - item.Value.RetrievedAt >= Duration.FromMinutes(30))
+                             .Select(item => item.Key).ToArray())
+                    _cache.Remove(expired);
+                _cache[query] = new CacheEntry(now, results);
+                while (_cache.Count > MaximumCachedQueries)
+                    _cache.Remove(_cache.MinBy(item => item.Value.RetrievedAt).Key);
+            }
             return results;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or OperationCanceledException)
         {
             logger.LogWarning(ex, "Location search failed");
             throw new InvalidOperationException("Location search is unavailable. Check the network connection and try again.", ex);

@@ -11,6 +11,10 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
     private readonly SemaphoreSlim _modalGate = new(1, 1);
     private NoctaxisDialogWindow? _activeDialog;
     public Window? Owner { get; set; }
+    public Task<bool> ConfirmClearTerrainCacheAsync(CancellationToken cancellationToken = default) =>
+        ShowOwnedDialogAsync(() => new ConfirmationDialog("Clear terrain cache?",
+            "Cached terrain and terrain-classification data will be removed and downloaded again when needed. Saved locations and settings are not affected.",
+            "Clear terrain cache"), false, cancellationToken);
 
     public async Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default)
     {

@@ -232,9 +232,102 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
         double longitude, int x, int y) => Assert.Equal(new TerrariumTileKey(2, x, y),
         TerrariumTerrainProvider.LocatePixel(new GeoCoordinate(latitude, longitude), 2).Tile);
 
+    [Fact]
+    public async Task ManualClear_InvalidatesDecodedTerrariumAndReacquiresThroughNormalProvider()
+    {
+        Seed(new TerrariumTileKey(1, 1, 1), 42);
+        var bytes = File.ReadAllBytes(Path.Combine(_directory, "1-1-1.png"));
+        var handler = new PngHandler(bytes);
+        using var http = new HttpClient(handler);
+        var paths = new TerrainPaths(_directory);
+        var manager = new TerrainDiskCache(paths, NullLogger<TerrainDiskCache>.Instance);
+        var cache = new EnvironmentalTileCache(paths, NullLogger<EnvironmentalTileCache>.Instance, manager);
+        var provider = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance,
+            new TerrariumTerrainOptions(1, 4));
+        var coordinate = CoordinateAtGlobalPixelCentre(1, 256, 256);
+        Assert.Equal(42, (await provider.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(42, (await provider.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(1, handler.Calls);
+        await manager.ClearAsync();
+        Assert.Equal(0, manager.Usage.Bytes);
+        Assert.Equal(42, (await provider.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal(2, provider.Metrics.TileLoads);
+    }
+
+    private sealed class TerrainPaths(string path) : Noctaxis.Core.Persistence.IUserDataPathProvider
+    { public string GetApplicationDataDirectory() => path; }
+    private sealed class PngHandler(byte[] bytes) : HttpMessageHandler
+    {
+        public int Calls { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        { Calls++; return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            { Content = new ByteArrayContent(bytes) }); }
+    }
+
+    [Fact]
+    public async Task BulkSamplingMatchesSingleSamplingAcrossSeamsCornersAndDateLine()
+    {
+        foreach (var x in new[] { 0, 1 })
+        foreach (var y in new[] { 0, 1 }) Seed(new TerrariumTileKey(1, x, y), -125.25 + x * 300 + y * 70);
+        var coordinates = new List<GeoCoordinate>();
+        foreach (var x in new[] { .0, .25, .5, 255.75, 256, 256.25, 256.5, 511.75 })
+        foreach (var y in new[] { .0, .25, .5, 255.75, 256, 256.25, 256.5, 511.75 })
+            coordinates.Add(CoordinateAtGlobalPixel(1, x, y));
+        coordinates.AddRange(coordinates.Take(12).ToArray());
+        var provider = Provider(1);
+        var bulk = await provider.GetElevationsAsync(coordinates, default);
+        for (var i = 0; i < coordinates.Count; i++)
+        {
+            var single = await provider.GetElevationSampleAsync(coordinates[i], default);
+            Assert.True(single.Value.HasValue);
+            Assert.Equal(single.Value.Value, bulk.ElevationsMetres[i]);
+            Assert.Equal(single.Diagnostics.Status, bulk.StatusAt(i));
+        }
+        Assert.Equal(4, provider.Metrics.TileLoads);
+    }
+
+    [Fact]
+    public async Task BulkSamplingPreservesMissingNeighbourAndHonoursCancellation()
+    {
+        Seed(new TerrariumTileKey(1, 1, 1), -30);
+        var coordinates = new[] { CoordinateAtGlobalPixel(1, 256, 256), CoordinateAtGlobalPixel(1, 270, 270) };
+        var provider = Provider(1);
+        var bulk = await provider.GetElevationsAsync(coordinates, default);
+        Assert.Null(bulk.ElevationsMetres[0]);
+        Assert.Equal(TerrainSampleStatus.Unavailable, bulk.StatusAt(0));
+        Assert.Equal(-30, bulk.ElevationsMetres[1]);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.GetElevationsAsync(coordinates, cancellation.Token));
+    }
+
     private TerrariumTerrainProvider Provider(int zoom) => new(new HttpClient(),
         new FixtureCache(_directory), NullLogger<TerrariumTerrainProvider>.Instance,
         new TerrariumTerrainOptions(zoom, 8));
+
+    [Fact]
+    public async Task PreloadCancellationStopsDiscoveryBeforeAnyTileAcquisition()
+    {
+        using var cancellation = new CancellationTokenSource();
+        var coordinates = new CancelOnReadCoordinates(cancellation);
+        var provider = Provider(1);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.PreloadAsync(coordinates, cancellation.Token));
+        Assert.InRange(coordinates.Reads, 1, 256);
+        Assert.Equal(0, provider.Metrics.TileLoads);
+    }
+
+    private sealed class CancelOnReadCoordinates(CancellationTokenSource cancellation) : IReadOnlyList<GeoCoordinate>
+    {
+        public int Reads;
+        public int Count => 10000;
+        public GeoCoordinate this[int index]
+        {
+            get { Reads++; cancellation.Cancel(); return new GeoCoordinate(51, -2); }
+        }
+        public IEnumerator<GeoCoordinate> GetEnumerator() => throw new NotSupportedException();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
 
     private void Seed(TerrariumTileKey key, double elevation)
     {

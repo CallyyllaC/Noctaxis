@@ -15,10 +15,33 @@ public sealed class WindowPolicyTests
         var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
             "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml"));
         var markup = File.ReadAllText(sourcePath);
-        Assert.Contains("Content=\"Terrain debug overlay\"", markup);
+        Assert.DoesNotContain("Terrain cast angular detail", markup);
+        Assert.DoesNotContain("SettingsTerrainCastAngularDetailDegrees", markup);
+        Assert.Contains("Content=\"Enable terrain diagnostics\"", markup);
         Assert.Contains("IsChecked=\"{Binding SettingsTerrainDebugOverlay}\"", markup);
-        Assert.Contains("ShowTerrainDebug=\"{Binding ShowTerrainDebugOverlay}\"", markup);
+        Assert.Contains("Profile=\"{Binding EnabledTerrainDiagnosticsProfile}\"", markup);
         Assert.Contains("Copy terrain debug snapshot", markup);
+        var document = System.Xml.Linq.XDocument.Parse(markup);
+        var tabs = document.Descendants().Where(element => element.Name.LocalName == "TabItem").ToArray();
+        var debug = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Debug");
+        var planner = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Planner");
+        var appearance = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Appearance");
+        var data = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Data");
+        Assert.Single(debug.Descendants(), element => element.Name.LocalName == "TerrainDebugMiniMap");
+        Assert.DoesNotContain(planner.Descendants(), element => element.Name.LocalName == "TerrainDebugMiniMap");
+        Assert.Single(debug.Descendants(), element => (string?)element.Attribute("IsChecked") == "{Binding SettingsTerrainDebugOverlay}");
+        Assert.Single(appearance.Descendants(), element => (string?)element.Attribute("IsChecked") == "{Binding SettingsEnableTerrainCalculations}");
+        Assert.Single(data.Descendants(), element => (string?)element.Attribute("Command") == "{Binding ClearTerrainCacheCommand}");
+        var minimap = Assert.Single(planner.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
+        Assert.Equal("208", (string?)minimap.Attribute("Width"));
+        Assert.Equal("False", (string?)minimap.Parent!.Parent!.Attribute("IsHitTestVisible"));
+        Assert.Equal("Top", (string?)minimap.Parent.Parent.Attribute("VerticalAlignment"));
+        Assert.Equal("Left", (string?)minimap.Parent.Parent.Attribute("HorizontalAlignment"));
+        Assert.Null(minimap.Parent.Parent.Attribute("IsVisible"));
+        Assert.Single(minimap.Parent.Elements(), element => (string?)element.Attribute("Text") == "Terrain");
+        Assert.DoesNotContain(planner.Descendants(), element => (string?)element.Attribute("Text") == "Local terrain");
+        Assert.Equal("{Binding GroundMetresPerPixel, ElementName=PlannerMap}", (string?)minimap.Attribute("MetresPerPixel"));
+        Assert.Single(document.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
     }
     [Fact]
     public void NoctaxisSecondaryWindows_UseDialogWindowPolicy()

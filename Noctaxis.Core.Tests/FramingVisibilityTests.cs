@@ -93,7 +93,7 @@ public sealed class FramingVisibilityTests
     {
         var result = _calculator.Calculate(Weather(null), Terrain(12, true), 9.6, 90, 60);
 
-        Assert.Equal(7, result.EffectiveTerrainObstructions.Count);
+        Assert.Equal(61, result.EffectiveTerrainObstructions.Count);
         Assert.Equal(60, result.EffectiveTerrainObstructions[0].BearingDegrees, 10);
         Assert.Equal(120, result.EffectiveTerrainObstructions[^1].BearingDegrees, 10);
         Assert.All(result.EffectiveTerrainObstructions, sample =>
@@ -194,7 +194,7 @@ public sealed class FramingVisibilityTests
     }
 
     [Fact]
-    public void AngularDetailChangesDerivedConeSamplingWithoutChangingTerrainProfile()
+    public void LegacyAngularDetailCannotCoarsenDerivedConeOrChangeTerrainProfile()
     {
         var terrain = AsymmetricSightlineTerrain();
         var cachedSamples = terrain.Samples;
@@ -202,8 +202,8 @@ public sealed class FramingVisibilityTests
         var tenDegrees = _calculator.Calculate(Weather(null), terrain, 10, 90, 43, 10);
         var fiveDegrees = _calculator.Calculate(Weather(null), terrain, 10, 90, 43, 5);
 
-        Assert.Equal(6, tenDegrees.EffectiveTerrainObstructions.Count);
-        Assert.Equal(10, fiveDegrees.EffectiveTerrainObstructions.Count);
+        Assert.Equal(44, tenDegrees.EffectiveTerrainObstructions.Count);
+        Assert.Equal(tenDegrees.EffectiveTerrainObstructions, fiveDegrees.EffectiveTerrainObstructions);
         Assert.Same(cachedSamples, terrain.Samples);
     }
 

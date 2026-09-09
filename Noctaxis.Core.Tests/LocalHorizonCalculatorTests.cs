@@ -28,6 +28,29 @@ public sealed class LocalHorizonCalculatorTests
     }
 
     [Fact]
+    public void ProductionCameraDetailUsesFullApproximateDegreeResolution()
+    {
+        var rays = _calculator.GetConeProfiles(Profile([1, 2]), 5, 70,
+            CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees);
+
+        Assert.Equal(1, CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees);
+        Assert.Equal(71, rays.Count);
+        Assert.All(rays.Zip(rays.Skip(1), (left, right) =>
+            Angles.NormaliseDegrees(right.BearingDegrees - left.BearingDegrees)),
+            spacing => Assert.Equal(70d / 70, spacing, 10));
+    }
+
+    [Theory]
+    [InlineData(3, 4)]
+    [InlineData(17, 18)]
+    public void NarrowFoVStillGetsApproximatelyOneDegreeDetail(double fov, int expectedRayCount)
+    {
+        var rays = _calculator.GetConeProfiles(Profile([1, 2]), 5, fov,
+            CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees);
+        Assert.Equal(expectedRayCount, rays.Count);
+    }
+
+    [Fact]
     public void RunningHorizon_AllowsMultipleOccludedAndVisibleIntervals()
     {
         var ray = _calculator.GetRayProfile(Profile([1, 5, 3, 2, 7, 6]), 0, 6_000);

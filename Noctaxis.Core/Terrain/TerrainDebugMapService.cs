@@ -56,13 +56,24 @@ public interface ITerrainDebugMapService
 /// Bounded developer-only geographic grid sampler. It delegates all elevation and classification
 /// work to the production surface resolver and therefore shares the normal tile/download caches.
 /// </summary>
-public sealed class TerrainDebugMapService(ITerrainSurfaceResolver surfaces) : ITerrainDebugMapService
+public sealed class TerrainDebugMapService(ITerrainSurfaceResolver surfaces,
+    IEnvironmentalTileCache? terrainCache = null) : ITerrainDebugMapService
 {
+    private sealed record CachedMap(GeoCoordinate Observer, TerrainDebugMapRequest Request,
+        long Generation, TerrainDebugMapSnapshot Snapshot);
+    private CachedMap? _completed;
+
     public async Task<TerrainDebugMapSnapshot> GetMapAsync(GeoCoordinate observer,
         TerrainDebugMapRequest request, CancellationToken cancellationToken)
     {
         var normalisedObserver = observer.Normalised();
         var normalisedRequest = request.Normalised();
+        cancellationToken.ThrowIfCancellationRequested();
+        var generation = terrainCache?.TerrainGeneration ?? 0;
+        var cached = Volatile.Read(ref _completed);
+        if (cached is not null && cached.Observer == normalisedObserver &&
+            cached.Request == normalisedRequest && cached.Generation == generation)
+            return cached.Snapshot;
         var coordinates = BuildGrid(normalisedObserver, normalisedRequest);
         var preload = surfaces.PreloadAsync(coordinates, cancellationToken);
         var classification = surfaces.GetClassificationsAsync(coordinates, cancellationToken);
@@ -74,12 +85,18 @@ public sealed class TerrainDebugMapService(ITerrainSurfaceResolver surfaces) : I
                 TerrariumTerrainProvider.LocatePixel(coordinate, 12).Tile.Id)
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
 
-        return new TerrainDebugMapSnapshot(normalisedObserver, normalisedRequest.RangeMetres,
+        var snapshot = new TerrainDebugMapSnapshot(normalisedObserver, normalisedRequest.RangeMetres,
             normalisedRequest.Width, normalisedRequest.Height, coordinates.ToImmutableArray(),
             elevations.RawTerrainElevationsMetres.ToImmutableArray(), elevations.SurfaceElevationsMetres.ToImmutableArray(),
             elevations.Classifications.ToImmutableArray(), elevations.AdjustedSamples.ToImmutableArray(),
             elevations.SampleStatuses.ToImmutableArray(), tiles.ToImmutableArray(), elevations.State,
             SystemClock.Instance.GetCurrentInstant(), elevations.Message);
+        cancellationToken.ThrowIfCancellationRequested();
+        // Retain only one complete snapshot. Unavailable/partial data must remain retryable.
+        if (elevations.State == EnvironmentalDataState.Available && classifications.State == EnvironmentalDataState.Available &&
+            generation == (terrainCache?.TerrainGeneration ?? 0))
+            Volatile.Write(ref _completed, new(normalisedObserver, normalisedRequest, generation, snapshot));
+        return snapshot;
     }
 
     internal static GeoCoordinate[] BuildGrid(GeoCoordinate observer, TerrainDebugMapRequest request)

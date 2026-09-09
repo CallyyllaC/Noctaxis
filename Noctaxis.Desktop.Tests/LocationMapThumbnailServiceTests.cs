@@ -12,7 +12,7 @@ using SkiaSharp;
 
 namespace Noctaxis.Desktop.Tests;
 
-public sealed class LocationMapThumbnailServiceTests
+public sealed partial class LocationMapThumbnailServiceTests
 {
     [Fact]
     public void SlippyMapTile_UsesStandardWebMercatorTileCoordinates()

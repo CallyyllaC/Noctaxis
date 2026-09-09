@@ -11,7 +11,8 @@ public sealed record TerrainCacheUsage(long Bytes, long LimitBytes, int Entries,
 public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<TerrainDiskCache> logger)
 {
     public const long DefaultLimitBytes = 2L * 1024 * 1024 * 1024;
-    private sealed record Entry(long Size, GeoBounds? Bounds, long Access);
+    private sealed record Entry(long Size, GeoBounds? Bounds, long Access,
+        long PriorityRevision = -1, double Distance = 0);
     private readonly object _gate = new();
     private readonly SemaphoreSlim _maintenance = new(1);
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
@@ -20,14 +21,21 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
     private TaskCompletionSource? _clearing;
     private TaskCompletionSource? _drained;
     private GeoCoordinate[] _saved = [];
+    private long _savedRevision;
     private long _bytes, _limit = DefaultLimitBytes, _clock, _evictions, _evictedBytes, _clears, _oversized;
     private long _generation;
+    private TerrainCacheUsage _usage = new(0, DefaultLimitBytes, 0, 0, 0, 0, 0);
     public string RootDirectory { get; } = Path.Combine(paths.GetApplicationDataDirectory(), "EnvironmentalData");
     public long Generation => Interlocked.Read(ref _generation);
     public event Action? Invalidated;
     public event Action? Changed;
-    public TerrainCacheUsage Usage { get { lock (_gate) return new(_bytes, _limit, _entries.Count,
-        _evictions, _evictedBytes, _clears, _oversized); } }
+    public TerrainCacheUsage Usage => Volatile.Read(ref _usage);
+    private void PublishUsage()
+    {
+        lock (_gate) Volatile.Write(ref _usage, new(_bytes, _limit, _entries.Count,
+            _evictions, _evictedBytes, _clears, _oversized));
+        Changed?.Invoke();
+    }
     public static bool Governs(EnvironmentalTileDescriptor descriptor) =>
         descriptor.SourceId is TerrariumTerrainProvider.SourceId or WorldCoverLandCoverProvider.SourceId;
 
@@ -36,7 +44,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
         lock (_gate) return _initialization ??= Task.Run(() =>
         {
             lock (_gate) { Scan(); Evict(); }
-            Changed?.Invoke();
+            PublishUsage();
         });
     }
 
@@ -45,16 +53,22 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
         if (limitBytes < 0) throw new ArgumentOutOfRangeException(nameof(limitBytes));
         var points = saved.Select(point => point.Normalised()).ToArray();
         // Install persisted policy before the lazy reconciliation can evict anything.
-        lock (_gate) { _limit = limitBytes; _saved = points; }
+        lock (_gate) { _limit = limitBytes; SetSavedCore(points); }
         await InitializeAsync().ConfigureAwait(false);
         await Task.Run(() => { lock (_gate) Evict(); }).ConfigureAwait(false);
-        Changed?.Invoke();
+        PublishUsage();
     }
 
     public void SetSavedLocations(IEnumerable<GeoCoordinate> saved)
     {
         var points = saved.Select(point => point.Normalised()).ToArray();
-        lock (_gate) _saved = points;
+        lock (_gate) SetSavedCore(points);
+    }
+    private void SetSavedCore(GeoCoordinate[] points)
+    {
+        if (_saved.SequenceEqual(points)) return;
+        _saved = points;
+        _savedRevision++;
     }
 
     public async Task<IDisposable> LeaseAsync(EnvironmentalTileDescriptor descriptor, CancellationToken token,
@@ -103,22 +117,30 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
                 _bytes -= _entries.GetValueOrDefault(path)?.Size ?? 0;
                 _entries[path] = new(size, Footprint(descriptor), ++_clock);
                 _bytes += size;
-                if (size > _limit) _oversized++;
+                if (size > _limit)
+                {
+                    _oversized++;
+                    logger.LogInformation("Oversized terrain asset ({Bytes} bytes) will not be retained after its active read", size);
+                }
                 Evict();
             }
         }).ConfigureAwait(false);
-        Changed?.Invoke();
+        PublishUsage();
     }
 
     private void Release(string path)
     {
         lock (_gate)
         {
-            if (--_leases[path] == 0) _leases.Remove(path);
+            if (--_leases[path] == 0)
+            {
+                _leases.Remove(path);
+                if (_clearing is null && File.Exists(path)) File.SetLastWriteTimeUtc(path, DateTime.UtcNow);
+            }
             if (_clearing is null) Evict();
             if (_leases.Count == 0) _drained?.TrySetResult();
         }
-        Changed?.Invoke();
+        PublishUsage();
     }
 
     public async Task ClearAsync()
@@ -143,7 +165,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
                 lock (_gate)
                 {
                     Scan(); // Includes files introduced externally since startup.
-                    foreach (var path in _entries.Keys.ToArray()) Delete(path);
+                    foreach (var path in _entries.Keys.ToArray()) Delete(path, eviction: false);
                     _clears++;
                 }
             }).ConfigureAwait(false);
@@ -155,13 +177,16 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
             {
                 // Drop decoded objects completed by readers that were already leased at clear start.
                 Interlocked.Increment(ref _generation);
+            }
+            Invalidated?.Invoke();
+            lock (_gate)
+            {
                 _clearing?.TrySetResult();
                 _clearing = null;
                 _drained = null;
             }
-            Invalidated?.Invoke();
             _maintenance.Release();
-            Changed?.Invoke();
+            PublishUsage();
         }
     }
 
@@ -169,7 +194,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
     {
         await InitializeAsync().ConfigureAwait(false);
         await Task.Run(() => { lock (_gate) { Scan(); Evict(); } }).ConfigureAwait(false);
-        Changed?.Invoke();
+        PublishUsage();
     }
 
     private void Scan()
@@ -179,6 +204,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
         {
             var directory = Path.Combine(RootDirectory, source);
             if (!Directory.Exists(directory)) continue;
+            if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
             // Reparse points are never traversed: scope stays within the two owned source trees.
             foreach (var path in Directory.EnumerateFiles(directory, "*", new EnumerationOptions
                 { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
@@ -207,9 +233,17 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
         if (_bytes <= _limit) return;
         var count = _evictions;
         var bytes = _evictedBytes;
+        // Preserve computed priorities across insert/release passes; invalidate when saved points change.
+        foreach (var path in _entries.Keys.ToArray())
+        {
+            var entry = _entries[path];
+            if (entry.PriorityRevision == _savedRevision) continue;
+            var distance = _saved.Length == 0 ? 0 : entry.Bounds is { } bounds
+                ? _saved.Min(point => DistanceToFootprint(point, bounds)) : double.PositiveInfinity;
+            _entries[path] = entry with { PriorityRevision = _savedRevision, Distance = distance };
+        }
         foreach (var item in _entries
-            .OrderByDescending(item => _saved.Length == 0 ? 0 : item.Value.Bounds is { } bounds
-                ? _saved.Min(point => DistanceToFootprint(point, bounds)) : double.PositiveInfinity)
+            .OrderByDescending(item => item.Value.Distance)
             .ThenBy(item => item.Value.Access).ThenBy(item => item.Key, StringComparer.Ordinal).ToArray())
         {
             if (_bytes <= _limit) break;
@@ -220,11 +254,14 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
             _evictions - count, _evictedBytes - bytes);
     }
 
-    private void Delete(string path)
+    private void Delete(string path, bool eviction = true)
     {
         File.Delete(path); // Fail visibly rather than reporting an unenforced hard limit.
         if (_entries.Remove(path, out var entry))
-        { _bytes -= entry.Size; _evictions++; _evictedBytes += entry.Size; }
+        {
+            _bytes -= entry.Size;
+            if (eviction) { _evictions++; _evictedBytes += entry.Size; }
+        }
     }
 
     public string PathFor(EnvironmentalTileDescriptor descriptor)

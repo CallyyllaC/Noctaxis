@@ -31,7 +31,7 @@ public enum CameraOverlayEffect
 {
     None = 0,
     WeatherDesaturated = 1,
-    TerrainHatch = 2
+    TerrainObstruction = 2
 }
 
 public sealed record GeographicRayGeometry(
@@ -63,7 +63,7 @@ public sealed record GeographicCameraOverlay(
     IReadOnlyList<GeographicPathSegment> CentreBearing,
     IReadOnlyList<GeographicPathSegment> RightBoundary,
     IReadOnlyList<GeographicOverlayRegion> FillRegions,
-    IReadOnlyList<GeographicOverlayRegion> TerrainHatchRegions,
+    IReadOnlyList<GeographicOverlayRegion> TerrainObstructionRegions,
     IReadOnlyList<TerrainConeRenderSample> TerrainSamples);
 
 public sealed record GeographicCameraOutline(
@@ -101,7 +101,7 @@ public sealed class GeographicOverlayGeometryBuilder
         };
         var weatherDistance = ValidWeatherDistance(visibility, normalised.DistanceMetres);
         var fills = BuildFillRegions(normalised, weatherDistance);
-        var terrain = BuildTerrainHatchGeometry(normalised, visibility);
+        var terrain = BuildTerrainObstructionGeometry(normalised, visibility);
 
         return new GeographicCameraOverlay(
             normalised,
@@ -200,12 +200,12 @@ public sealed class GeographicOverlayGeometryBuilder
         ];
     }
 
-    private static TerrainHatchGeometry BuildTerrainHatchGeometry(
+    private static TerrainObstructionGeometry BuildTerrainObstructionGeometry(
         GeoSector sector,
         FramingVisibilityAssessment? visibility)
     {
         if (visibility is null || visibility.EffectiveTerrainObstructions.Count < 2)
-            return new TerrainHatchGeometry([], []);
+            return new TerrainObstructionGeometry([], []);
 
         var samples = new List<TerrainConeRenderSample>();
         foreach (var sample in visibility.EffectiveTerrainObstructions)
@@ -255,7 +255,7 @@ public sealed class GeographicOverlayGeometryBuilder
                     regions);
             }
         }
-        return new TerrainHatchGeometry(regions, samples);
+        return new TerrainObstructionGeometry(regions, samples);
     }
 
     private static void RemoveDuplicateBearings(List<TerrainConeRenderSample> samples)
@@ -298,7 +298,7 @@ public sealed class GeographicOverlayGeometryBuilder
             var secondDistance = leftStartDistanceMetres +
                                  (rightStartDistanceMetres - leftStartDistanceMetres) * secondFraction;
             regions.Add(new GeographicOverlayRegion(
-                CameraOverlayEffect.TerrainHatch,
+                CameraOverlayEffect.TerrainObstruction,
                 SampleTerrainCell(sector.Origin, firstBearing, secondBearing,
                     firstDistance, secondDistance, sector.DistanceMetres),
                 Math.Min(firstDistance, secondDistance),
@@ -306,7 +306,7 @@ public sealed class GeographicOverlayGeometryBuilder
         }
     }
 
-    private sealed record TerrainHatchGeometry(
+    private sealed record TerrainObstructionGeometry(
         IReadOnlyList<GeographicOverlayRegion> Regions,
         IReadOnlyList<TerrainConeRenderSample> Samples);
 

@@ -13,6 +13,112 @@ namespace Noctaxis.Core.Tests;
 
 public sealed class PersistenceAndWeatherTests : IDisposable
 {
+    [Fact]
+    public async Task ConcurrentSavesProduceCompleteStateAndCancelledSavePreservesIt()
+    {
+        var now = Instant.FromUtc(2026, 9, 9, 20, 0);
+        var store = CreateStore(now);
+        var state = new PersistedState(4, new AppSettings(), [], PlanningSession.Default(now, "UTC"), null);
+        await Task.WhenAll(Enumerable.Range(0, 20).Select(index => store.SaveAsync(
+            state with { Settings = new AppSettings(TimeSnapMinutes: index + 1) }, CancellationToken.None)));
+        var saved = await store.LoadAsync(CancellationToken.None);
+        Assert.InRange(saved.Settings.TimeSnapMinutes, 1, 20);
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => store.SaveAsync(state, cancelled.Token));
+        Assert.Equal(saved.Settings.TimeSnapMinutes, (await store.LoadAsync(CancellationToken.None)).Settings.TimeSnapMinutes);
+    }
+
+    [Theory]
+    [InlineData(15, 15)] [InlineData(55, 55)] [InlineData(37.5, 37.5)]
+    [InlineData(0, 15)] [InlineData(99, 55)]
+    public async Task TintStrengthPersistsClampsAndDefaultsWhenMissing(double value, double expected)
+    {
+        var now = Instant.FromUtc(2026, 1, 1, 0, 0); var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(4, new AppSettings(CameraFraming:
+            new CameraFramingSettings(TerrainTintStrengthPercent: value)), [],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        Assert.Equal(expected, (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainTintStrengthPercent);
+        var path = Path.Combine(store.StorageDirectory, "state.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        json["Settings"]!["CameraFraming"]!.AsObject().Remove("TerrainTintStrengthPercent");
+        await File.WriteAllTextAsync(path, json.ToJsonString());
+        Assert.Equal(40, (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainTintStrengthPercent);
+        Assert.Equal(40, new CameraFramingSettings(TerrainTintStrengthPercent: double.NaN).Normalised().TerrainTintStrengthPercent);
+    }
+
+    [Theory]
+    [InlineData("#9A6F9E", "#9A6F9E")]
+    [InlineData("#22bb88", "#22BB88")]
+    [InlineData("invalid", "#9A6F9E")]
+    [InlineData(null, "#9A6F9E")]
+    public async Task TerrainColourPersistsAndMissingPropertyDefaults(string? colour, string expected)
+    {
+        var now = Instant.FromUtc(2026, 1, 1, 0, 0); var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(4, new AppSettings(CameraFraming:
+            new CameraFramingSettings(TerrainObstructionColour: colour!)), [],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        Assert.Equal(expected, (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainObstructionColour);
+        var path = Path.Combine(store.StorageDirectory, "state.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        json["Settings"]!["CameraFraming"]!.AsObject().Remove("TerrainObstructionColour");
+        await File.WriteAllTextAsync(path, json.ToJsonString());
+        Assert.Equal("#9A6F9E", (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainObstructionColour);
+    }
+
+    [Theory]
+    [InlineData(-90, 0)] [InlineData(90, 50)] [InlineData(23.5, 12)]
+    [InlineData(-100, -5)] [InlineData(100, 80)]
+    public async Task CameraFrameSettingsRoundTripAndClamp(double pitch, double threshold)
+    {
+        var now = Instant.FromUtc(2026, 1, 1, 0, 0); var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(4, new AppSettings(CameraFraming: new CameraFramingSettings(
+            CameraPitchDegrees: pitch, MinimumTerrainFrameCoveragePercent: threshold)), [],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        var framing = (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming;
+        Assert.Equal(Math.Clamp(pitch, -90, 90), framing.CameraPitchDegrees);
+        Assert.Equal(Math.Clamp(threshold, 0, 50), framing.MinimumTerrainFrameCoveragePercent);
+        var path = Path.Combine(store.StorageDirectory, "state.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        var properties = json["Settings"]!["CameraFraming"]!.AsObject();
+        properties.Remove("CameraPitchDegrees"); properties.Remove("MinimumTerrainFrameCoveragePercent");
+        await File.WriteAllTextAsync(path, json.ToJsonString());
+        framing = (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming;
+        Assert.Equal(0, framing.CameraPitchDegrees); Assert.Equal(5, framing.MinimumTerrainFrameCoveragePercent);
+    }
+
+    [Theory]
+    [InlineData(10)]
+    [InlineData(25)]
+    [InlineData(45)]
+    public async Task LegacyAngularDetailLoadsAtFixedProductionResolution(double legacyDetail)
+    {
+        var now = Instant.FromUtc(2026, 1, 1, 0, 0);
+        var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(4, new AppSettings(CameraFraming: new CameraFramingSettings()), [],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        var path = Path.Combine(store.StorageDirectory, "state.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        json["Settings"]!["CameraFraming"]!["TerrainCastAngularDetailDegrees"] = legacyDetail;
+        await File.WriteAllTextAsync(path, json.ToJsonString());
+        Assert.Equal(1, (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees);
+    }
+
+    [Fact]
+    public async Task TerrainEnableSetting_RoundTripsAndDefaultsOnWhenAbsent()
+    {
+        var now = Instant.FromUtc(2026, 1, 1, 0, 0);
+        var store = CreateStore(now);
+        await store.SaveAsync(new PersistedState(4, new AppSettings(EnableTerrainCalculations: false), [],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        Assert.False((await store.LoadAsync(CancellationToken.None)).Settings.EnableTerrainCalculations);
+        var path = Path.Combine(store.StorageDirectory, "state.json");
+        var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        Assert.True(json["Settings"]!.AsObject().Remove("EnableTerrainCalculations"));
+        await File.WriteAllTextAsync(path, json.ToJsonString());
+        Assert.True((await store.LoadAsync(CancellationToken.None)).Settings.EnableTerrainCalculations);
+    }
+
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "NoctaxisTests", Guid.NewGuid().ToString("N"));
 
     [Fact]

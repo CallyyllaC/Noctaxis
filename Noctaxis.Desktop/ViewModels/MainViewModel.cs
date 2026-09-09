@@ -54,7 +54,9 @@ public partial class MainViewModel : ObservableObject
     private PlanningSession _session;
     private bool _suppressChanges;
     private GeoCoordinate? _lastCustomCoordinate;
-    private DateTimeOffset _dateSliderAnchor = DateTimeOffset.Now.Date;
+    private DateTimeOffset _dateSliderAnchor;
+    private readonly Instant _startupInstant;
+    private long _settingsApplyGeneration;
 
     public MainViewModel(IPlanningService planning, ITargetCatalogue catalogue, ITimeZoneResolver timeZones,
         IUserDataStore store, IScoutingCardExporter exporter,
@@ -66,7 +68,8 @@ public partial class MainViewModel : ObservableObject
         IDeviceLocationAvailabilityService deviceLocationAvailability, ITargetSearchService targetSearch,
         IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
         ILocationMapThumbnailService? locationMapThumbnails = null,
-        ITerrainDebugMapService? terrainDebugMaps = null)
+        ITerrainDebugMapService? terrainDebugMaps = null, TerrainDiskCache? terrainDiskCache = null,
+        IHorizonService? terrainDiagnostics = null)
     {
         _planning = planning;
         _catalogue = catalogue;
@@ -82,12 +85,18 @@ public partial class MainViewModel : ObservableObject
         _dialogs = dialogs;
         _reverseGeocoding = reverseGeocoding;
         _terrainDebugMaps = terrainDebugMaps;
-        _session = PlanningSession.Default(SystemClock.Instance.GetCurrentInstant(), timeZones.MachineTimeZoneId);
+        _terrainDiagnostics = terrainDiagnostics as HorizonService;
+        _terrainDiskCache = terrainDiskCache;
+        if (_terrainDiskCache is not null) _terrainDiskCache.Changed += QueueTerrainCacheUsage;
+        _startupInstant = PlannerStartupTime.RoundedLocalHour(clock, timeZones);
+        _session = PlanningSession.Default(_startupInstant, timeZones.MachineTimeZoneId);
         Targets = catalogue.Targets;
         _selectedTarget = Targets[0];
-        _localDate = DateTimeOffset.Now;
-        _timeText = DateTime.Now.ToString("HH:mm");
-        _minutesOfDay = DateTime.Now.TimeOfDay.TotalMinutes;
+        var startupLocal = timeZones.InZone(_startupInstant, timeZones.MachineTimeZoneId);
+        _localDate = new DateTimeOffset(startupLocal.Year, startupLocal.Month, startupLocal.Day, 0, 0, 0, TimeSpan.Zero);
+        _dateSliderAnchor = _localDate.Value;
+        _timeText = $"{startupLocal.Hour:00}:00";
+        _minutesOfDay = startupLocal.Hour * 60;
         _latitude = _session.Observer.Latitude;
         _longitude = _session.Observer.Longitude;
         _elevation = _session.Observer.ElevationMetres;
@@ -163,11 +172,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _settingsTimeSnapMinutes = 5;
     [ObservableProperty] private double _settingsFramingShadingOpacityPercent = 10;
     [ObservableProperty] private double _settingsFramingLineThickness = 1.25;
-    [ObservableProperty] private double _settingsTerrainCastAngularDetailDegrees =
-        CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees;
     [ObservableProperty] private bool _settingsCameraFramingOverlayVisible = true;
     [ObservableProperty] private bool _settingsShowFramingVisibilityLimits = true;
     [ObservableProperty] private bool _settingsTerrainDebugOverlay;
+    [ObservableProperty] private bool _settingsEnableTerrainCalculations = true;
+    [ObservableProperty] private double _settingsTerrainMinimapContext = AppSettings.DefaultTerrainMinimapContext;
     [ObservableProperty] private TerrainDebugMapSnapshot? _terrainDebugMap;
     [ObservableProperty] private TerrainDebugMapLoadState _terrainDebugMapLoadState =
         TerrainDebugMapLoadState.Disabled;
@@ -184,8 +193,9 @@ public partial class MainViewModel : ObservableObject
     public PlannerPinActivity PlannerPinActivity => PlannerRefresh.PinActivity;
     public bool CelestialOverlaysReady => PlannerRefresh.CelestialOverlayState == PlannerRefreshWorkState.Ready;
     public bool CameraOverlayReady => PlannerRefresh.CameraGeometryState == PlannerRefreshWorkState.Ready;
-    public bool ShowTerrainDebugOverlay => Settings.TerrainDebugOverlay;
-    public TerrainHorizonProfile? TerrainDebugProfile => CurrentTerrain;
+    public bool ShowTerrainDebugOverlay => Settings.EnableTerrainCalculations && Settings.TerrainDebugOverlay;
+    public TerrainHorizonProfile? EnabledTerrainDiagnosticsProfile => ShowTerrainDebugOverlay ? CurrentTerrain : null;
+    public TerrainHorizonProfile? TerrainDebugProfile => Settings.EnableTerrainCalculations ? CurrentTerrain : null;
     public long TerrainDebugGeneration => PlannerRefresh.Generation;
     public long TerrainDebugMapGeneration => Volatile.Read(ref _terrainDebugMapGeneration);
     public double? TerrainDebugTargetAltitude => CurrentTerrain is not null
@@ -193,7 +203,7 @@ public partial class MainViewModel : ObservableObject
         : null;
     public double TerrainDebugBearing => CurrentCameraBearing ?? 0;
     public double TerrainDebugHorizontalFieldOfView => CameraFramingGuide?.HorizontalFieldOfViewDegrees ?? 60;
-    public string TerrainDebugText => CurrentTerrain is { } terrain
+    public string TerrainDebugText => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : !Settings.TerrainDebugOverlay ? "Terrain diagnostics disabled" : CurrentTerrain is { } terrain
         ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
             CurrentCameraBearing ?? CurrentSnapshot?.Position.Horizontal.AzimuthDegrees ?? 0,
             TerrainDebugTargetAltitude, TerrainDebugGeneration,
@@ -208,9 +218,10 @@ public partial class MainViewModel : ObservableObject
     public double? ResolvedGroundElevationMetres =>
         _session.EffectiveObserverElevation.ResolvedGroundElevationAslMetres;
     public bool CanResetGroundElevation => IsElevationManualOverride &&
-        _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue;
+        (!Settings.EnableTerrainCalculations || _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue);
     public string GroundElevationSourceText => IsElevationManualOverride
         ? "Manual ground-elevation override"
+        : !Settings.EnableTerrainCalculations ? "Terrain disabled · 0 m MSL fallback"
         : _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue
             ? "Terrain-derived ground elevation"
             : "Resolving terrain surface elevation…";
@@ -243,11 +254,11 @@ public partial class MainViewModel : ObservableObject
 
     public string AzimuthText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AzimuthDegrees:F1}°";
     public string AltitudeText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AltitudeDegrees:+0.0;-0.0;0.0}°";
-    private TargetLocalVisibility? CurrentTargetLocalVisibility => Snapshot is null
+    private TargetLocalVisibility? CurrentTargetLocalVisibility => !Settings.EnableTerrainCalculations || Snapshot is null
         ? null
         : _localHorizonCalculator.AssessTarget(Snapshot.Terrain,
             Snapshot.Position.Horizontal.AzimuthDegrees, Snapshot.Position.Horizontal.AltitudeDegrees);
-    public string HorizonStatus => CurrentTargetLocalVisibility?.State switch
+    public string HorizonStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : CurrentTargetLocalVisibility?.State switch
     {
         null => "Calculating…",
         TargetLocalVisibilityState.BelowAstronomicalHorizon => "Below astronomical horizon",
@@ -268,19 +279,19 @@ public partial class MainViewModel : ObservableObject
     public string RiseText => FormatTime(Snapshot?.Position.Events.Rise);
     public string TransitText => FormatTime(Snapshot?.Position.Events.Transit);
     public string SetText => FormatTime(Snapshot?.Position.Events.Set);
-    public string TerrainStatus => CurrentEnvironment is { } environment
+    public string TerrainStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : CurrentEnvironment is { } environment
         ? environment.ActiveSourceDescription
         : CurrentTerrain is { } terrain
             ? terrain.Status
             : "Loading terrain horizon…";
     public string TerrainCurrentLocationText => $"{Observer.Latitude:F5}, {Observer.Longitude:F5}";
-    public string GroundHorizonState => IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
+    public string GroundHorizonState => !Settings.EnableTerrainCalculations ? "Disabled" : IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
         ? CurrentTerrain is { IsComplete: false, HasTerrainCoverage: true } ? "Ready · refining…" : "Loading…"
         : FormatHorizonState(CurrentTerrain?.HasTerrainCoverage == true,
             CurrentTerrain?.GroundHorizonState);
     public string GroundHorizonAngleText => FormatHorizonAngle(
         CurrentCameraBearing is double bearing ? CurrentTerrain?.GroundAltitudeAt(bearing) : null);
-    public string TerrainDatumText => CurrentTerrain switch
+    public string TerrainDatumText => !Settings.EnableTerrainCalculations ? GroundElevationSourceText : CurrentTerrain switch
     {
         null => "Observer datum: Loading",
         { ObserverDatumConfidence: ObserverDatumConfidence.Normal } => "Observer datum: Normal",
@@ -367,25 +378,47 @@ public partial class MainViewModel : ObservableObject
             snapshot.FieldOfView,
             snapshot.Position.Horizontal.AzimuthDegrees,
             Settings.EffectiveCameraFraming with { IsOverlayVisible = IsCameraFramingOverlayVisible });
-    public FramingVisibilityAssessment? CameraFramingVisibility =>
-        CurrentSnapshot is not { } snapshot || CurrentTerrain is not { } terrain ||
-        CameraFramingGuide is not { } guide || !ShowFramingVisibilityLimits
-            ? null
-            : _framingVisibilityCalculator.Calculate(
-                snapshot.Weather,
-                terrain,
-                snapshot.Position.Horizontal.AltitudeDegrees,
-                guide.CentreBearingDegrees,
-                guide.HorizontalFieldOfViewDegrees,
-                Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees,
-                snapshot.FieldOfView.VerticalDegrees);
+    private FramingInputs? _framingInputs;
+    private FramingVisibilityAssessment? _framingAssessment;
+    private readonly record struct FramingInputs(TerrainHorizonProfile Terrain, WeatherResult Weather,
+        double Altitude, double Bearing, double HorizontalFov, double VerticalFov, double Pitch, double Threshold);
+
+    public FramingVisibilityAssessment? CameraFramingVisibility => IsCameraFramingOverlayVisible && ShowFramingVisibilityLimits
+        ? DerivedCameraFraming : null;
+
+    private FramingVisibilityAssessment? DerivedCameraFraming
+    {
+        get
+        {
+            if (CurrentSnapshot is not { } snapshot || CurrentTerrain is not { } terrain) return null;
+            var guide = _cameraFramingGuideCalculator.Calculate(snapshot.FieldOfView,
+                snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var inputs = new FramingInputs(terrain, snapshot.Weather,
+                snapshot.Position.Horizontal.AltitudeDegrees, guide.CentreBearingDegrees,
+                guide.HorizontalFieldOfViewDegrees, snapshot.FieldOfView.VerticalDegrees, CameraPitchDegrees, Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent);
+            // A single UI-owned derived result. Compare actual calculator inputs rather than
+            // presentation notifications or the containing snapshot (which changes independently).
+            if (_framingInputs is not { } prior || !ReferenceEquals(prior.Terrain, terrain) ||
+                prior != inputs)
+            {
+                _framingAssessment = _framingVisibilityCalculator.Calculate(inputs.Weather, terrain,
+                    inputs.Altitude, inputs.Bearing, inputs.HorizontalFov,
+                    CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees, inputs.VerticalFov,
+                    new CameraTerrainFrame(inputs.Pitch, inputs.VerticalFov, inputs.Threshold));
+                _framingInputs = inputs;
+            }
+            return _framingAssessment;
+        }
+    }
     public string FramingVisibilityStatus => !IsCameraFramingOverlayVisible
         ? string.Empty
         : !ShowFramingVisibilityLimits
             ? "Visibility limits hidden"
             : CameraFramingVisibility?.Status ?? "Visibility data unavailable";
     public CameraFramingSettings CameraFramingMapSettings =>
-        (Settings.EffectiveCameraFraming with { LineThickness = SettingsFramingLineThickness }).Normalised();
+        (Settings.EffectiveCameraFraming with { LineThickness = SettingsFramingLineThickness,
+            TerrainObstructionColour = SettingsTerrainObstructionColourHex,
+            TerrainTintStrengthPercent = SettingsTerrainTintStrengthPercent }).Normalised();
 
     private PlanningSnapshot? CurrentSnapshot =>
         Snapshot is { } snapshot && IsCurrentObserver(snapshot.Session.Observer) ? snapshot : null;
@@ -399,6 +432,10 @@ public partial class MainViewModel : ObservableObject
         CurrentSnapshot is { } snapshot && IsCurrentObserver(snapshot.Terrain.Observer)
             ? snapshot.Terrain
             : null;
+
+    private TerrainHorizonProfile DisabledTerrain() => TerrainHorizonProfile.Disabled(_session.Observer,
+        _session.Instant, Settings.EffectiveCameraHeightAboveGroundMetres,
+        _session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres);
 
     private HorizonObstruction CurrentCameraObstruction
     {
@@ -437,9 +474,18 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraFramingMapSettings));
         SavedLocations.Clear();
         foreach (var location in persisted.Locations) SavedLocations.Add(location);
+        if (_terrainDiskCache is not null && Settings.EnableTerrainCalculations)
+        {
+            await _terrainDiskCache.ConfigureAsync(Settings.EffectiveTerrainCacheLimitBytes,
+                SavedLocations.Select(location => location.Coordinate));
+            UpdateTerrainCacheUsage();
+        }
         _lastCustomCoordinate = persisted.LastCustomCoordinate;
         var configuredZone = _timeZones.GetEffectiveId(Settings.SelectedTimeZoneId);
-        _session = persisted.Session with { TimeZoneId = _timeZones.GetEffectiveId(persisted.Session.TimeZoneId) };
+        // state.json is the automatic last-working-state restore, not an explicit historical-session load.
+        _session = (persisted.Session with { Instant = _startupInstant,
+            TimeZoneId = _timeZones.GetEffectiveId(persisted.Session.TimeZoneId) })
+            .WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
         if (_session.SavedLocationId is null) _session = _session with { TimeZoneId = configuredZone };
         LoadEquipmentOptions();
         EnsureCelestialSelections();
@@ -450,7 +496,7 @@ public partial class MainViewModel : ObservableObject
         LoadSessionIntoControls();
         PreviewObserver = _session.Observer;
         PreviewMinutesOfDay = MinutesOfDay;
-        _dateSliderAnchor = LocalDate ?? DateTimeOffset.Now.Date;
+        _dateSliderAnchor = LocalDate ?? _startupInstant.ToDateTimeOffset();
         SelectedPageIndex = 0;
     }
 
@@ -497,7 +543,7 @@ public partial class MainViewModel : ObservableObject
     {
         var normalised = coordinate.Normalised();
         var locationChanged = !SameObserverPosition(normalised, _session.Observer);
-        var elevationState = locationChanged ? new ObserverElevationState() :
+        var elevationState = locationChanged ? new ObserverElevationState { TerrainCalculationsEnabled = Settings.EnableTerrainCalculations } :
             _session.EffectiveObserverElevation;
         normalised = normalised with
         {
@@ -577,6 +623,26 @@ public partial class MainViewModel : ObservableObject
 
     public async Task ApplySettingsAsync(AppSettings settings)
     {
+        var previous = Settings;
+        var physicalChanged = settings.EnableTerrainCalculations != previous.EnableTerrainCalculations ||
+            settings.EffectiveCameraHeightAboveGroundMetres != previous.EffectiveCameraHeightAboveGroundMetres;
+        var timeZoneChanged = settings.SelectedTimeZoneId != previous.SelectedTimeZoneId &&
+            _timeZones.GetEffectiveId(settings.SelectedTimeZoneId) !=
+            _timeZones.GetEffectiveId(previous.SelectedTimeZoneId);
+        var weatherPolicyChanged = settings.EffectiveWeather.CacheDistanceKilometres != previous.EffectiveWeather.CacheDistanceKilometres;
+        var oldEquipment = previous.EffectiveEquipment(_session.Lens);
+        var newEquipment = settings.EffectiveEquipment(_session.Lens);
+        var equipmentChanged = !oldEquipment.Cameras!.SequenceEqual(newEquipment.Cameras!) ||
+            !oldEquipment.Lenses!.SequenceEqual(newEquipment.Lenses!);
+        var settingsGeneration = Interlocked.Increment(ref _settingsApplyGeneration);
+        var configureTerrainCache = settings.EnableTerrainCalculations && !previous.EnableTerrainCalculations ||
+            settings.EffectiveTerrainCacheLimitBytes != previous.EffectiveTerrainCacheLimitBytes;
+        var terrainModeChanged = settings.EnableTerrainCalculations != Settings.EnableTerrainCalculations;
+        if (terrainModeChanged)
+        {
+            _refreshCancellation?.Cancel();
+            Interlocked.Increment(ref _refreshGeneration);
+        }
         Settings = settings with
         {
             Units = MeasurementUnits.NormaliseId(settings.Units),
@@ -584,13 +650,35 @@ public partial class MainViewModel : ObservableObject
             CameraHeightAboveGroundMetres = settings.EffectiveCameraHeightAboveGroundMetres,
             Equipment = settings.EffectiveEquipment(_session.Lens)
         };
-        LoadEquipmentOptions();
+        _session = _session.WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
+        if (terrainModeChanged)
+        {
+            _suppressChanges = true;
+            Elevation = _session.Observer.ElevationMetres;
+            PreviewObserver = _session.Observer;
+            _suppressChanges = false;
+            if (Snapshot is not null) Snapshot = Snapshot with { Session = _session,
+                Terrain = Settings.EnableTerrainCalculations
+                    ? new TerrainHorizonProfile(_session.Observer, [], false, "Resolving terrain profile", _session.Instant)
+                    : DisabledTerrain(), TerrainCrossings = new(null, null), Environment = null };
+            NotifySnapshotProperties();
+        }
+        if (!Settings.EnableTerrainCalculations) ScheduleTerrainDebugMapRefresh();
+        if (_terrainDiskCache is not null && configureTerrainCache)
+        {
+            await _terrainDiskCache.ConfigureAsync(settings.EffectiveTerrainCacheLimitBytes,
+                SavedLocations.Select(location => location.Coordinate));
+            // A newer toggle owns the UI even if this cache reconciliation completed later.
+            if (settingsGeneration != Volatile.Read(ref _settingsApplyGeneration)) return;
+            UpdateTerrainCacheUsage();
+        }
+        if (equipmentChanged) LoadEquipmentOptions();
         _suppressChanges = true;
         IsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         ShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
-        TimeZoneId = _timeZones.GetEffectiveId(settings.SelectedTimeZoneId);
+        if (timeZoneChanged) TimeZoneId = _timeZones.GetEffectiveId(settings.SelectedTimeZoneId);
         _suppressChanges = false;
-        ApplyLocalDateTime(false);
+        if (timeZoneChanged) ApplyLocalDateTime(false);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
@@ -599,28 +687,37 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FramingVisibilityStatus));
         OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
         OnPropertyChanged(nameof(TerrainDebugProfile));
+        OnPropertyChanged(nameof(EnabledTerrainDiagnosticsProfile));
         OnPropertyChanged(nameof(TerrainDebugBearing));
         OnPropertyChanged(nameof(TerrainDebugHorizontalFieldOfView));
         OnPropertyChanged(nameof(TerrainDebugText));
         NotifyObserverElevationProperties();
-        ScheduleObserverRefresh(0);
-        await _activePlannerRefresh;
+        if (physicalChanged) ScheduleObserverRefresh(0);
+        else if (timeZoneChanged) ScheduleAstronomyRefresh(0);
+        NotifyTerrainProperties();
+        if (physicalChanged || timeZoneChanged) await _activePlannerRefresh;
+        else if (weatherPolicyChanged) await RefreshWeather();
         await PersistAsync(CancellationToken.None);
     }
 
     private void LoadSettingsEditor()
     {
         SettingsUnits = MeasurementUnits.NormaliseId(Settings.Units);
+        SettingsMinimumTerrainFrameCoveragePercent = Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent;
         SettingsTimeZoneId = Settings.SelectedTimeZoneId;
         SettingsCameraHeightAboveGroundMetres = Settings.EffectiveCameraHeightAboveGroundMetres;
         SettingsWeatherCacheDistance = Settings.EffectiveWeather.CacheDistanceKilometres;
+        SettingsTerrainCacheLimitGiB = Settings.EffectiveTerrainCacheLimitBytes / (1024d * 1024 * 1024);
         SettingsTimeSnapMinutes = Settings.TimeSnapMinutes;
         SettingsFramingShadingOpacityPercent = Settings.EffectiveCameraFraming.ShadingOpacityPercent;
         SettingsFramingLineThickness = Settings.EffectiveCameraFraming.LineThickness;
-        SettingsTerrainCastAngularDetailDegrees = Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees;
+        SettingsTerrainObstructionColour = Avalonia.Media.Color.Parse(Settings.EffectiveCameraFraming.TerrainObstructionColour);
+        SettingsTerrainTintStrengthPercent = Settings.EffectiveCameraFraming.TerrainTintStrengthPercent;
         SettingsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         SettingsShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
         SettingsTerrainDebugOverlay = Settings.TerrainDebugOverlay;
+        SettingsEnableTerrainCalculations = Settings.EnableTerrainCalculations;
+        SettingsTerrainMinimapContext = Settings.EffectiveTerrainMinimapContext;
         WeatherFieldOptions.Clear();
         foreach (var field in Enum.GetValues<WeatherField>())
             WeatherFieldOptions.Add(new WeatherFieldOptionViewModel(field, WeatherFieldLabel(field), Settings.EffectiveWeather.IsEnabled(field)));
@@ -684,6 +781,10 @@ public partial class MainViewModel : ObservableObject
             CameraHeightAboveGroundMetres =
                 AppSettings.NormaliseCameraHeight(SettingsCameraHeightAboveGroundMetres),
             TerrainDebugOverlay = SettingsTerrainDebugOverlay,
+            EnableTerrainCalculations = SettingsEnableTerrainCalculations,
+            TerrainMinimapContext = Math.Clamp(double.IsFinite(SettingsTerrainMinimapContext) ? SettingsTerrainMinimapContext : AppSettings.DefaultTerrainMinimapContext, 1.0, 2.5),
+            TerrainCacheLimitBytes = (long)(Math.Clamp(double.IsFinite(SettingsTerrainCacheLimitGiB)
+                ? SettingsTerrainCacheLimitGiB : 2, 0, 1024) * 1024 * 1024 * 1024),
             Equipment = new EquipmentSettings(
                 EquipmentCameraEditors.Select(item => item.Profile).ToArray(),
                 EquipmentLensEditors.Select(item => item.Profile).ToArray()),
@@ -693,9 +794,9 @@ public partial class MainViewModel : ObservableObject
                 ShowVisibilityLimits = SettingsShowFramingVisibilityLimits,
                 ShadingOpacityPercent = Math.Clamp(SettingsFramingShadingOpacityPercent, 0, 50),
                 LineThickness = Math.Clamp(SettingsFramingLineThickness, .5, 5),
-                TerrainCastAngularDetailDegrees = Math.Clamp(SettingsTerrainCastAngularDetailDegrees,
-                    CameraFramingSettings.MinimumTerrainCastAngularDetailDegrees,
-                    CameraFramingSettings.MaximumTerrainCastAngularDetailDegrees)
+                TerrainObstructionColour = SettingsTerrainObstructionColourHex,
+                TerrainTintStrengthPercent = SettingsTerrainTintStrengthPercent,
+                MinimumTerrainFrameCoveragePercent = Math.Clamp(SettingsMinimumTerrainFrameCoveragePercent, 0, 50)
             }
         };
         await ApplySettingsAsync(updated);
@@ -927,6 +1028,7 @@ public partial class MainViewModel : ObservableObject
 
     public async Task PersistAsync(CancellationToken cancellationToken)
     {
+        _terrainDiskCache?.SetSavedLocations(SavedLocations.Select(location => location.Coordinate));
         var state = new PersistedState(4, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
         await _store.SaveAsync(state, cancellationToken);
     }
@@ -1658,7 +1760,7 @@ public partial class MainViewModel : ObservableObject
                 Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
             var horizon = await _planning.PrioritiseTerrainAsync(requestedSession,
                 Settings.EffectiveCameraHeightAboveGroundMetres,
-                CameraTerrainBearings(guide, Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees), token);
+                CameraTerrainBearings(guide), token);
             if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null ||
                 Snapshot.Terrain.IsComplete) return;
             await _plannerSnapshotCommitGate.WaitAsync(token);
@@ -1765,11 +1867,11 @@ public partial class MainViewModel : ObservableObject
         var environmentCommit = environmentTask is null
             ? Task.CompletedTask
             : CommitEnvironmentAsync(environmentTask, coreCommit, requestedSession, generation, cancellationToken);
-        var priorityTerrainCommit = observerWork?.PriorityTerrain is null
+        var priorityTerrainCommit = !Settings.EnableTerrainCalculations || observerWork?.PriorityTerrain is null
             ? Task.CompletedTask
             : CommitPriorityTerrainAsync(observerWork.PriorityTerrain, coreCommit, requestedSession,
                 generation, cancellationToken);
-        if (observerWork?.PriorityTerrain is null)
+        if (!Settings.EnableTerrainCalculations || observerWork?.PriorityTerrain is null)
             UpdateRefresh(generation, state => state with { CameraTerrainState = PlannerRefreshWorkState.NotRequired });
         var weatherCommit = CommitWeatherAsync(weatherTask, coreCommit, requestedSession, generation,
             cancellationToken);
@@ -1825,8 +1927,7 @@ public partial class MainViewModel : ObservableObject
             if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
             var guide = _cameraFramingGuideCalculator.Calculate(Snapshot.FieldOfView,
                 Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
-            var bearings = CameraTerrainBearings(guide,
-                Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees);
+            var bearings = CameraTerrainBearings(guide);
             UpdateRefresh(generation, state => state with
             {
                 CameraTerrainState = PlannerRefreshWorkState.Running,
@@ -1870,13 +1971,9 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private static IReadOnlyList<double> CameraTerrainBearings(CameraFramingGuide guide,
-        double angularDetailDegrees)
+    private static IReadOnlyList<double> CameraTerrainBearings(CameraFramingGuide guide)
     {
-        var detail = Math.Clamp(double.IsFinite(angularDetailDegrees) ? angularDetailDegrees :
-                CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees,
-            CameraFramingSettings.MinimumTerrainCastAngularDetailDegrees,
-            CameraFramingSettings.MaximumTerrainCastAngularDetailDegrees);
+        const double detail = CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees;
         var segments = Math.Max(1, (int)Math.Ceiling(guide.HorizontalFieldOfViewDegrees / detail));
         var spacing = guide.HorizontalFieldOfViewDegrees / segments;
         var bearings = new double[segments + 1];
@@ -1893,7 +1990,9 @@ public partial class MainViewModel : ObservableObject
         cancellationToken.ThrowIfCancellationRequested();
         if (!IsCurrentRefresh(generation, requestedSession.Observer)) return;
 
-        if (scope == PlannerRefreshScope.Astronomy && previousSnapshot is not null &&
+        if (!Settings.EnableTerrainCalculations)
+            core = core with { Terrain = DisabledTerrain(), TerrainCrossings = new(null, null), Environment = null };
+        if (Settings.EnableTerrainCalculations && scope == PlannerRefreshScope.Astronomy && previousSnapshot is not null &&
             Angles.GreatCircleDistanceMetres(previousSnapshot.Session.Observer, requestedSession.Observer) <= 2)
         {
             core = core with
@@ -1933,9 +2032,11 @@ public partial class MainViewModel : ObservableObject
         {
             UpdateRefresh(generation, state => state with
             {
-                GroundTerrainState = PlannerRefreshWorkState.Running,
+                GroundTerrainState = Settings.EnableTerrainCalculations
+                    ? PlannerRefreshWorkState.Running : PlannerRefreshWorkState.NotRequired,
                 EnvironmentMetadataState = PlannerRefreshWorkState.Running,
-                StatusText = state.IsCoreReady ? "Planner ready · loading terrain…" : state.StatusText
+                StatusText = state.IsCoreReady ? (Settings.EnableTerrainCalculations
+                    ? "Planner ready · loading terrain…" : "Planner ready · loading environment metadata…") : state.StatusText
             });
             var environment = await environmentTask;
             await coreCommit;
@@ -1944,7 +2045,8 @@ public partial class MainViewModel : ObservableObject
             try
             {
                 if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
-                var horizon = environment.HorizonProfile;
+                var horizon = Settings.EnableTerrainCalculations ? environment.HorizonProfile : DisabledTerrain();
+                environment = environment with { HorizonProfile = horizon };
                 ApplyResolvedTerrainGround(horizon);
                 Snapshot = Snapshot with
                 {
@@ -1956,7 +2058,8 @@ public partial class MainViewModel : ObservableObject
                 NotifySnapshotProperties();
                 UpdateRefresh(generation, state => state with
                 {
-                    GroundTerrainState = EnvironmentWorkState(horizon.HasTerrainCoverage, horizon.GroundHorizonState),
+                    GroundTerrainState = Settings.EnableTerrainCalculations
+                        ? EnvironmentWorkState(horizon.HasTerrainCoverage, horizon.GroundHorizonState) : PlannerRefreshWorkState.NotRequired,
                     EnvironmentMetadataState = EnvironmentMetadataWorkState(environment),
                     StatusText = EnrichmentStatus(state)
                 });
@@ -2080,6 +2183,7 @@ public partial class MainViewModel : ObservableObject
 
     private void LoadSessionIntoControls()
     {
+        _session = _session.WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
         _suppressChanges = true;
         SelectedTarget = Targets.FirstOrDefault(x => x.Id == _session.TargetId) ?? Targets[0];
         Latitude = _session.Observer.Latitude;
@@ -2131,6 +2235,13 @@ public partial class MainViewModel : ObservableObject
 
     private void NotifyTerrainProperties()
     {
+        NotifyCameraFrameProperties();
+        OnPropertyChanged(nameof(EnabledTerrainDiagnosticsProfile));
+        OnPropertyChanged(nameof(TerrainDiagnosticsStatus));
+        OnPropertyChanged(nameof(TerrainDiagnosticsBearing));
+        OnPropertyChanged(nameof(TerrainDiagnosticsSurface));
+        OnPropertyChanged(nameof(TerrainDiagnosticsPerformance));
+        OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
         OnPropertyChanged(nameof(TerrainStatus));
         OnPropertyChanged(nameof(TerrainCurrentLocationText));
         OnPropertyChanged(nameof(GroundHorizonState));
@@ -2152,24 +2263,34 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnTerrainDebugMapChanged(TerrainDebugMapSnapshot? value)
     {
+        OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
         OnPropertyChanged(nameof(TerrainDebugText));
     }
 
     partial void OnTerrainDebugMapLoadStateChanged(TerrainDebugMapLoadState value)
     {
+        OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
         OnPropertyChanged(nameof(TerrainDebugText));
     }
 
+    private GeoCoordinate? _localMapRequestedObserver;
+    private long _localMapSourceGeneration;
+
     private void ScheduleTerrainDebugMapRefresh()
     {
+        var sourceGeneration = _terrainDiskCache?.Generation ?? 0;
+        if (Settings.EnableTerrainCalculations && _terrainDebugMaps is not null &&
+            _localMapRequestedObserver is { } requested && SameObserverPosition(requested, _session.Observer) &&
+            _localMapSourceGeneration == sourceGeneration) return;
         _terrainDebugMapCancellation?.Cancel();
         _terrainDebugMapCancellation?.Dispose();
         _terrainDebugMapCancellation = null;
         Interlocked.Increment(ref _terrainDebugMapGeneration);
         TerrainDebugMap = null;
         OnPropertyChanged(nameof(TerrainDebugMapGeneration));
-        if (!Settings.TerrainDebugOverlay || _terrainDebugMaps is null)
+        if (!Settings.EnableTerrainCalculations || _terrainDebugMaps is null)
         {
+            _localMapRequestedObserver = null;
             TerrainDebugMapLoadState = TerrainDebugMapLoadState.Disabled;
             _activeTerrainDebugMapRefresh = Task.CompletedTask;
             return;
@@ -2179,6 +2300,8 @@ public partial class MainViewModel : ObservableObject
         _terrainDebugMapCancellation = new CancellationTokenSource();
         var generation = TerrainDebugMapGeneration;
         var observer = _session.Observer;
+        _localMapRequestedObserver = observer;
+        _localMapSourceGeneration = sourceGeneration;
         _activeTerrainDebugMapRefresh = ResolveTerrainDebugMapAsync(
             observer, generation, _terrainDebugMapCancellation.Token);
     }
@@ -2192,8 +2315,9 @@ public partial class MainViewModel : ObservableObject
                 new TerrainDebugMapRequest(), cancellationToken);
             if (generation != TerrainDebugMapGeneration ||
                 !SameObserverPosition(observer, _session.Observer)) return;
-            TerrainDebugMap = map;
-            TerrainDebugMapLoadState = TerrainDebugMapLoadState.Ready;
+            var hasTerrain = map.SurfaceElevationsMetres.Any(value => value.HasValue);
+            TerrainDebugMap = hasTerrain ? map : null;
+            TerrainDebugMapLoadState = hasTerrain ? TerrainDebugMapLoadState.Ready : TerrainDebugMapLoadState.Unavailable;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
         catch (Exception ex)
@@ -2209,6 +2333,7 @@ public partial class MainViewModel : ObservableObject
 
     private void ApplyResolvedTerrainGround(TerrainHorizonProfile horizon)
     {
+        if (!Settings.EnableTerrainCalculations) return;
         double? resolvedSurface = horizon.GroundElevationAtObserver is { HasValue: true } ground
             ? ground.Value : null;
         if (!resolvedSurface.HasValue) return;

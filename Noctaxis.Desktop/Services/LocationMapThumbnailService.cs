@@ -209,7 +209,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     private readonly ISettlementDataProvider _settlementData;
     private readonly IMapImageAcceleration _imageAcceleration;
     private readonly string _legacyStorageDirectory;
-    private readonly ConcurrentDictionary<(string Provider, string Style, int Zoom, int X, int Y), byte[]> _tileCache = new();
+    private readonly TileMemoryCache<(string Provider, string Style, int Zoom, int X, int Y)> _tileCache = new(16 * 1024 * 1024);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locationGates = new();
     private readonly SemaphoreSlim _tileRequestGate = new(1, 1);
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
@@ -891,14 +891,14 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         await _tileRequestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (forceRefresh) _tileCache.TryRemove(key, out _);
+            if (forceRefresh) _tileCache.Remove(key);
             else if (_tileCache.TryGetValue(key, out cached)) return cached;
             using var response = await _httpClient.GetAsync(source.TileUri(zoom, x, y),
                 HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
             var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
             if (bytes.Length < 64) throw new InvalidDataException("Map source returned an incomplete tile payload.");
-            _tileCache[key] = bytes;
+            _tileCache.Store(key, bytes);
             return bytes;
         }
         finally { _tileRequestGate.Release(); }

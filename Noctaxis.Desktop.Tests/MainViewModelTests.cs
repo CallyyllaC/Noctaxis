@@ -20,7 +20,7 @@ using System.Xml.Linq;
 
 namespace Noctaxis.Desktop.Tests;
 
-public sealed class MainViewModelTests
+public sealed partial class MainViewModelTests
 {
     [AttributeUsage(AttributeTargets.Method, AllowMultiple = true)]
     private sealed class CoversSettingsInputAttribute(string bindingPath) : Attribute
@@ -381,7 +381,7 @@ public sealed class MainViewModelTests
         var catalogue = new OpenNgcTargetCatalogue();
         var planning = new ControllablePlanning(catalogue);
         var viewModel = CreateViewModel(planning, catalogue,
-            new FakeStore(new PersistedState(3, new AppSettings(), [],
+            new FakeStore(new PersistedState(3, new AppSettings(TerrainDebugOverlay: true), [],
                 PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
             new FakeExporter());
         await viewModel.InitializeAsync();
@@ -997,6 +997,7 @@ public sealed class MainViewModelTests
         viewModel.Elevation = 250;
         planning.GroundElevationMetres = 120;
         await viewModel.ApplySettingsAsync(viewModel.Settings);
+        await viewModel.WaitForPlannerRefreshAsync();
         Assert.Equal(250, viewModel.Elevation);
         Assert.True(viewModel.IsElevationManualOverride);
         Assert.Equal(252, viewModel.Snapshot!.Terrain.ObserverAbsoluteElevationMetres);
@@ -1118,7 +1119,6 @@ public sealed class MainViewModelTests
     [CoversSettingsInput("SettingsShowFramingVisibilityLimits")]
     [CoversSettingsInput("SettingsFramingShadingOpacityPercent")]
     [CoversSettingsInput("SettingsFramingLineThickness")]
-    [CoversSettingsInput("SettingsTerrainCastAngularDetailDegrees")]
     [CoversSettingsInput("SettingsTerrainDebugOverlay")]
     [CoversSettingsInput("SettingsWeatherCacheDistance")]
     [CoversSettingsInput("ResetSettingsEditorCommand")]
@@ -1144,22 +1144,18 @@ public sealed class MainViewModelTests
         await viewModel.InitializeAsync();
 
         AssertScalarSettingsEditors(viewModel, "UK", "UTC", 15, 7.5, false, false, 22, .5);
-        Assert.Equal(7, viewModel.SettingsTerrainCastAngularDetailDegrees);
         Assert.False(viewModel.SettingsTerrainDebugOverlay);
 
         SetScalarSettingsEditors(viewModel, "Imperial", "Europe/London", 27, 12.5, true, true, 37, 5);
-        viewModel.SettingsTerrainCastAngularDetailDegrees = 25;
         viewModel.SettingsTerrainDebugOverlay = true;
         Assert.Equal(5, viewModel.CameraFramingMapSettings.LineThickness);
 
         viewModel.ResetSettingsEditorCommand.Execute(null);
         AssertScalarSettingsEditors(viewModel, "UK", "UTC", 15, 7.5, false, false, 22, .5);
-        Assert.Equal(7, viewModel.SettingsTerrainCastAngularDetailDegrees);
         Assert.False(viewModel.SettingsTerrainDebugOverlay);
         Assert.Equal(.5, viewModel.CameraFramingMapSettings.LineThickness);
 
         SetScalarSettingsEditors(viewModel, "Imperial", "Europe/London", 27, 12.5, true, true, 37, 5);
-        viewModel.SettingsTerrainCastAngularDetailDegrees = 25;
         viewModel.SettingsTerrainDebugOverlay = true;
         await viewModel.SaveSettingsCommand.ExecuteAsync(null);
 
@@ -1172,7 +1168,7 @@ public sealed class MainViewModelTests
         Assert.True(store.State.Settings.EffectiveCameraFraming.ShowVisibilityLimits);
         Assert.Equal(37, store.State.Settings.EffectiveCameraFraming.ShadingOpacityPercent);
         Assert.Equal(5, store.State.Settings.EffectiveCameraFraming.LineThickness);
-        Assert.Equal(25, store.State.Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees);
+        Assert.Equal(1, store.State.Settings.EffectiveCameraFraming.TerrainCastAngularDetailDegrees);
         Assert.True(store.State.Settings.TerrainDebugOverlay);
     }
 
@@ -1287,7 +1283,14 @@ public sealed class MainViewModelTests
         Assert.Equal("{Binding FocalLengthMinimum}", focalLengthSlider.Attribute("Minimum")?.Value);
         Assert.Equal("{Binding FocalLengthMaximum}", focalLengthSlider.Attribute("Maximum")?.Value);
         Assert.Equal("{Binding IsFocalLengthEditable}", focalLengthSlider.Attribute("IsEnabled")?.Value);
-        Assert.DoesNotContain(camera.Descendants(), element => element.Name.LocalName == "NumericUpDown");
+        var axes = camera.Descendants().Where(element => element.Name.LocalName == "NumericUpDown").ToArray();
+        Assert.Equal(2, axes.Length);
+        var bearingInput = Assert.Single(axes, e => e.Attribute("Value")?.Value == "{Binding CameraBearingDegrees}");
+        Assert.Equal("0", bearingInput.Attribute("Minimum")?.Value);
+        Assert.Equal("360", bearingInput.Attribute("Maximum")?.Value);
+        var pitchInput = Assert.Single(axes, e => e.Attribute("Value")?.Value == "{Binding CameraPitchDegrees}");
+        Assert.Equal("-90", pitchInput.Attribute("Minimum")?.Value);
+        Assert.Equal("90", pitchInput.Attribute("Maximum")?.Value);
         Assert.DoesNotContain(camera.Descendants(), element => element.Name.LocalName == "ComboBox" &&
             element.Attribute("SelectedItem")?.Value == "{Binding SelectedOrientation}");
         var orientationButtons = camera.Descendants().Where(element => element.Name.LocalName == "RadioButton")
@@ -1373,6 +1376,56 @@ public sealed class MainViewModelTests
     }
 
     [Fact]
+    [CoversSettingsInput("SettingsTerrainCacheLimitGiB")]
+    [CoversSettingsInput("ClearTerrainCacheCommand")]
+    public async Task TerrainCacheSettings_PersistLimitConfirmClearAndRefreshActiveObserver()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Noctaxis-cache-ui-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var manager = new TerrainDiskCache(new TerrainCacheTestPaths(directory), NullLogger<TerrainDiskCache>.Instance);
+            var catalogue = new OpenNgcTargetCatalogue();
+            var planning = new FakePlanning(catalogue);
+            var dialogs = new FakeDialogs();
+            var saved = new SavedLocation(Guid.NewGuid(), "Keep", new GeoCoordinate(53, -1), "UTC");
+            var store = new FakeStore(new PersistedState(4, new AppSettings(), [saved],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null));
+            var viewModel = CreateViewModel(planning, catalogue, store, new FakeExporter(),
+                dialogs: dialogs, terrainDiskCache: manager);
+            await viewModel.InitializeAsync();
+            Assert.Equal(2, viewModel.SettingsTerrainCacheLimitGiB);
+            viewModel.SettingsTerrainCacheLimitGiB = .5;
+            await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+            Assert.Equal(536870912, manager.Usage.LimitBytes);
+            Assert.Equal(536870912, store.State.Settings.TerrainCacheLimitBytes);
+            viewModel.ShowPlannerCommand.Execute(null);
+            await viewModel.WaitForPlannerRefreshAsync();
+            var settings = store.State.Settings;
+            var file = manager.PathFor(new(TerrariumTerrainProvider.SourceId, "v1", "z2", "1-1", "png"));
+            Directory.CreateDirectory(Path.GetDirectoryName(file)!); await File.WriteAllBytesAsync(file, new byte[400]);
+            await manager.ReconcileAsync();
+            await viewModel.ClearTerrainCacheCommand.ExecuteAsync(null);
+            Assert.True(File.Exists(file));
+            Assert.Equal(0, manager.Usage.Clears);
+            dialogs.ConfirmClearTerrain = true;
+            var requests = planning.EnvironmentRequests;
+            await viewModel.ClearTerrainCacheCommand.ExecuteAsync(null);
+            Assert.False(File.Exists(file));
+            Assert.Equal(1, manager.Usage.Clears);
+            Assert.Equal(0, manager.Usage.Bytes);
+            Assert.Equal(requests + 1, planning.EnvironmentRequests);
+            Assert.Equal(settings, store.State.Settings);
+            Assert.Equal(saved, Assert.Single(store.State.Locations));
+            Assert.Equal(2, dialogs.ClearTerrainConfirmations);
+            Assert.Contains("0.0 MiB", viewModel.TerrainCacheUsageText);
+        }
+        finally { if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    }
+
+    private sealed class TerrainCacheTestPaths(string root) : IUserDataPathProvider
+    { public string GetApplicationDataDirectory() => root; }
+
+    [Fact]
     public void EverySettingsInput_HasDeclaredBehavioralTestCoverage()
     {
         var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
@@ -1384,6 +1437,8 @@ public sealed class MainViewModelTests
         {
             ["TextBox"] = "Text",
             ["ComboBox"] = "SelectedItem",
+            ["ColorPicker"] = "Color",
+            ["Slider"] = "Value",
             ["NumericUpDown"] = "Value",
             ["CheckBox"] = "IsChecked",
             ["Button"] = "Command"
@@ -1643,18 +1698,19 @@ public sealed class MainViewModelTests
     private static MainViewModel CreateViewModel(IPlanningService planning, ITargetCatalogue catalogue, IUserDataStore store, FakeExporter exporter,
         IPlannerDialogService? dialogs = null, IDeviceLocationAvailabilityService? availability = null,
         ILocationMapThumbnailService? thumbnails = null, IReverseGeocodingProvider? reverseGeocoding = null,
-        ITerrainDebugMapService? terrainDebugMaps = null)
+        ITerrainDebugMapService? terrainDebugMaps = null, TerrainDiskCache? terrainDiskCache = null,
+        IClock? clock = null, IFramingVisibilityCalculator? framingVisibility = null)
     {
         var locationSearch = new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance);
         var resolver = new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance);
         var localHorizon = new LocalHorizonCalculator();
         return new MainViewModel(planning, catalogue, new TimeZoneResolver(), store, exporter,
             NullLogger<MainViewModel>.Instance, new LensCalculator(),
-            new CameraFramingGuideCalculator(), new FramingVisibilityCalculator(localHorizon), localHorizon,
-            SystemClock.Instance,
+            new CameraFramingGuideCalculator(), framingVisibility ?? new FramingVisibilityCalculator(), localHorizon,
+            clock ?? new FixedClock(store is FakeStore fake ? fake.State.Session.Instant : Instant.FromUtc(2024, 1, 1, 0, 0)),
             locationSearch, resolver, availability ?? new UnavailableDeviceLocationProvider(),
             new LocalTargetSearchService(catalogue), dialogs ?? new FakeDialogs(),
-            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps);
+            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps, terrainDiskCache);
     }
 
     private sealed class FakeLocationSearchProvider : ILocationSearchProvider
@@ -1874,19 +1930,25 @@ public sealed class MainViewModelTests
             return completion.Task; // Deliberately ignores cancellation to test generation rejection.
         }
 
-        public void Complete(int index)
+        public void Complete(int index, bool available = true)
         {
             (GeoCoordinate Observer, TaskCompletionSource<TerrainDebugMapSnapshot> Completion) request;
             lock (_gate) request = _requests[index];
             request.Completion.TrySetResult(new TerrainDebugMapSnapshot(request.Observer,
-                20_000, 1, 1, [request.Observer], [10], [10], [LandCoverClass.Grassland],
-                [false], [TerrainSampleStatus.Valid], ["12/1/1"], EnvironmentalDataState.Available,
+                20_000, 1, 1, [request.Observer], [available ? 10 : null], [available ? 10 : null], [LandCoverClass.Grassland],
+                [false], [TerrainSampleStatus.Valid], ["12/1/1"], available ? EnvironmentalDataState.Available : EnvironmentalDataState.Unavailable,
                 SystemClock.Instance.GetCurrentInstant(), "Synthetic"));
+        }
+
+        public void Fail(int index)
+        {
+            lock (_gate) _requests[index].Completion.TrySetException(new IOException("Synthetic map failure"));
         }
     }
 
     private sealed class StagedPlanning(ITargetCatalogue catalogue) : IPlanningService
     {
+        public CancellationToken LastRefreshToken { get; private set; }
         public SemaphoreSlim WeatherStarted { get; } = new(0);
         private readonly List<(PlanningSession Session, TaskCompletionSource<PlanningSnapshot> Completion)> _core = [];
         private readonly List<(PlanningSession Session, TaskCompletionSource<PlannerEnvironmentSnapshot> Completion)> _environment = [];
@@ -1926,9 +1988,13 @@ public sealed class MainViewModelTests
         }
 
         public PlanningRefreshWork StartRefresh(PlanningSession session, WeatherSettings weatherSettings,
-            CancellationToken cancellationToken) => new(CalculateCoreSnapshotAsync(session, cancellationToken),
-            LoadEnvironmentAsync(session, cancellationToken), LoadWeatherAsync(session, weatherSettings, cancellationToken),
-            (bearings, token) => Task.FromResult(PriorityHorizon(session, bearings.Count)));
+            CancellationToken cancellationToken)
+        {
+            LastRefreshToken = cancellationToken;
+            return new(CalculateCoreSnapshotAsync(session, cancellationToken),
+                LoadEnvironmentAsync(session, cancellationToken), LoadWeatherAsync(session, weatherSettings, cancellationToken),
+                (bearings, token) => Task.FromResult(PriorityHorizon(session, bearings.Count)));
+        }
 
         public async Task<PlanningSnapshot> CalculateSnapshotAsync(PlanningSession session,
             WeatherSettings weatherSettings, CancellationToken cancellationToken)
@@ -2061,6 +2127,10 @@ public sealed class MainViewModelTests
 
     private sealed class FakeDialogs : IPlannerDialogService
     {
+        public bool ConfirmClearTerrain { get; set; }
+        public int ClearTerrainConfirmations { get; private set; }
+        public Task<bool> ConfirmClearTerrainCacheAsync(CancellationToken cancellationToken = default)
+        { ClearTerrainConfirmations++; return Task.FromResult(ConfirmClearTerrain); }
         public LocationSearchResult? SearchResult { get; set; }
         public SavedLocationEdit? EditResult { get; set; }
         public bool ConfirmDeleteResult { get; set; } = true;

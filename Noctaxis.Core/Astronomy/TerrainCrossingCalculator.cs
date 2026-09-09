@@ -7,6 +7,7 @@ public static class TerrainCrossingCalculator
 {
     public static TerrainCrossings Calculate(AstralPath path, TerrainHorizonProfile terrain)
     {
+        if (!terrain.TerrainCalculationsEnabled) return new(null, null);
         Instant? clears = null;
         Instant? drops = null;
         for (var i = 1; i < path.Samples.Count; i++)

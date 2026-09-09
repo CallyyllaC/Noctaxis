@@ -83,6 +83,7 @@ public sealed class OpenMeteoWeatherProvider(
 
     public async Task<WeatherResult> GetWeatherAsync(WeatherRequest request, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (!request.ForceRefresh && cache.TryGet(request.Location, request.ApproximateTime,
                 request.CacheDistanceKilometres, out var cached))
         {
@@ -113,7 +114,7 @@ public sealed class OpenMeteoWeatherProvider(
             return new WeatherResult(DataState.Ready, conditions, "Open-Meteo forecast");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or FormatException)
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or FormatException or OperationCanceledException)
         {
             logger.LogWarning(ex, "Open-Meteo request failed");
             return new WeatherResult(DataState.Error, null, "Weather unavailable: " + ex.Message);

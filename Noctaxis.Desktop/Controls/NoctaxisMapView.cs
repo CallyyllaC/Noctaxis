@@ -1,3 +1,4 @@
+using Noctaxis.Desktop.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -18,6 +19,36 @@ namespace Noctaxis.Desktop.Controls;
 
 public sealed class NoctaxisMapView : UserControl
 {
+    public static readonly StyledProperty<double> GroundMetresPerPixelProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, double>(nameof(GroundMetresPerPixel), double.PositiveInfinity);
+    public double GroundMetresPerPixel => GetValue(GroundMetresPerPixelProperty);
+    public static readonly StyledProperty<double> ViewportHeightPixelsProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, double>(nameof(ViewportHeightPixels), double.PositiveInfinity);
+    public double ViewportHeightPixels => GetValue(ViewportHeightPixelsProperty);
+    private int _groundScaleUpdatePending;
+
+    private void UpdateGroundScale(object? sender = null, ViewportChangedEventArgs? args = null)
+    {
+        // Animated Mapsui navigation can notify from the render thread. Both reading
+        // Observer and publishing the minimap binding value require the Avalonia UI thread.
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            if (Interlocked.Exchange(ref _groundScaleUpdatePending, 1) == 0)
+                Dispatcher.UIThread.Post(() =>
+                {
+                    Interlocked.Exchange(ref _groundScaleUpdatePending, 0);
+                    if (_attached) UpdateGroundScale(); // Read the latest viewport, not a queued old frame.
+                });
+            return;
+        }
+        if (_mapControl.Map is not { } map) return;
+        var resolution = map.Navigator.Viewport.Resolution;
+        if (double.IsFinite(resolution) && resolution > 0)
+        {
+            SetValue(GroundMetresPerPixelProperty, resolution * Math.Cos(Observer.Latitude * Angles.DegreesToRadians));
+            SetValue(ViewportHeightPixelsProperty, map.Navigator.Viewport.Height);
+        }
+    }
     public static readonly StyledProperty<GeoCoordinate> ObserverProperty =
         AvaloniaProperty.Register<NoctaxisMapView, GeoCoordinate>(nameof(Observer), new GeoCoordinate(51.5074, -0.1278));
     public static readonly StyledProperty<PlanningSnapshot?> SnapshotProperty =
@@ -102,10 +133,19 @@ public sealed class NoctaxisMapView : UserControl
                     _overlay.InvalidateVisual();
             });
         _renderTimer.Start();
-        AttachedToVisualTree += (_, _) => { _attached = true; _pinInteraction.SetCommittedCoordinate(Observer); UpdateOverlay(); CenterOn(Observer); };
+        AttachedToVisualTree += (_, _) =>
+        {
+            _attached = true;
+            map.Navigator.ViewportChanged += UpdateGroundScale;
+            _pinInteraction.SetCommittedCoordinate(Observer);
+            UpdateOverlay();
+            CenterOn(Observer);
+            UpdateGroundScale();
+        };
         DetachedFromVisualTree += (_, _) =>
         {
             _attached = false;
+            map.Navigator.ViewportChanged -= UpdateGroundScale;
             _overlay.ReleaseRenderer();
         };
     }
@@ -126,6 +166,7 @@ public sealed class NoctaxisMapView : UserControl
 
     internal MapControl MapControlForTesting => _mapControl;
     internal Control OverlayForTesting => _overlay;
+    internal EnvironmentalOverlayState? EnvironmentalStateForTesting => _overlay.EnvironmentalStateForTesting;
 
     public void CenterOn(GeoCoordinate coordinate)
     {
@@ -139,6 +180,7 @@ public sealed class NoctaxisMapView : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == ObserverProperty && _mapControl is not null) UpdateGroundScale();
         if (change.Property == SnapshotProperty)
         {
             _overlay.Snapshot = Snapshot;
@@ -332,6 +374,7 @@ public sealed class NoctaxisMapView : UserControl
         private readonly EnvironmentalOverlayStateCoordinator _environmentalCoordinator = new();
         private EnvironmentalOverlayRenderer? _environmentalRenderer;
         private EnvironmentalOverlayState? _environmentalState;
+        internal EnvironmentalOverlayState? EnvironmentalStateForTesting => _environmentalState;
         public PlannerPinActivity PinActivity { get; set; }
         public bool ShowCelestialOverlays { get; set; }
         public bool ShowCameraOverlay { get; set; }
@@ -439,7 +482,11 @@ public sealed class NoctaxisMapView : UserControl
                 if (_celestialGeometry is not null)
                     DrawCelestialRays(context, snapshot, _celestialGeometry, FramingSettings, currentViewport.Value);
                 if (ShowTerrainDebug)
-                    DrawTerrainDebugSamples(context, snapshot, currentViewport.Value);
+                    TerrainSampleRenderer.Draw(context, snapshot,
+                        FramingGuide?.CentreBearingDegrees ?? snapshot.Position.Horizontal.AzimuthDegrees,
+                        Observer, currentViewport.Value.Resolution,
+                        coordinate => Project(coordinate, currentViewport.Value),
+                        (path, pen) => DrawPath(context, path, pen, currentViewport.Value));
             }
 
             using (context.PushTransform(Matrix.CreateTranslation(pin.Value.X, pin.Value.Y)))
@@ -475,7 +522,7 @@ public sealed class NoctaxisMapView : UserControl
             {
                 var terrain = Snapshot.Environment?.HorizonProfile ?? Snapshot.Terrain;
                 var profileKey = EnvironmentalOverlayStateFactory.CreateProfileKey(
-                    terrain, FramingSettings.TerrainCastAngularDetailDegrees);
+                    terrain, CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees);
                 var previousRevision = _environmentalCoordinator.Diagnostics.OverlayStateRebuilds;
                 _environmentalState = _environmentalCoordinator.Update(
                     Observer, _cameraGeometry.Sector, FramingVisibility, profileKey);
@@ -531,73 +578,6 @@ public sealed class NoctaxisMapView : UserControl
             context.DrawGeometry(null, new Pen(new SolidColorBrush(colour), isCore ? 1.7 : 1.1), geometry);
         }
 
-        private void DrawTerrainDebugSamples(DrawingContext context, PlanningSnapshot snapshot,
-            Viewport currentViewport)
-        {
-            var profile = snapshot.Environment?.HorizonProfile ?? snapshot.Terrain;
-            var bearing = FramingGuide?.CentreBearingDegrees ?? snapshot.Position.Horizontal.AzimuthDegrees;
-            var sample = TerrainProfileDiagnostics.NearestBearingSample(profile, bearing);
-            if (sample is null) return;
-
-            var rawSamples = profile.ObserverDiagnostics?.TerrainSample.RawSamples ?? [];
-            foreach (var raw in rawSamples)
-            {
-                var point = Project(raw.Coordinate, currentViewport);
-                if (point is null) continue;
-                var fill = DebugBrush(raw.Status);
-                context.DrawEllipse(fill, new Pen(Brushes.Black, 1), point.Value, 4, 4);
-                if (currentViewport.Resolution <= 12)
-                    DrawDebugLabel(context, point.Value, raw.RawElevationMetres, raw.Status);
-            }
-
-            var sightline = sample.Value.Sightline ?? [];
-            if (sightline.Count == 0) return;
-            var stride = Math.Max(1, (int)Math.Ceiling(sightline.Count / 80d));
-            for (var index = 0; index < sightline.Count; index += stride)
-            {
-                var radial = sightline[index];
-                var coordinate = Angles.Destination(Observer, sample.Value.BearingDegrees, radial.DistanceMetres);
-                var point = Project(coordinate, currentViewport);
-                if (point is null) continue;
-                var status = radial.GroundElevationMetres.HasValue
-                    ? TerrainSampleStatus.Valid : radial.GroundStatus;
-                context.DrawEllipse(DebugBrush(status), null, point.Value, 2.2, 2.2);
-                if (currentViewport.Resolution <= 4 && index < 32)
-                    DrawDebugLabel(context, point.Value,
-                        radial.GroundElevationMetres, status);
-            }
-
-            if (sample.Value.EffectiveHorizonFeatureDistanceMetres is not double winningDistance) return;
-            var winningCoordinate = Angles.Destination(Observer, sample.Value.BearingDegrees, winningDistance);
-            DrawPath(context, [Observer, winningCoordinate],
-                new Pen(new SolidColorBrush(Color.FromArgb(210, 255, 88, 72)), 1.2, dashStyle: DashStyle.Dash),
-                currentViewport);
-            var winningPoint = Project(winningCoordinate, currentViewport);
-            if (winningPoint is not null)
-                context.DrawEllipse(new SolidColorBrush(Color.FromArgb(245, 255, 70, 58)),
-                    new Pen(Brushes.White, 1.5), winningPoint.Value, 6, 6);
-        }
-
-        private static IBrush DebugBrush(TerrainSampleStatus status) => status switch
-        {
-            TerrainSampleStatus.Water => new SolidColorBrush(Color.FromArgb(235, 52, 181, 255)),
-            TerrainSampleStatus.Valid => new SolidColorBrush(Color.FromArgb(235, 92, 238, 148)),
-            TerrainSampleStatus.NoData or TerrainSampleStatus.Error =>
-                new SolidColorBrush(Color.FromArgb(245, 255, 75, 75)),
-            _ => new SolidColorBrush(Color.FromArgb(230, 255, 183, 73))
-        };
-
-        private static void DrawDebugLabel(DrawingContext context, Point point, double? elevation,
-            TerrainSampleStatus status)
-        {
-            var label = elevation.HasValue ? $"{elevation.Value:F1} m" : status.ToString();
-            var text = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                Typeface.Default, 9, Brushes.White);
-            context.DrawRectangle(new SolidColorBrush(Color.FromArgb(210, 7, 12, 19)), null,
-                new Rect(point.X + 5, point.Y - 7, text.Width + 4, text.Height + 2));
-            context.DrawText(text, new Point(point.X + 7, point.Y - 6));
-        }
-
         private static Point? Project(GeoCoordinate coordinate, Viewport? current)
         {
             if (!current.HasValue || current.Value.Resolution <= 0) return null;
@@ -635,7 +615,9 @@ public sealed class NoctaxisMapView : UserControl
             {
                 var parameters = EnvironmentalRenderParameters.Default with
                 {
-                    ConeOpacity = (float)(settings.ShadingOpacityPercent / 100)
+                    ConeOpacity = (float)(settings.ShadingOpacityPercent / 100),
+                    TerrainColourArgb = Color.Parse(settings.TerrainObstructionColour).ToUInt32(),
+                    TerrainTintOpacity = (float)(settings.TerrainTintStrengthPercent / 100)
                 };
                 var frame = EnvironmentalOverlayMath.CreateFrame(
                     currentViewport, Bounds.Width, Bounds.Height, parameters);

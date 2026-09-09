@@ -41,6 +41,7 @@ public sealed class JsonUserDataStore : IUserDataStore
     private readonly Func<Instant> _now;
     private readonly JsonSerializerOptions _options;
     private readonly string _filePath;
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
 
     public JsonUserDataStore(IUserDataPathProvider paths, ILogger<JsonUserDataStore> logger, Func<Instant>? now = null)
     {
@@ -75,14 +76,20 @@ public sealed class JsonUserDataStore : IUserDataStore
 
     public async Task SaveAsync(PersistedState state, CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(StorageDirectory);
-        var temporary = _filePath + ".tmp";
-        await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 16 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough))
+        await _saveGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await JsonSerializer.SerializeAsync(stream, PersistedStateDto.FromDomain(state), _options, cancellationToken).ConfigureAwait(false);
-            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            Directory.CreateDirectory(StorageDirectory);
+            var temporary = _filePath + ".tmp";
+            await using (var stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None, 16 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await JsonSerializer.SerializeAsync(stream, PersistedStateDto.FromDomain(state), _options, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporary, _filePath, true);
         }
-        File.Move(temporary, _filePath, true);
+        finally { _saveGate.Release(); }
     }
 
     private void TryQuarantineCorruptFile()

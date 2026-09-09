@@ -108,9 +108,9 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.Equal(60_000, overlay.TerrainHatchRegions.Min(region => region.StartDistanceMetres));
-        Assert.All(overlay.TerrainHatchRegions,
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.Equal(60_000, overlay.TerrainObstructionRegions.Min(region => region.StartDistanceMetres));
+        Assert.All(overlay.TerrainObstructionRegions,
             region => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres));
         AssertBoundaryEndsAtMaximumRange(overlay.CentreBearing, sector.Origin);
     }
@@ -126,10 +126,10 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.Equal(2_000, overlay.TerrainHatchRegions.Min(region => region.StartDistanceMetres));
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.Equal(2_000, overlay.TerrainObstructionRegions.Min(region => region.StartDistanceMetres));
         Assert.Contains(overlay.TerrainSamples, sample => !sample.IsObstructed);
-        Assert.All(overlay.TerrainHatchRegions,
+        Assert.All(overlay.TerrainObstructionRegions,
             region => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres));
         AssertBoundaryEndsAtMaximumRange(overlay.RightBoundary, sector.Origin);
     }
@@ -148,8 +148,8 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.All(overlay.TerrainHatchRegions,
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.All(overlay.TerrainObstructionRegions,
             hatch => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, hatch.EndDistanceMetres));
         Assert.Contains(overlay.FillRegions, region =>
             region.Effect == CameraOverlayEffect.WeatherDesaturated && region.StartDistanceMetres == 40_000);
@@ -169,8 +169,8 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.All(overlay.TerrainHatchRegions, hatch =>
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.All(overlay.TerrainObstructionRegions, hatch =>
         {
             Assert.True(hatch.StartDistanceMetres > 40_000);
             Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, hatch.EndDistanceMetres);
@@ -191,8 +191,8 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.All(overlay.TerrainHatchRegions,
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.All(overlay.TerrainObstructionRegions,
             hatch => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, hatch.EndDistanceMetres));
     }
 
@@ -210,7 +210,7 @@ public sealed class GeographicOverlayGeometryTests
 
         Assert.False(IsHatched(overlay, 30, distance / 2));
         Assert.True(IsHatched(overlay, 30, distance * 1.5));
-        Assert.All(overlay.TerrainHatchRegions,
+        Assert.All(overlay.TerrainObstructionRegions,
             region => Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres));
     }
 
@@ -285,7 +285,7 @@ public sealed class GeographicOverlayGeometryTests
         Assert.Equal(CameraOverlayEffect.WeatherDesaturated, overlay.FillRegions[1].Effect);
         Assert.Equal(50, overlay.FillRegions[1].StartDistanceMetres);
         Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, overlay.FillRegions[1].EndDistanceMetres);
-        Assert.Empty(overlay.TerrainHatchRegions);
+        Assert.Empty(overlay.TerrainObstructionRegions);
     }
 
     [Fact]
@@ -305,7 +305,7 @@ public sealed class GeographicOverlayGeometryTests
 
         Assert.Equal(boundary, overlay.FillRegions[0].EndDistanceMetres);
         Assert.Equal(boundary, overlay.FillRegions[1].StartDistanceMetres);
-        Assert.All(overlay.TerrainHatchRegions, region =>
+        Assert.All(overlay.TerrainObstructionRegions, region =>
         {
             Assert.Equal(boundary, region.StartDistanceMetres);
             Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres);
@@ -343,8 +343,8 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.NotEmpty(overlay.TerrainHatchRegions);
-        Assert.All(overlay.TerrainHatchRegions, region =>
+        Assert.NotEmpty(overlay.TerrainObstructionRegions);
+        Assert.All(overlay.TerrainObstructionRegions, region =>
         {
             Assert.Equal(10_000, region.StartDistanceMetres);
             Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, region.EndDistanceMetres);
@@ -385,7 +385,7 @@ public sealed class GeographicOverlayGeometryTests
 
         var clear = Assert.Single(overlay.TerrainSamples, sample => !sample.IsObstructed);
         Assert.Null(clear.ObstructionDistanceMetres);
-        Assert.DoesNotContain(overlay.TerrainHatchRegions,
+        Assert.DoesNotContain(overlay.TerrainObstructionRegions,
             region => region.StartDistanceMetres == MapOverlayGeometry.MaximumRangeMetres);
         AssertValidTerrainTopology(overlay);
     }
@@ -447,7 +447,7 @@ public sealed class GeographicOverlayGeometryTests
             TerrainSample(sector, 30, null),
             TerrainSample(sector, 60, null)));
 
-        Assert.Empty(overlay.TerrainHatchRegions);
+        Assert.Empty(overlay.TerrainObstructionRegions);
         Assert.All(overlay.TerrainSamples, sample => Assert.False(sample.IsObstructed));
     }
 
@@ -474,7 +474,7 @@ public sealed class GeographicOverlayGeometryTests
         var fill = Assert.Single(overlay.FillRegions);
         Assert.Equal(CameraOverlayEffect.None, fill.Effect);
         Assert.Equal(MapOverlayGeometry.MaximumRangeMetres, fill.EndDistanceMetres);
-        Assert.Empty(overlay.TerrainHatchRegions);
+        Assert.Empty(overlay.TerrainObstructionRegions);
         Assert.Single(overlay.CentreBearing);
     }
 
@@ -489,7 +489,7 @@ public sealed class GeographicOverlayGeometryTests
 
         var overlay = _builder.BuildCameraOverlay(sector, visibility);
 
-        Assert.Empty(overlay.TerrainHatchRegions);
+        Assert.Empty(overlay.TerrainObstructionRegions);
         AssertBoundaryEndsAtMaximumRange(overlay.CentreBearing, sector.Origin);
     }
 
@@ -558,7 +558,7 @@ public sealed class GeographicOverlayGeometryTests
             Assert.True(overlay.TerrainSamples[index].UnwrappedBearingDegrees >
                         overlay.TerrainSamples[index - 1].UnwrappedBearingDegrees);
 
-        foreach (var region in overlay.TerrainHatchRegions)
+        foreach (var region in overlay.TerrainObstructionRegions)
         {
             Assert.Equal(4, region.Coordinates.Count);
             Assert.False(SelfIntersects(overlay.Sector.Origin, region.Coordinates));
@@ -592,7 +592,7 @@ public sealed class GeographicOverlayGeometryTests
         var point = new LocalPoint(
             distanceMetres * Math.Sin(bearing * Angles.DegreesToRadians),
             distanceMetres * Math.Cos(bearing * Angles.DegreesToRadians));
-        return overlay.TerrainHatchRegions.Any(region => PointInPolygon(point,
+        return overlay.TerrainObstructionRegions.Any(region => PointInPolygon(point,
             region.Coordinates.Select(coordinate => ToLocal(overlay.Sector.Origin, coordinate)).ToArray()));
     }
 

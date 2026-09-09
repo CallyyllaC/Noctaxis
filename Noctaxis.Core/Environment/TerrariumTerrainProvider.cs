@@ -125,16 +125,74 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
     {
         var values = new double?[coordinates.Count];
         var statuses = new TerrainSampleStatus[coordinates.Count];
-        await Parallel.ForEachAsync(Enumerable.Range(0, coordinates.Count), new ParallelOptions
+        // Bound both coordinate storage and resident references, including adversarial scattered inputs.
+        // The public result owns its storage; only this invocation retains the temporary tile references.
+        var positions = new BulkPosition[Math.Min(1024, coordinates.Count)];
+        var tiles = new Dictionary<TerrariumTileKey, TerrariumTileLoad?>();
+        var offset = 0;
+        cancellationToken.ThrowIfCancellationRequested();
+        while (offset < coordinates.Count)
         {
-            MaxDegreeOfParallelism = 6,
-            CancellationToken = cancellationToken
-        }, async (index, token) =>
-        {
-            var sample = await SampleAsync(coordinates[index].Normalised(), token, false).ConfigureAwait(false);
-            values[index] = sample.ElevationMetres;
-            statuses[index] = sample.ElevationMetres.HasValue ? TerrainSampleStatus.Valid : sample.Status;
-        }).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            tiles.Clear();
+            var count = 0;
+            while (count < positions.Length && offset + count < coordinates.Count && tiles.Count <= 92)
+            {
+                var address = LocatePixel(coordinates[offset + count].Normalised(), _options.Zoom);
+                var x = address.GlobalPixelX - .5d;
+                var y = address.GlobalPixelY - .5d;
+                var position = new BulkPosition((long)Math.Floor(x), (long)Math.Floor(y),
+                    x - Math.Floor(x), y - Math.Floor(y));
+                positions[count++] = position;
+                for (var corner = 0; corner < 4; corner++)
+                    if (position.Weight(corner) > 1e-9)
+                        tiles.TryAdd(GlobalPixel(position.X + (corner & 1),
+                            position.Y + (corner >> 1), _options.Zoom).Tile, null);
+            }
+            var keys = tiles.Keys.ToArray();
+            var loads = new TerrariumTileLoad?[keys.Length];
+            await Parallel.ForAsync(0, keys.Length, new ParallelOptions
+            {
+                MaxDegreeOfParallelism = 4,
+                CancellationToken = cancellationToken
+            }, async (index, token) =>
+                loads[index] = await GetTileAsync(keys[index], token).ConfigureAwait(false)).ConfigureAwait(false);
+            for (var index = 0; index < keys.Length; index++) tiles[keys[index]] = loads[index];
+            for (var local = 0; local < count; local++)
+            {
+                if ((local & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                var position = positions[local];
+                var weighted = 0d;
+                var totalWeight = 0d;
+                var missing = false;
+                var error = false;
+                for (var corner = 0; corner < 4; corner++)
+                {
+                    var weight = position.Weight(corner);
+                    if (weight <= 1e-9) continue;
+                    var pixel = GlobalPixel(position.X + (corner & 1), position.Y + (corner >> 1), _options.Zoom);
+                    var load = tiles[pixel.Tile];
+                    if (load?.Tile is null)
+                    {
+                        missing = true;
+                        error |= load?.Status == TerrainSampleStatus.Error;
+                        continue;
+                    }
+                    weighted += load.Tile[pixel.Column, pixel.Row] * weight;
+                    totalWeight += weight;
+                }
+                var index = offset + local;
+                if (missing || totalWeight < .999999)
+                    statuses[index] = error ? TerrainSampleStatus.Error : TerrainSampleStatus.Unavailable;
+                else
+                {
+                    values[index] = weighted / totalWeight;
+                    statuses[index] = TerrainSampleStatus.Valid;
+                }
+                Interlocked.Increment(ref _samples);
+            }
+            offset += count;
+        }
         var available = values.Count(value => value.HasValue);
         return new ElevationBatchResult(
             available == 0 ? EnvironmentalDataState.Unavailable :
@@ -145,12 +203,31 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
             statuses);
     }
 
+    private readonly record struct BulkPosition(long X, long Y, double FractionX, double FractionY)
+    {
+        public double Weight(int corner) => ((corner & 1) != 0 ? FractionX : 1 - FractionX) *
+            ((corner & 2) != 0 ? FractionY : 1 - FractionY);
+    }
+
     public async Task PreloadAsync(IReadOnlyList<GeoCoordinate> coordinates,
         CancellationToken cancellationToken)
     {
         var keys = EnvironmentalPerformanceDiagnostics.Measure("tile-discovery", () =>
-            coordinates.SelectMany(coordinate => RequiredTiles(coordinate.Normalised(), _options.Zoom))
-                .Distinct().ToArray());
+        {
+            var required = new HashSet<TerrariumTileKey>();
+            for (var index = 0; index < coordinates.Count; index++)
+            {
+                if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+                var address = LocatePixel(coordinates[index].Normalised(), _options.Zoom);
+                var x = (long)Math.Floor(address.GlobalPixelX - .5d);
+                var y = (long)Math.Floor(address.GlobalPixelY - .5d);
+                required.Add(GlobalPixel(x, y, _options.Zoom).Tile);
+                required.Add(GlobalPixel(x + 1, y, _options.Zoom).Tile);
+                required.Add(GlobalPixel(x, y + 1, _options.Zoom).Tile);
+                required.Add(GlobalPixel(x + 1, y + 1, _options.Zoom).Tile);
+            }
+            return required.ToArray();
+        });
         await Parallel.ForEachAsync(keys, new ParallelOptions
         {
             MaxDegreeOfParallelism = 4,
@@ -326,15 +403,6 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
                 (_options.FailureRetryDelay ?? TimeSpan.FromSeconds(30)));
             return null;
         }
-    }
-
-    private static IReadOnlyList<TerrariumTileKey> RequiredTiles(GeoCoordinate coordinate, int zoom)
-    {
-        var address = LocatePixel(coordinate, zoom);
-        var x = (long)Math.Floor(address.GlobalPixelX - .5d);
-        var y = (long)Math.Floor(address.GlobalPixelY - .5d);
-        return new[] { GlobalPixel(x, y, zoom).Tile, GlobalPixel(x + 1, y, zoom).Tile,
-            GlobalPixel(x, y + 1, zoom).Tile, GlobalPixel(x + 1, y + 1, zoom).Tile };
     }
 
     private static TerrariumPixelAddress GlobalPixel(long x, long y, int zoom)

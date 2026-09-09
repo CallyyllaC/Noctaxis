@@ -34,7 +34,8 @@ public sealed record TerrainProfileRequest(
     bool AccountForEarthCurvature = true,
     double ObserverHeightAboveGroundMetres = 1.7,
     TerrainRadialSamplingPolicy? AdaptiveSampling = null,
-    double? ManualGroundElevationOverrideMetres = null)
+    double? ManualGroundElevationOverrideMetres = null,
+    bool EnableTerrainCalculations = true)
 {
     public TerrainRadialSamplingPolicy EffectiveAdaptiveSampling =>
         AdaptiveSampling ?? TerrainRadialSamplingPolicy.Default;
@@ -107,7 +108,18 @@ public sealed class HorizonService : IHorizonService
     private readonly ITerrainSurfaceResolver _surface;
     private readonly ILogger<HorizonService> _logger;
     private readonly ConcurrentDictionary<string, ProgressiveSession> _active = new(StringComparer.Ordinal);
-    private readonly ConcurrentDictionary<string, TerrainHorizonProfile> _completed = new(StringComparer.Ordinal);
+    public const int CompletedProfileCapacity = 4;
+    private readonly CompletedResultCache<string, TerrainHorizonProfile> _completed =
+        new(CompletedProfileCapacity, EstimateProfileBytes);
+    public CompletedResultCacheDiagnostics CompletedCacheDiagnostics => _completed.Diagnostics;
+
+    internal static long EstimateProfileBytes(TerrainHorizonProfile profile)
+    {
+        long bytes = profile.Samples.Count * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<TerrainHorizonSample>();
+        foreach (var sample in profile.Samples)
+            bytes += (sample.Sightline?.Count ?? 0) * (long)System.Runtime.CompilerServices.Unsafe.SizeOf<TerrainSightlineSample>();
+        return bytes;
+    }
     private readonly int _degreeOfParallelism;
     private long _generation;
     private CancellationTokenSource _cacheLifetime = new();
@@ -118,6 +130,7 @@ public sealed class HorizonService : IHorizonService
         lock (_generationGate)
         {
             _cacheLifetime.Cancel();
+            _cacheLifetime.Dispose();
             _cacheLifetime = new();
             _generation++;
             _completed.Clear();
@@ -154,11 +167,21 @@ public sealed class HorizonService : IHorizonService
         lock (_generationGate)
         {
             generation = _generation;
-            session = _active.GetOrAdd(key, _ => new ProgressiveSession(normalised, request, _surface,
-                _logger, CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cacheLifetime.Token).Token,
-                _degreeOfParallelism));
+            session = _active.GetOrAdd(key, cacheKey =>
+            {
+                var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cacheLifetime.Token);
+                var created = new ProgressiveSession(normalised, request, _surface,
+                    _logger, lifetime.Token, _degreeOfParallelism, result =>
+                    {
+                        lock (_generationGate)
+                            if (_generation == generation) _completed.TryAdd(key, result);
+                    });
+                _ = created.Work.CompleteProfile.ContinueWith(completed => lifetime.Dispose(),
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+                return created;
+            });
         }
-        _ = CompleteAndCacheAsync(key, session, generation);
+        _ = RemoveCompletedSessionAsync(key, session);
         return session.Work;
     }
 
@@ -170,12 +193,11 @@ public sealed class HorizonService : IHorizonService
         TerrainProfileRequest request, IReadOnlyList<double> bearings, CancellationToken cancellationToken) =>
         StartProfile(observer, request, cancellationToken).PrioritiseBearingsAsync(bearings, cancellationToken);
 
-    private async Task CompleteAndCacheAsync(string key, ProgressiveSession session, long generation)
+    private async Task RemoveCompletedSessionAsync(string key, ProgressiveSession session)
     {
         try
         {
-            var result = await session.Work.CompleteProfile.ConfigureAwait(false);
-            lock (_generationGate) { if (_generation == generation) _completed.TryAdd(key, result); }
+            await session.Work.CompleteProfile.ConfigureAwait(false);
         }
         catch (OperationCanceledException) { }
         catch (Exception ex) { _logger.LogDebug(ex, "Progressive terrain profile failed"); }
@@ -212,8 +234,6 @@ public sealed class HorizonService : IHorizonService
         private readonly TaskCompletionSource<bool> _prepared = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TimingAccumulator _timings = new();
         private GeoCoordinate[] _coordinates = [];
-        private TerrainSurfaceClassificationBatch _classifications = new(
-            EnvironmentalDataState.Unavailable, [], [], "Not prepared.");
         private RadialPlan _radial = RadialPlan.Empty;
         private EnvironmentalValue<double> _observerTerrain = EnvironmentalValue<double>.Unavailable(
             TerrainSurfaceResolver.SourceId, TerrainSurfaceResolver.SourceVersion, "Not prepared.");
@@ -233,13 +253,14 @@ public sealed class HorizonService : IHorizonService
 
         public ProgressiveSession(GeoCoordinate observer, TerrainProfileRequest request,
             ITerrainSurfaceResolver surface, ILogger logger,
-            CancellationToken cancellationToken, int degreeOfParallelism)
+            CancellationToken cancellationToken, int degreeOfParallelism, Action<TerrainHorizonProfile> completed)
         {
             _observer = observer;
             _request = request;
             _surface = surface;
             _logger = logger;
             _degreeOfParallelism = degreeOfParallelism;
+            _completed = completed;
             _states = new int[request.AzimuthSampleCount];
             _bearingReady = new TaskCompletionSource<bool>[request.AzimuthSampleCount];
             _samples = new TerrainHorizonSample[request.AzimuthSampleCount];
@@ -256,6 +277,7 @@ public sealed class HorizonService : IHorizonService
         }
 
         public TerrainHorizonWork Work { get; }
+        private readonly Action<TerrainHorizonProfile> _completed;
 
         private async Task<TerrainHorizonProfile> BuildCompleteAsync()
         {
@@ -282,6 +304,7 @@ public sealed class HorizonService : IHorizonService
                     _timings.CoordinateGenerationMilliseconds, _timings.TilePreparationMilliseconds,
                     _timings.TerrainSamplingMilliseconds,
                     _timings.HorizonMathematicsMilliseconds);
+                _completed(profile);
                 return profile;
             }
             catch (Exception ex)
@@ -318,36 +341,17 @@ public sealed class HorizonService : IHorizonService
             _timings.CoordinateGenerationMilliseconds = coordinateTimer.Elapsed.TotalMilliseconds;
 
             var observerTerrainTask = SafeSurfaceSampleAsync(
-                () => _surface.GetSurfaceSampleAsync(_observer, cancellationToken));
-            var classificationsTask = GetTimedClassificationsAsync(cancellationToken);
+                () => _surface.GetCalculationSampleAsync(_observer, cancellationToken));
             var tileTimer = Stopwatch.StartNew();
-            await Task.WhenAll(_surface.PreloadAsync(_coordinates, cancellationToken), observerTerrainTask,
-                    classificationsTask)
+            await Task.WhenAll(_surface.PreloadAsync(_coordinates, cancellationToken), observerTerrainTask)
                 .ConfigureAwait(false);
             tileTimer.Stop();
             _timings.TilePreparationMilliseconds = tileTimer.Elapsed.TotalMilliseconds;
-            _classifications = await classificationsTask.ConfigureAwait(false);
             var observerTerrain = await observerTerrainTask.ConfigureAwait(false);
             _observerTerrain = observerTerrain.SurfaceElevation;
             _observerTerrainDiagnostics = observerTerrain.RawTerrainDiagnostics;
             _observerSurfaceResolution = observerTerrain.Resolution;
             ChooseObserverDatum();
-        }
-
-        private async Task<TerrainSurfaceClassificationBatch> GetTimedClassificationsAsync(
-            CancellationToken cancellationToken)
-        {
-            var timer = Stopwatch.StartNew();
-            try
-            {
-                return await _surface.GetClassificationsAsync(_coordinates, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-            finally
-            {
-                timer.Stop();
-                _timings.SurfaceClassificationMilliseconds = timer.Elapsed.TotalMilliseconds;
-            }
         }
 
         private async Task RunBackgroundWorkerAsync(Func<int> nextChunk, CancellationToken cancellationToken)
@@ -403,26 +407,14 @@ public sealed class HorizonService : IHorizonService
                 cancellationToken.ThrowIfCancellationRequested();
                 var radialCount = _radial.Distances.Length;
                 var positions = new GeoCoordinate[bearingIndices.Count * radialCount];
-                var classifications = new LandCoverClass?[positions.Length];
-                var waterKinds = new TerrainWaterBodyKind[positions.Length];
                 for (var bearingOffset = 0; bearingOffset < bearingIndices.Count; bearingOffset++)
                 {
                     Array.Copy(_coordinates, bearingIndices[bearingOffset] * radialCount,
                         positions, bearingOffset * radialCount, radialCount);
-                    for (var radialIndex = 0; radialIndex < radialCount; radialIndex++)
-                    {
-                        var sourceIndex = bearingIndices[bearingOffset] * radialCount + radialIndex;
-                        var targetIndex = bearingOffset * radialCount + radialIndex;
-                        classifications[targetIndex] = _classifications.Classifications[sourceIndex];
-                        waterKinds[targetIndex] = _classifications.WaterBodyKinds[sourceIndex];
-                    }
                 }
 
-                var classificationSlice = new TerrainSurfaceClassificationBatch(_classifications.State,
-                    classifications, waterKinds, _classifications.Message);
-
                 var terrainBatch = await TimedBatchAsync(
-                    () => _surface.GetSurfaceElevationsAsync(positions, classificationSlice,
+                    () => _surface.GetSurfaceElevationsAsync(positions,
                         cancellationToken), positions.Length,
                     "Terrain physical-surface resolution failed.").ConfigureAwait(false);
                 MergeState(ref _groundState, terrainBatch.State);
@@ -599,7 +591,8 @@ public sealed class HorizonService : IHorizonService
         private long _networkTicks;
         public double CoordinateGenerationMilliseconds;
         public double TilePreparationMilliseconds;
-        public double SurfaceClassificationMilliseconds;
+        private long _classificationTicks;
+        public double SurfaceClassificationMilliseconds => TicksToMilliseconds(Volatile.Read(ref _classificationTicks));
         public double TotalMilliseconds;
         public double TerrainSamplingMilliseconds => TicksToMilliseconds(Volatile.Read(ref _terrainTicks));
         public double HorizonMathematicsMilliseconds => TicksToMilliseconds(Volatile.Read(ref _horizonTicks));
@@ -610,6 +603,7 @@ public sealed class HorizonService : IHorizonService
         {
             var ticks = MillisecondsToTicks(milliseconds);
             if (stage == "tile-discovery") Interlocked.Add(ref _tileDiscoveryTicks, ticks);
+            else if (stage == "surface-classification") Interlocked.Add(ref _classificationTicks, ticks);
             else if (stage == "cache-lookup") Interlocked.Add(ref _cacheLookupTicks, ticks);
             else if (stage is "disk-read-decode" or "dem-decode")
                 Interlocked.Add(ref _diskReadDecodeTicks, ticks);

@@ -209,7 +209,8 @@ public sealed class EnvironmentalIntelligenceTests
     {
         var origin = new GeoCoordinate(51, 0);
         var landCover = new BuiltUpLandCover();
-        var surfaces = new TerrainSurfaceResolver(new DirectionalElevation(origin, 0, 500), landCover,
+        // Negative land still requires and propagates classification; positive terrain deliberately skips labels.
+        var surfaces = new TerrainSurfaceResolver(new NegativeLandElevation(), landCover,
             NullLogger<TerrainSurfaceResolver>.Instance);
         var horizons = new HorizonService(surfaces, NullLogger<HorizonService>.Instance);
         var service = new PlannerEnvironmentService(horizons,
@@ -246,6 +247,15 @@ public sealed class EnvironmentalIntelligenceTests
 
     private static EnvironmentalValue<double> Value(double value, string source) =>
         new(EnvironmentalDataState.Available, value, source, "1", "test");
+
+    private sealed class NegativeLandElevation : ITerrainElevationProvider
+    {
+        public Task<EnvironmentalValue<double>> GetElevationAsync(GeoCoordinate coordinate, CancellationToken token) =>
+            Task.FromResult(Value(-20, "ground"));
+        public Task<ElevationBatchResult> GetElevationsAsync(IReadOnlyList<GeoCoordinate> coordinates, CancellationToken token) =>
+            Task.FromResult(new ElevationBatchResult(EnvironmentalDataState.Available,
+                Enumerable.Repeat<double?>(-20, coordinates.Count).ToArray(), "ground", "1", "Negative land fixture"));
+    }
 
     private sealed class DirectionalElevation(GeoCoordinate origin, double bearing, double peak)
         : ITerrainElevationProvider

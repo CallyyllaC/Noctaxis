@@ -1,0 +1,38 @@
+[
+  {
+    "batchCount": 1,
+    "iteration": 1,
+    "milliseconds": 139.9787,
+    "allocated": 71489592
+  },
+  {
+    "batchCount": 1,
+    "iteration": 2,
+    "milliseconds": 146.4941,
+    "allocated": 71494832
+  },
+  {
+    "batchCount": 1,
+    "iteration": 3,
+    "milliseconds": 140.6176,
+    "allocated": 71489776
+  },
+  {
+    "batchCount": 15,
+    "iteration": 1,
+    "milliseconds": 104.6338,
+    "allocated": 78688712
+  },
+  {
+    "batchCount": 15,
+    "iteration": 2,
+    "milliseconds": 116.406,
+    "allocated": 78670232
+  },
+  {
+    "batchCount": 15,
+    "iteration": 3,
+    "milliseconds": 100.0805,
+    "allocated": 78689504
+  }
+]

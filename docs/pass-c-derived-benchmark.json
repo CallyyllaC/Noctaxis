@@ -1,0 +1,62 @@
+[
+  {
+    "bearing": 90,
+    "mode": "legacy",
+    "milliseconds": 0.291715,
+    "allocatedBytes": 11074,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 0,
+    "additionalProviderCalls": 0
+  },
+  {
+    "bearing": 90,
+    "mode": "coverage",
+    "milliseconds": 0.35885,
+    "allocatedBytes": 9658,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 0,
+    "additionalProviderCalls": 0
+  },
+  {
+    "bearing": 90,
+    "mode": "coverage-and-depth",
+    "milliseconds": 0.47942999999999997,
+    "allocatedBytes": 91330,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 72,
+    "additionalProviderCalls": 0
+  },
+  {
+    "bearing": 90.35,
+    "mode": "legacy",
+    "milliseconds": 2.8848700000000003,
+    "allocatedBytes": 5219066,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 0,
+    "additionalProviderCalls": 0
+  },
+  {
+    "bearing": 90.35,
+    "mode": "coverage",
+    "milliseconds": 3.679565,
+    "allocatedBytes": 5219922,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 0,
+    "additionalProviderCalls": 0
+  },
+  {
+    "bearing": 90.35,
+    "mode": "coverage-and-depth",
+    "milliseconds": 3.59206,
+    "allocatedBytes": 5301594,
+    "bearings": 71,
+    "radialSamplesScanned": 46505,
+    "depthRows": 72,
+    "additionalProviderCalls": 0
+  }
+]

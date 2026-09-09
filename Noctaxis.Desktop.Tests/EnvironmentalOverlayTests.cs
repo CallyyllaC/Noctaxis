@@ -1,3 +1,4 @@
+using Noctaxis.Desktop.Diagnostics;
 using System.Collections.Immutable;
 using Avalonia;
 using Avalonia.Controls;
@@ -17,7 +18,7 @@ using SkiaSharp;
 
 namespace Noctaxis.Desktop.Tests;
 
-public sealed class EnvironmentalOverlayTests
+public sealed partial class EnvironmentalOverlayTests
 {
     private static readonly GeoCoordinate Observer = new(53.61, -0.43);
 
@@ -36,15 +37,15 @@ public sealed class EnvironmentalOverlayTests
         Assert.True(coordinator.UpdateRender(initial with { Width = 1_600 })); // resize
         Assert.True(coordinator.UpdateRender(initial with
         {
-            Parameters = initial.Parameters with { HatchOpacity = .5f }
+            Parameters = initial.Parameters with { TerrainColourArgb = 0xff4488aa }
         }));
         Assert.True(coordinator.UpdateRender(initial with
         {
-            Parameters = initial.Parameters with { HatchSpacingPixels = 12 }
+            Parameters = initial.Parameters with { TerrainColourArgb = 0xffaa8844 }
         }));
         Assert.True(coordinator.UpdateRender(initial with
         {
-            Parameters = initial.Parameters with { HatchThicknessPixels = 4 }
+            Parameters = initial.Parameters with { TerrainColourArgb = 0xff22aa88 }
         }));
 
         Assert.Equal(1, diagnostics.ProfileStateChanges);
@@ -267,7 +268,7 @@ public sealed class EnvironmentalOverlayTests
     [InlineData(50)]
     [InlineData(100)]
     [InlineData(500)]
-    public void TerrainHatchPipelineKeepsObserverSideClearAndDrawsBeyondFirstHit(double hitDistance)
+    public void TerrainObstructionPipelineKeepsObserverSideClearAndDrawsBeyondFirstHit(double hitDistance)
     {
         const int logicalWidth = 928;
         const int logicalHeight = 640;
@@ -285,8 +286,7 @@ public sealed class EnvironmentalOverlayTests
             resolution, 0, logicalWidth, logicalHeight);
         var parameters = EnvironmentalRenderParameters.Default with
         {
-            HatchSpacingPixels = 3,
-            HatchThicknessPixels = 8
+            TerrainColourArgb = 0xff9a6f9e
         };
         var frame = EnvironmentalOverlayMath.CreateFrame(
             viewport, logicalWidth, logicalHeight, parameters);
@@ -322,7 +322,7 @@ public sealed class EnvironmentalOverlayTests
         {
             var alpha = System.Runtime.InteropServices.Marshal.ReadByte(
                 framebuffer.Address, y * framebuffer.RowBytes + x * 4 + 3);
-            if (alpha <= 150) continue;
+            if (alpha <= 70) continue;
             var distance = Math.Sqrt(Math.Pow(x - renderedPin.X, 2) + Math.Pow(y - renderedPin.Y, 2));
             if (distance < nearest.Distance) nearest = (x, y, distance);
         }
@@ -353,7 +353,7 @@ public sealed class EnvironmentalOverlayTests
         var sample = WebMercator.FromWgs84(Angles.Destination(Observer, 90, distance));
         var viewport = new Viewport(sample.X, sample.Y, 1, 0, 64, 64);
         var parameters = EnvironmentalRenderParameters.Default with
-        { HatchSpacingPixels = 3, HatchThicknessPixels = 8 };
+        { TerrainColourArgb = 0xff9a6f9e };
         var frame = EnvironmentalOverlayMath.CreateFrame(viewport, 64, 64, parameters);
         using var host = new EnvironmentalOverlayTestControl(state, frame, Colors.DeepPink)
             { Width = 64, Height = 64 };
@@ -368,13 +368,10 @@ public sealed class EnvironmentalOverlayTests
         var offset = 32 * buffer.RowBytes + 32 * 4;
         int Channel(int channel) => System.Runtime.InteropServices.Marshal.ReadByte(buffer.Address, offset + channel);
         Assert.True(Channel(3) > 0);
-        Assert.Equal(hatched, Channel(3) > 150);
-        // Solid hatch deliberately covers the base. Check base colour separately in clear regions.
-        if (!hatched)
-        {
-            if (grayscale) Assert.InRange(Math.Abs(Channel(2) - Channel(1)), 0, 1);
-            else Assert.True(Channel(2) > Channel(1) + 10);
-        }
+        Assert.Equal(hatched, Channel(3) > 80);
+        Assert.True(Channel(3) < 180); // Background remains visible, even under maximum tint.
+        if (grayscale && !hatched) Assert.InRange(Math.Abs(Channel(2) - Channel(1)), 0, 1);
+        else Assert.True(Channel(2) > Channel(1) + 10);
     }
 
     private sealed class EnvironmentalOverlayTestControl(
@@ -457,7 +454,7 @@ public sealed class EnvironmentalOverlayTests
                 var y = (int)Math.Round(pin.Y - radius * Math.Cos(radians));
                 var offset = y * framebuffer.RowBytes + x * 4;
                 var alpha = System.Runtime.InteropServices.Marshal.ReadByte(framebuffer.Address, offset + 3);
-                if (alpha > 100) hatchPixels++;
+                if (alpha > 80) hatchPixels++;
             }
             if (hatchPixels >= 4) coveredBearings.Add(bearing);
         }
@@ -571,6 +568,45 @@ public sealed class EnvironmentalOverlayTests
     }
 
     [AvaloniaFact]
+    public void PermanentMinimap_RendersStatesAndRedrawsBearingWithoutReplacingRaster()
+    {
+        var map = DebugMap(new GeoCoordinate(53, -1));
+        var control = new LocalTerrainMap { Width = 208, Height = 208, Observer = map.Observer,
+            Map = map, LoadState = TerrainDebugMapLoadState.Ready };
+        control.Measure(new Size(208, 208));
+        control.Arrange(new Rect(0, 0, 208, 208));
+        byte[] Render()
+        {
+            using var bitmap = new RenderTargetBitmap(new PixelSize(208, 208), new Vector(96, 96));
+            bitmap.Render(control);
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, new PngBitmapEncoderOptions());
+            return stream.ToArray();
+        }
+        var north = Render();
+        control.CentreBearingDegrees = 90;
+        var east = Render();
+        Assert.Same(map, control.Map);
+        Assert.False(north.SequenceEqual(east));
+        var images = new List<byte[]> { east };
+        foreach (var state in new[] { TerrainDebugMapLoadState.Resolving,
+                     TerrainDebugMapLoadState.Disabled, TerrainDebugMapLoadState.Unavailable })
+        {
+            control.LoadState = state;
+            var rendered = Render();
+            Assert.All(images, prior => Assert.False(prior.SequenceEqual(rendered)));
+            images.Add(rendered);
+        }
+        // Optional local visual review; ordinary tests create no image artifacts.
+        if (System.Environment.GetEnvironmentVariable("NOCTAXIS_MINIMAP_CAPTURE") is { Length: > 0 } directory)
+        {
+            Directory.CreateDirectory(directory);
+            for (var index = 0; index < images.Count; index++)
+                File.WriteAllBytes(Path.Combine(directory, $"minimap-{index}.png"), images[index]);
+        }
+    }
+
+    [AvaloniaFact]
     public void LocalTerrainMapUsesNorthUpBearingAndReactiveMapIdentity()
     {
         var centre = new Point(100, 100);
@@ -622,7 +658,7 @@ public sealed class EnvironmentalOverlayTests
 
         Assert.False(visibility.IsTargetTerrainObstructed);
         Assert.All(visibility.EffectiveTerrainObstructions, sample => Assert.False(sample.IsObstructed));
-        Assert.Empty(overlay.TerrainHatchRegions);
+        Assert.Empty(overlay.TerrainObstructionRegions);
     }
 
     private sealed class ValueObserver<T>(List<T> values) : IObserver<T>
@@ -729,9 +765,9 @@ public sealed class EnvironmentalOverlayTests
             {
                 Parameters = firstFrame.RenderKey.Parameters with
                 {
-                    HatchOpacity = .5f,
-                    HatchSpacingPixels = 11,
-                    HatchThicknessPixels = 3
+                    TerrainColourArgb = 0xff4488aa,
+                    WeatherOpacityScale = .8f,
+                    ConeOpacity = .15f
                 }
             }
         };
@@ -747,7 +783,7 @@ public sealed class EnvironmentalOverlayTests
     }
 
     [Fact]
-    public void HatchDensityDoesNotChangeStateSizeOrDrawOperationCount()
+    public void ContinuousTintUsesOneDrawOperationAndFixedProfileTexture()
     {
         var sector = Sector(0, 120);
         var coordinator = new EnvironmentalOverlayStateCoordinator(profileTextureWidth: 512);
@@ -756,7 +792,6 @@ public sealed class EnvironmentalOverlayTests
 
         Assert.Equal(512, state.ProfileTexels.Length);
         Assert.Equal(1, EnvironmentalOverlayRenderer.DrawOperationsPerFrame);
-        Assert.Equal(0, coordinator.Diagnostics.LegacyHatchPrimitiveCount);
         Assert.Equal(3, state.SourceSamples.Length);
     }
 

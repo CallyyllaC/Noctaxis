@@ -19,7 +19,8 @@ public enum TerrainSurfaceResolutionReason
     WaterElevationPreserved,
     OceanBathymetryAdjustedToMeanSeaLevel,
     PermanentWaterBathymetryAdjustedToMeanSeaLevel,
-    TerrainUnavailable
+    TerrainUnavailable,
+    NonNegativeTerrainClassificationNotRequired
 }
 
 public readonly record struct TerrainSurfaceResolution(
@@ -61,6 +62,8 @@ public sealed record TerrainSurfaceClassificationBatch(
 
 public interface ITerrainSurfaceResolver
 {
+    Task<TerrainSurfaceSampleResult> GetCalculationSampleAsync(GeoCoordinate coordinate,
+        CancellationToken cancellationToken) => GetSurfaceSampleAsync(coordinate, cancellationToken);
     Task<TerrainSurfaceSampleResult> GetSurfaceSampleAsync(GeoCoordinate coordinate,
         CancellationToken cancellationToken);
     Task<TerrainSurfaceBatchResult> GetSurfaceElevationsAsync(IReadOnlyList<GeoCoordinate> coordinates,
@@ -106,15 +109,60 @@ public sealed class TerrainSurfaceResolver(
     public async Task<TerrainSurfaceBatchResult> GetSurfaceElevationsAsync(
         IReadOnlyList<GeoCoordinate> coordinates, CancellationToken cancellationToken)
     {
-        var classifications = await GetClassificationsAsync(coordinates, cancellationToken).ConfigureAwait(false);
-        return await GetSurfaceElevationsAsync(coordinates, classifications, cancellationToken)
-            .ConfigureAwait(false);
+        var raw = await terrain.GetElevationsAsync(coordinates, cancellationToken).ConfigureAwait(false);
+        if (raw.ElevationsMetres.Count != coordinates.Count)
+            throw new InvalidDataException("Terrain surface input batch length did not match its request.");
+        var negativeCount = 0;
+        for (var index = 0; index < coordinates.Count; index++)
+        {
+            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
+            if (raw.ElevationsMetres[index] < 0) negativeCount++;
+        }
+        if (negativeCount > 0 && negativeCount == coordinates.Count)
+            return ResolveBatch(raw, await GetClassificationsAsync(coordinates, cancellationToken)
+                .ConfigureAwait(false), cancellationToken);
+        var labels = new LandCoverClass?[coordinates.Count];
+        var kinds = new TerrainWaterBodyKind[coordinates.Count];
+        if (negativeCount > 0)
+        {
+            var negatives = new GeoCoordinate[negativeCount];
+            for (int index = 0, target = 0; index < coordinates.Count; index++)
+                if (raw.ElevationsMetres[index] < 0) negatives[target++] = coordinates[index];
+            var classified = await GetClassificationsAsync(negatives, cancellationToken).ConfigureAwait(false);
+            if (classified.Classifications.Count != negativeCount || classified.WaterBodyKinds.Count != negativeCount)
+                throw new InvalidDataException("Classification batch length did not match its request.");
+            for (int index = 0, source = 0; index < coordinates.Count; index++)
+                if (raw.ElevationsMetres[index] < 0)
+                {
+                    labels[index] = classified.Classifications[source];
+                    kinds[index] = classified.WaterBodyKinds[source++];
+                }
+        }
+        return ResolveBatch(raw, new(EnvironmentalDataState.Available, labels, kinds,
+            "Classification requested only where it can affect elevation."), cancellationToken, true);
+    }
+
+    public async Task<TerrainSurfaceSampleResult> GetCalculationSampleAsync(GeoCoordinate coordinate,
+        CancellationToken cancellationToken)
+    {
+        var raw = await terrain.GetElevationSampleAsync(coordinate, cancellationToken).ConfigureAwait(false);
+        var cover = raw.Value.HasValue && raw.Value.Value < 0
+            ? await SafeLandCoverAsync(coordinate, cancellationToken).ConfigureAwait(false)
+            : EnvironmentalValue<LandCoverClass>.Unavailable(WorldCoverLandCoverProvider.SourceId,
+                WorldCoverLandCoverProvider.SourceVersion, "Classification not required for this terrain elevation.");
+        var resolution = Resolve(raw.Value.HasValue ? raw.Value.Value : null,
+            cover.HasValue ? cover.Value : null,
+            cover.State == EnvironmentalDataState.Water ? TerrainWaterBodyKind.Ocean : null);
+        if (raw.Value.HasValue && raw.Value.Value >= 0)
+            resolution = resolution with { Reason = TerrainSurfaceResolutionReason.NonNegativeTerrainClassificationNotRequired };
+        return new(raw.Value, CreateSurfaceValue(raw.Value, resolution), cover, resolution, raw.Diagnostics);
     }
 
     public async Task<TerrainSurfaceClassificationBatch> GetClassificationsAsync(
         IReadOnlyList<GeoCoordinate> coordinates, CancellationToken cancellationToken)
     {
-        var cover = await SafeLandCoversAsync(coordinates, cancellationToken).ConfigureAwait(false);
+        var cover = await EnvironmentalPerformanceDiagnostics.MeasureAsync("surface-classification",
+            () => SafeLandCoversAsync(coordinates, cancellationToken)).ConfigureAwait(false);
         var kinds = Enumerable.Range(0, coordinates.Count).Select(cover.WaterBodyKindAt).ToArray();
         return new TerrainSurfaceClassificationBatch(cover.State, cover.Classifications, kinds, cover.Message);
     }
@@ -124,22 +172,33 @@ public sealed class TerrainSurfaceResolver(
         CancellationToken cancellationToken)
     {
         var raw = await terrain.GetElevationsAsync(coordinates, cancellationToken).ConfigureAwait(false);
-        if (raw.ElevationsMetres.Count != coordinates.Count ||
-            classifications.Classifications.Count != coordinates.Count ||
-            classifications.WaterBodyKinds.Count != coordinates.Count)
+        if (raw.ElevationsMetres.Count != coordinates.Count)
+            throw new InvalidDataException("Terrain surface input batch length did not match its request.");
+        return ResolveBatch(raw, classifications, cancellationToken);
+    }
+
+    private static TerrainSurfaceBatchResult ResolveBatch(ElevationBatchResult raw,
+        TerrainSurfaceClassificationBatch classifications, CancellationToken cancellationToken,
+        bool skipPositive = false)
+    {
+        var count = raw.ElevationsMetres.Count;
+        if (classifications.Classifications.Count != count || classifications.WaterBodyKinds.Count != count)
             throw new InvalidDataException("Terrain surface input batch length did not match its request.");
 
-        var surfaces = new double?[coordinates.Count];
-        var reasons = new TerrainSurfaceResolutionReason[coordinates.Count];
-        var adjusted = new bool[coordinates.Count];
-        var statuses = new TerrainSampleStatus[coordinates.Count];
+        var surfaces = new double?[count];
+        var reasons = new TerrainSurfaceResolutionReason[count];
+        var adjusted = new bool[count];
+        var statuses = new TerrainSampleStatus[count];
         var adjustedCount = 0;
-        for (var index = 0; index < coordinates.Count; index++)
+        for (var index = 0; index < count; index++)
         {
+            if ((index & 255) == 0) cancellationToken.ThrowIfCancellationRequested();
             var resolution = Resolve(raw.ElevationsMetres[index], classifications.Classifications[index],
                 classifications.WaterBodyKinds[index]);
             surfaces[index] = resolution.SurfaceElevationMetres;
             reasons[index] = resolution.Reason;
+            if (skipPositive && raw.ElevationsMetres[index] >= 0)
+                reasons[index] = TerrainSurfaceResolutionReason.NonNegativeTerrainClassificationNotRequired;
             adjusted[index] = resolution.WasAdjusted;
             if (resolution.WasAdjusted) adjustedCount++;
             statuses[index] = !resolution.SurfaceElevationMetres.HasValue
@@ -199,6 +258,8 @@ public sealed class TerrainSurfaceResolver(
 
     public static string ResolutionMessage(TerrainSurfaceResolution resolution) => resolution.Reason switch
     {
+        TerrainSurfaceResolutionReason.NonNegativeTerrainClassificationNotRequired =>
+            "Non-negative Terrarium elevation retained; classification cannot change its elevation.",
         TerrainSurfaceResolutionReason.OceanBathymetryAdjustedToMeanSeaLevel =>
             "Ocean bathymetry resolved to approximate mean sea level.",
         TerrainSurfaceResolutionReason.PermanentWaterBathymetryAdjustedToMeanSeaLevel =>

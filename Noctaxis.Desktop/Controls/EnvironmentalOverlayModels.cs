@@ -19,11 +19,11 @@ public readonly record struct EnvironmentalTerrainSample(
     double UnwrappedBearingDegrees,
     double OffsetDegrees,
     bool IsObstructed,
-    double? ObstructionDistanceMetres);
+    double? ObstructionDistanceMetres, double EffectiveCoverage = 1);
 
 public readonly record struct EnvironmentalProfileTexel(
     float ObstructionDistanceMetres,
-    bool IsObstructed);
+    bool IsObstructed, float EffectiveCoverage = 1);
 
 public readonly record struct EnvironmentalProfileKey(
     double ObserverLatitude,
@@ -49,20 +49,16 @@ public readonly record struct EnvironmentalOverlayKey(
 public readonly record struct EnvironmentalRenderParameters(
     float ConeOpacity,
     float WeatherOpacityScale,
-    float HatchOpacity,
-    float HatchSpacingPixels,
-    float HatchThicknessPixels,
-    float HatchHighlightOffsetPixels)
+    uint TerrainColourArgb,
+    float TerrainTintOpacity = .40f)
 {
-    public static EnvironmentalRenderParameters Default { get; } = new(.10f, .72f, .92f, 7, 2.2f, 3.2f);
+    public static EnvironmentalRenderParameters Default { get; } = new(.10f, 1f, 0xff9a6f9e);
 
     public EnvironmentalRenderParameters Normalised() => new(
         Math.Clamp(float.IsFinite(ConeOpacity) ? ConeOpacity : .10f, 0, .5f),
-        Math.Clamp(float.IsFinite(WeatherOpacityScale) ? WeatherOpacityScale : .72f, 0, 1),
-        Math.Clamp(float.IsFinite(HatchOpacity) ? HatchOpacity : .92f, 0, 1),
-        Math.Clamp(float.IsFinite(HatchSpacingPixels) ? HatchSpacingPixels : 7, 3, 32),
-        Math.Clamp(float.IsFinite(HatchThicknessPixels) ? HatchThicknessPixels : 2.2f, .5f, 8),
-        Math.Clamp(float.IsFinite(HatchHighlightOffsetPixels) ? HatchHighlightOffsetPixels : 3.2f, 0, 16));
+        Math.Clamp(float.IsFinite(WeatherOpacityScale) ? WeatherOpacityScale : 1f, 0, 1),
+        TerrainColourArgb | 0xff000000,
+        Math.Clamp(float.IsFinite(TerrainTintOpacity) ? TerrainTintOpacity : .40f, .15f, .55f));
 }
 
 public readonly record struct EnvironmentalRenderKey(
@@ -116,7 +112,6 @@ public sealed class EnvironmentalOverlayDiagnostics
     public long ProfileUploads => Interlocked.Read(ref _profileUploads);
     public long DrawCalls => Interlocked.Read(ref _drawCalls);
     public long ShaderCompilations => Interlocked.Read(ref _shaderCompilations);
-    public int LegacyHatchPrimitiveCount => 0;
 
     internal void ProfileChanged() => Interlocked.Increment(ref _profileStateChanges);
     internal void OverlayRebuilt() => Interlocked.Increment(ref _overlayStateRebuilds);
@@ -231,6 +226,7 @@ public static class EnvironmentalOverlayStateFactory
             sampleHash.Add(sample.BearingDegrees);
             sampleHash.Add(sample.IsObstructed);
             sampleHash.Add(sample.ObstructionDistanceMetres);
+            sampleHash.Add(sample.EffectiveCoverage);
         }
         return new EnvironmentalTerrainTextureKey(
             profileKey,
@@ -267,7 +263,7 @@ public static class EnvironmentalOverlayStateFactory
                 sector.LeftBearingDegrees + offset,
                 offset,
                 obstructed,
-                obstructed ? distance : null));
+                obstructed ? distance : null, source.EffectiveCoverage));
         }
         samples.Sort(static (left, right) => left.OffsetDegrees.CompareTo(right.OffsetDegrees));
         for (var index = samples.Count - 1; index > 0; index--)
@@ -293,7 +289,7 @@ public static class EnvironmentalOverlayStateFactory
             var offset = horizontalFovDegrees * index / (width - 1d);
             var sample = SampleAtOffset(samples, offset);
             builder.Add(sample.IsObstructed && sample.ObstructionDistanceMetres is double distance
-                ? new EnvironmentalProfileTexel((float)distance, true)
+                ? new EnvironmentalProfileTexel((float)distance, true, (float)sample.EffectiveCoverage)
                 : default);
         }
         return builder.MoveToImmutable();
@@ -338,7 +334,7 @@ public static class EnvironmentalOverlayStateFactory
             left.UnwrappedBearingDegrees + offsetDegrees - left.OffsetDegrees,
             offsetDegrees,
             true,
-            distance);
+            distance, left.EffectiveCoverage + (right.EffectiveCoverage - left.EffectiveCoverage) * fraction);
     }
 
     private static double? ValidDistance(double? distanceMetres, double maximumDistanceMetres) =>

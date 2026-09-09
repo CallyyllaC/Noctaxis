@@ -124,7 +124,7 @@
                       <MenuFlyout>
                         <MenuItem Header="Edit location" Command="{Binding EditCommand}"/>
                         <MenuItem Header="Regenerate map image" Command="{Binding RefreshMapThumbnailCommand}"/>
-                        <MenuItem Header="Refresh WSF settlement layer" Command="{Binding RefreshSettlementCacheCommand}"/>
+                        <MenuItem Header="Refresh settlement imagery" Command="{Binding RefreshSettlementCacheCommand}"/>
                         <MenuItem Header="{Binding SettlementStatusSummary}" IsEnabled="False"
                                   IsVisible="{Binding HasSettlementWarning}" Foreground="#9AA6B8"/>
                         <Separator/>

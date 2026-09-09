@@ -11,7 +11,7 @@ public interface IFramingVisibilityCalculator
         double cameraBearingDegrees,
         double horizontalFovDegrees = 0,
         double terrainCastAngularDetailDegrees = CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees,
-        double verticalFovDegrees = 0);
+        double verticalFovDegrees = 0, CameraTerrainFrame? cameraFrame = null);
 }
 
 /// <summary>
@@ -19,12 +19,11 @@ public interface IFramingVisibilityCalculator
 /// Terrain and surface sightlines provide radial obstruction boundaries; weather remains an
 /// independent visibility effect and neither changes the geographic extent of the camera cone.
 /// </summary>
-public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHorizon = null) : IFramingVisibilityCalculator
+public sealed class FramingVisibilityCalculator : IFramingVisibilityCalculator
 {
     public const double MaximumValidVisibilityKilometres = 200;
     private const double TransitionProbeStepDegrees = 1;
     private const double TransitionRefinementDegrees = 0.125;
-    private readonly ILocalHorizonCalculator _localHorizon = localHorizon ?? new LocalHorizonCalculator();
 
     public FramingVisibilityAssessment Calculate(
         WeatherResult weather,
@@ -33,20 +32,23 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         double cameraBearingDegrees,
         double horizontalFovDegrees = 0,
         double terrainCastAngularDetailDegrees = CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees,
-        double verticalFovDegrees = 0)
+        double verticalFovDegrees = 0, CameraTerrainFrame? cameraFrame = null)
     {
-        // Retained in the public calculation contract for callers that report optical framing,
-        // but plan-view terrain geometry is deliberately independent of camera pitch/FOV height.
+        // Legacy callers without a camera frame retain the horizontal diagnostic path.
+        // Production supplies independent pitch and vertical FoV through cameraFrame.
         _ = verticalFovDegrees;
-        var terrainAvailable = terrain.HasTerrainCoverage && terrain.Samples.Count > 0;
+        // Legacy callers may still supply this argument; production always consumes 1° detail.
+        _ = terrainCastAngularDetailDegrees;
+        var terrainAvailable = terrain.TerrainCalculationsEnabled && terrain.HasTerrainCoverage && terrain.Samples.Count > 0;
         double? terrainHorizon = terrainAvailable ? terrain.EffectiveAltitudeAt(cameraBearingDegrees) : null;
         double? clearance = terrainHorizon.HasValue ? targetAltitudeDegrees - terrainHorizon.Value : null;
         // Equality is treated as occulted: a sightline tangent to the resolved terrain surface
         // has no positive angular clearance.
         var terrainObstructed = clearance is <= 0;
+        CameraTerrainDepth? depth = null;
         var terrainObstructions = terrainAvailable
             ? SampleTerrainObstructions(terrain, cameraBearingDegrees, horizontalFovDegrees,
-                terrainCastAngularDetailDegrees)
+                CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees, cameraFrame, out depth)
             : [];
 
         var visibility = weather.State == DataState.Ready && weather.Conditions is { IsStale: false }
@@ -70,23 +72,27 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
             terrainHorizon,
             weatherVisibilityDistanceMetres,
             status,
-            terrainObstructions);
+            terrainObstructions, depth);
     }
 
     private IReadOnlyList<FramingTerrainObstructionSample> SampleTerrainObstructions(
         TerrainHorizonProfile terrain,
         double centreBearingDegrees,
         double horizontalFovDegrees,
-        double angularDetailDegrees)
+        double angularDetailDegrees, CameraTerrainFrame? cameraFrame, out CameraTerrainDepth? depth)
     {
         var fov = double.IsFinite(horizontalFovDegrees) ? Math.Clamp(horizontalFovDegrees, 0, 179) : 0;
-        var profiles = fov > 0
-            ? _localHorizon.GetConeProfiles(terrain, centreBearingDegrees, fov, angularDetailDegrees)
-            : [_localHorizon.GetRayProfile(terrain, centreBearingDegrees)];
-        var coarseSamples = new FramingTerrainObstructionSample[profiles.Count];
-        for (var index = 0; index < profiles.Count; index++)
+        var segments = fov > 0 ? Math.Max(1, (int)Math.Ceiling(fov / angularDetailDegrees)) : 0;
+        var spacing = segments > 0 ? fov / segments : 0;
+        var left = centreBearingDegrees - fov / 2;
+        var coarseSamples = new FramingTerrainObstructionSample[segments + 1];
+        var pixels = cameraFrame is null ? null : new double[coarseSamples.Length * CameraTerrainDepth.Rows];
+        for (var index = 0; index < coarseSamples.Length; index++)
             coarseSamples[index] = TerrainConeSampleAt(
-                terrain, profiles[index].BearingDegrees);
+                terrain, left + spacing * index, cameraFrame, pixels, index, coarseSamples.Length);
+        depth = pixels is null || !coarseSamples.Any(s => s.FrameTerrainHorizonDegrees.HasValue) ? null
+            : new CameraTerrainDepth(System.Collections.Immutable.ImmutableArray.CreateRange(coarseSamples.Select(s => s.BearingDegrees)),
+                cameraFrame!.Lower, cameraFrame.Upper, System.Collections.Immutable.ImmutableArray.CreateRange(pixels));
         if (coarseSamples.Length < 2) return coarseSamples;
 
         var samples = new List<FramingTerrainObstructionSample>(coarseSamples.Length + 8)
@@ -96,7 +102,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         for (var index = 0; index < coarseSamples.Length - 1; index++)
         {
             AddRefinedTransitions(terrain,
-                coarseSamples[index], coarseSamples[index + 1], samples);
+                coarseSamples[index], coarseSamples[index + 1], samples, cameraFrame);
             AddIfDistinct(samples, coarseSamples[index + 1]);
         }
         return samples;
@@ -104,9 +110,11 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
 
     private static FramingTerrainObstructionSample TerrainConeSampleAt(
         TerrainHorizonProfile terrain,
-        double bearingDegrees)
+        double bearingDegrees, CameraTerrainFrame? cameraFrame = null,
+        double[]? depth = null, int column = 0, int width = 1)
     {
         var bearing = Angles.NormaliseDegrees(bearingDegrees);
+        if (cameraFrame is not null) return cameraFrame.Scan(terrain, bearing, depth, column, width);
         var obstruction = terrain.TerrainObstructionAt(bearing);
         var effective = obstruction.EffectiveFirstObstructionDistanceMetres;
         var obstructed = effective is double distance && double.IsFinite(distance) && distance > 0 &&
@@ -121,7 +129,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
         TerrainHorizonProfile terrain,
         FramingTerrainObstructionSample left,
         FramingTerrainObstructionSample right,
-        ICollection<FramingTerrainObstructionSample> destination)
+        ICollection<FramingTerrainObstructionSample> destination, CameraTerrainFrame? cameraFrame)
     {
         var sweep = Angles.NormaliseDegrees(right.BearingDegrees - left.BearingDegrees);
         if (sweep <= 1e-9) return;
@@ -133,7 +141,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
             var currentBearing = left.BearingDegrees + sweep * probeIndex / probeCount;
             var current = probeIndex == probeCount
                 ? right
-                : TerrainConeSampleAt(terrain, currentBearing);
+                : TerrainConeSampleAt(terrain, currentBearing, cameraFrame);
             if (previous.IsObstructed != current.IsObstructed)
             {
                 var lowBearing = previousBearing;
@@ -143,7 +151,7 @@ public sealed class FramingVisibilityCalculator(ILocalHorizonCalculator? localHo
                 while (highBearing - lowBearing > TransitionRefinementDegrees)
                 {
                     var middleBearing = (lowBearing + highBearing) / 2;
-                    var middle = TerrainConeSampleAt(terrain, middleBearing);
+                    var middle = TerrainConeSampleAt(terrain, middleBearing, cameraFrame);
                     if (middle.IsObstructed == low.IsObstructed)
                     {
                         lowBearing = middleBearing;

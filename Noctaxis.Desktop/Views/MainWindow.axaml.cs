@@ -56,7 +56,8 @@ public partial class MainWindow : Window
             var png = await _viewModel.CreateExportPngAsync(CancellationToken.None);
             var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
             if (clipboard is null) throw new InvalidOperationException("The system clipboard is unavailable.");
-            var bitmap = new Bitmap(new MemoryStream(png, writable: false));
+            using var stream = new MemoryStream(png, writable: false);
+            using var bitmap = new Bitmap(stream);
             await clipboard.SetBitmapAsync(bitmap);
             await clipboard.FlushAsync();
         }
