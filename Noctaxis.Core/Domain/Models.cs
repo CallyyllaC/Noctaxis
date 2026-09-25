@@ -501,6 +501,8 @@ public sealed record TerrainHorizonProfile(
     Noctaxis.Core.Terrain.TerrainObserverDiagnostics? ObserverDiagnostics = null,
     bool TerrainCalculationsEnabled = true)
 {
+    /// <summary>Diagnostic producer identity; retained across partial and complete publications.</summary>
+    public long? GenerationId { get; init; }
     public static TerrainHorizonProfile Disabled(GeoCoordinate observer, Instant instant,
         double cameraHeight, double? manualGround = null) => new(observer, [], false,
             "Terrain calculations disabled", instant, ObserverHeightAboveGroundMetres: cameraHeight,
@@ -754,7 +756,11 @@ public sealed record AppSettings(
     bool TerrainDebugOverlay = false,
     long TerrainCacheLimitBytes = 2L * 1024 * 1024 * 1024,
       bool EnableTerrainCalculations = true,
-      double TerrainMinimapContext = 2.5)
+      double TerrainMinimapContext = 2.5,
+      AppearancePreferences? Appearance = null,
+      string? AwooSupporterLicenceCode = null,
+    ExternalMapProvider ExternalMapProvider = ExternalMapProvider.OpenStreetMap,
+    LightPollutionPreferences? LightPollution = null)
 {
     public const string UseSystemTimeZoneId = "system";
     [JsonIgnore]

@@ -1,0 +1,3591 @@
+{
+  "source": "Native Avalonia MapControl; offline blank map; no terrain or user state",
+  "renderScaling": 1,
+  "note": "UI gaps are scheduler latency, not presented frames; counters are cumulative (subtract before from after).",
+  "results": [
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "idle",
+      "elapsedMs": 2452.2408,
+      "processCpuMs": 218.75,
+      "processAllocatedBytes": 89960,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.6941,
+      "uiGapP95Ms": 31.6338,
+      "uiGapMaxMs": 31.731,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.4303,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0347,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.1729,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 68,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.4303,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0347,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.1729,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "pan",
+      "elapsedMs": 2343.893,
+      "processCpuMs": 1484.375,
+      "processAllocatedBytes": 1756264,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5851,
+      "uiGapP95Ms": 31.3327,
+      "uiGapMaxMs": 31.6569,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0521,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0409,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0075,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 69,
+        "viewportChanges": 61,
+        "timerInvalidations": 61,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 62,
+          "totalMs": 2.3061,
+          "allocatedBytes": 48112
+        },
+        "pin": {
+          "calls": 62,
+          "totalMs": 1.6007,
+          "allocatedBytes": 48112
+        },
+        "projection": {
+          "calls": 62,
+          "totalMs": 0.4299,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "zoom",
+      "elapsedMs": 2383.0393,
+      "processCpuMs": 265.625,
+      "processAllocatedBytes": 1710584,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5558,
+      "uiGapP95Ms": 31.479,
+      "uiGapMaxMs": 31.6253,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.025,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0217,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0023,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 68,
+        "viewportChanges": 60,
+        "timerInvalidations": 60,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 61,
+          "totalMs": 1.02,
+          "allocatedBytes": 47336
+        },
+        "pin": {
+          "calls": 61,
+          "totalMs": 0.8172,
+          "allocatedBytes": 47336
+        },
+        "projection": {
+          "calls": 61,
+          "totalMs": 0.1366,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "combined",
+      "elapsedMs": 2240.9787,
+      "processCpuMs": 312.5,
+      "processAllocatedBytes": 1661768,
+      "collections": [
+        1,
+        1,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.4776,
+      "uiGapP95Ms": 31.3672,
+      "uiGapMaxMs": 31.5061,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0111,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0074,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0022,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 65,
+        "viewportChanges": 57,
+        "timerInvalidations": 57,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 58,
+          "totalMs": 0.8194,
+          "allocatedBytes": 45008
+        },
+        "pin": {
+          "calls": 58,
+          "totalMs": 0.6241,
+          "allocatedBytes": 45008
+        },
+        "projection": {
+          "calls": 58,
+          "totalMs": 0.1294,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "rapid",
+      "elapsedMs": 1402.0675,
+      "processCpuMs": 218.75,
+      "processAllocatedBytes": 1189280,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.6487,
+      "uiGapP95Ms": 16.123,
+      "uiGapMaxMs": 16.3227,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0138,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0107,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0022,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 44,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.5431,
+          "allocatedBytes": 29488
+        },
+        "pin": {
+          "calls": 38,
+          "totalMs": 0.4126,
+          "allocatedBytes": 29488
+        },
+        "projection": {
+          "calls": 38,
+          "totalMs": 0.086,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "resize",
+      "elapsedMs": 2300.0913,
+      "processCpuMs": 1687.5,
+      "processAllocatedBytes": 2974256,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.4392,
+      "uiGapP95Ms": 31.6354,
+      "uiGapMaxMs": 31.7811,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0107,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0074,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0017,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 70,
+        "viewportChanges": 63,
+        "timerInvalidations": 63,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 131,
+          "totalMs": 1.321,
+          "allocatedBytes": 101656
+        },
+        "pin": {
+          "calls": 131,
+          "totalMs": 0.9914,
+          "allocatedBytes": 101656
+        },
+        "projection": {
+          "calls": 131,
+          "totalMs": 0.2032,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Floating",
+      "scenario": "loading",
+      "elapsedMs": 2277.8888,
+      "processCpuMs": 406.25,
+      "processAllocatedBytes": 800040,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.6166,
+      "uiGapP95Ms": 31.5471,
+      "uiGapMaxMs": 31.6093,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.898,
+          "allocatedBytes": 25424
+        },
+        "pin": {
+          "calls": 7,
+          "totalMs": 0.874,
+          "allocatedBytes": 25424
+        },
+        "projection": {
+          "calls": 7,
+          "totalMs": 0.016,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 64,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 65,
+          "totalMs": 7.2216,
+          "allocatedBytes": 236080
+        },
+        "pin": {
+          "calls": 65,
+          "totalMs": 6.9979,
+          "allocatedBytes": 236080
+        },
+        "projection": {
+          "calls": 65,
+          "totalMs": 0.1425,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "idle",
+      "elapsedMs": 2335.0841,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 89888,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.5937,
+      "uiGapP95Ms": 31.5275,
+      "uiGapMaxMs": 31.6598,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0025,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.536,
+          "allocatedBytes": 408
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.1161,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0025,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.536,
+          "allocatedBytes": 408
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.1161,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "pan",
+      "elapsedMs": 2418.6998,
+      "processCpuMs": 187.5,
+      "processAllocatedBytes": 1543712,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6866,
+      "uiGapP95Ms": 31.5048,
+      "uiGapMaxMs": 31.9676,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0047,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 2,
+          "totalMs": 0.05,
+          "allocatedBytes": 176
+        },
+        "projection": {
+          "calls": 3,
+          "totalMs": 0.0167,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 70,
+        "viewportChanges": 62,
+        "timerInvalidations": 62,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 63,
+          "totalMs": 0.2221,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 89,
+          "totalMs": 1.5161,
+          "allocatedBytes": 7928
+        },
+        "projection": {
+          "calls": 152,
+          "totalMs": 0.4227,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "zoom",
+      "elapsedMs": 2361.7522,
+      "processCpuMs": 187.5,
+      "processAllocatedBytes": 1574744,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5137,
+      "uiGapP95Ms": 31.5745,
+      "uiGapMaxMs": 31.6538,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0033,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0423,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0087,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 67,
+        "viewportChanges": 60,
+        "timerInvalidations": 60,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 61,
+          "totalMs": 0.2066,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 90,
+          "totalMs": 1.3032,
+          "allocatedBytes": 7920
+        },
+        "projection": {
+          "calls": 151,
+          "totalMs": 0.3487,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "combined",
+      "elapsedMs": 2496.443,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 1583064,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6639,
+      "uiGapP95Ms": 31.5999,
+      "uiGapMaxMs": 31.8773,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0027,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0371,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0082,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 70,
+        "viewportChanges": 63,
+        "timerInvalidations": 63,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 64,
+          "totalMs": 0.2156,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 92,
+          "totalMs": 1.4681,
+          "allocatedBytes": 8096
+        },
+        "projection": {
+          "calls": 156,
+          "totalMs": 0.3633,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "rapid",
+      "elapsedMs": 1402.1748,
+      "processCpuMs": 125,
+      "processAllocatedBytes": 1163368,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.7125,
+      "uiGapP95Ms": 16.1099,
+      "uiGapMaxMs": 16.1223,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0061,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0454,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.012,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.1385,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 62,
+          "totalMs": 0.9562,
+          "allocatedBytes": 5456
+        },
+        "projection": {
+          "calls": 100,
+          "totalMs": 0.2369,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "resize",
+      "elapsedMs": 2390.496,
+      "processCpuMs": 562.5,
+      "processAllocatedBytes": 2895456,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5811,
+      "uiGapP95Ms": 31.5145,
+      "uiGapMaxMs": 31.6854,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0026,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0414,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0082,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 73,
+        "viewportChanges": 65,
+        "timerInvalidations": 65,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 137,
+          "totalMs": 0.3403,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 118,
+          "totalMs": 1.6626,
+          "allocatedBytes": 10384
+        },
+        "projection": {
+          "calls": 255,
+          "totalMs": 0.5278,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Layer",
+      "scenario": "loading",
+      "elapsedMs": 2314.1489,
+      "processCpuMs": 140.625,
+      "processAllocatedBytes": 850112,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 55,
+      "uiGapMedianMs": 30.5102,
+      "uiGapP95Ms": 31.5478,
+      "uiGapMaxMs": 31.7817,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.0245,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 7,
+          "totalMs": 0.9098,
+          "allocatedBytes": 760
+        },
+        "projection": {
+          "calls": 14,
+          "totalMs": 0.0325,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 62,
+        "viewportChanges": 0,
+        "timerInvalidations": 61,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 62,
+          "totalMs": 0.2144,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 63,
+          "totalMs": 2.3042,
+          "allocatedBytes": 5688
+        },
+        "projection": {
+          "calls": 125,
+          "totalMs": 0.2894,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "idle",
+      "elapsedMs": 2316.4677,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 73680,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.5844,
+      "uiGapP95Ms": 31.5361,
+      "uiGapMaxMs": 31.7617,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0152,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0118,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0022,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0152,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0118,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0022,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "pan",
+      "elapsedMs": 2316.4266,
+      "processCpuMs": 109.375,
+      "processAllocatedBytes": 1329608,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5433,
+      "uiGapP95Ms": 31.5408,
+      "uiGapMaxMs": 31.6529,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0107,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0079,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0019,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 67,
+        "viewportChanges": 59,
+        "timerInvalidations": 59,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 60,
+          "totalMs": 0.1926,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0079,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 60,
+          "totalMs": 0.1159,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "zoom",
+      "elapsedMs": 2469.5661,
+      "processCpuMs": 250,
+      "processAllocatedBytes": 1355656,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.7464,
+      "uiGapP95Ms": 31.6033,
+      "uiGapMaxMs": 31.7408,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0141,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0109,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0019,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 70,
+        "viewportChanges": 63,
+        "timerInvalidations": 63,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 64,
+          "totalMs": 0.2124,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0109,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 64,
+          "totalMs": 0.1315,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "combined",
+      "elapsedMs": 2392.2333,
+      "processCpuMs": 187.5,
+      "processAllocatedBytes": 1357448,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6589,
+      "uiGapP95Ms": 31.5144,
+      "uiGapMaxMs": 31.6393,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0174,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0128,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0029,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 67,
+        "viewportChanges": 61,
+        "timerInvalidations": 61,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 62,
+          "totalMs": 0.2207,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0128,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 62,
+          "totalMs": 0.1328,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "rapid",
+      "elapsedMs": 1397.5181,
+      "processCpuMs": 140.625,
+      "processAllocatedBytes": 1077096,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.5497,
+      "uiGapP95Ms": 16.0871,
+      "uiGapMaxMs": 16.4272,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.013,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0088,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0032,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.1196,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0088,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 38,
+          "totalMs": 0.0697,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "resize",
+      "elapsedMs": 2372.2537,
+      "processCpuMs": 406.25,
+      "processAllocatedBytes": 2671984,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.4781,
+      "uiGapP95Ms": 31.6015,
+      "uiGapMaxMs": 31.783,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0099,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.007,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0018,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 70,
+        "viewportChanges": 63,
+        "timerInvalidations": 63,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 141,
+          "totalMs": 0.3454,
+          "allocatedBytes": 1552
+        },
+        "pin": {
+          "calls": 2,
+          "totalMs": 0.0139,
+          "allocatedBytes": 1552
+        },
+        "projection": {
+          "calls": 141,
+          "totalMs": 0.2024,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "Debounced",
+      "scenario": "loading",
+      "elapsedMs": 2304.949,
+      "processCpuMs": 156.25,
+      "processAllocatedBytes": 784144,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.6253,
+      "uiGapP95Ms": 31.596,
+      "uiGapMaxMs": 31.7762,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 5,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 6,
+          "totalMs": 0.4143,
+          "allocatedBytes": 21792
+        },
+        "pin": {
+          "calls": 6,
+          "totalMs": 0.3954,
+          "allocatedBytes": 21792
+        },
+        "projection": {
+          "calls": 6,
+          "totalMs": 0.0124,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 63,
+        "viewportChanges": 0,
+        "timerInvalidations": 62,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 63,
+          "totalMs": 4.2673,
+          "allocatedBytes": 228816
+        },
+        "pin": {
+          "calls": 63,
+          "totalMs": 4.0821,
+          "allocatedBytes": 228816
+        },
+        "projection": {
+          "calls": 63,
+          "totalMs": 0.1175,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "idle",
+      "elapsedMs": 2257.9269,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 77616,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.5527,
+      "uiGapP95Ms": 31.485,
+      "uiGapMaxMs": 31.6804,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0058,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0037,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 62,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0058,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0037,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "pan",
+      "elapsedMs": 2287.8034,
+      "processCpuMs": 187.5,
+      "processAllocatedBytes": 1349376,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5708,
+      "uiGapP95Ms": 31.5582,
+      "uiGapMaxMs": 31.6028,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0061,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0046,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 68,
+        "viewportChanges": 59,
+        "timerInvalidations": 59,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 60,
+          "totalMs": 0.1944,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 60,
+          "totalMs": 0.1259,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "zoom",
+      "elapsedMs": 2198.3914,
+      "processCpuMs": 140.625,
+      "processAllocatedBytes": 1326448,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.126,
+      "uiGapP95Ms": 31.58,
+      "uiGapMaxMs": 31.7149,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0036,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0019,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 59,
+        "viewportChanges": 52,
+        "timerInvalidations": 52,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 53,
+          "totalMs": 0.1493,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 53,
+          "totalMs": 0.0949,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "combined",
+      "elapsedMs": 2366.5828,
+      "processCpuMs": 109.375,
+      "processAllocatedBytes": 1350920,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5885,
+      "uiGapP95Ms": 31.5552,
+      "uiGapMaxMs": 31.7703,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0046,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0035,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 69,
+        "viewportChanges": 60,
+        "timerInvalidations": 60,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 61,
+          "totalMs": 0.188,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 61,
+          "totalMs": 0.1203,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "rapid",
+      "elapsedMs": 1402.8799,
+      "processCpuMs": 78.125,
+      "processAllocatedBytes": 1011976,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.5638,
+      "uiGapP95Ms": 16.1065,
+      "uiGapMaxMs": 16.2591,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.003,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0016,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.1111,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 38,
+          "totalMs": 0.0689,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "resize",
+      "elapsedMs": 2534.8074,
+      "processCpuMs": 390.625,
+      "processAllocatedBytes": 2602520,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.7182,
+      "uiGapP95Ms": 31.4808,
+      "uiGapMaxMs": 31.7572,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0027,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0016,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 76,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 144,
+          "totalMs": 0.3334,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 144,
+          "totalMs": 0.1949,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 0,
+      "mode": "NoPin",
+      "scenario": "loading",
+      "elapsedMs": 2286.3054,
+      "processCpuMs": 109.375,
+      "processAllocatedBytes": 222128,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.3698,
+      "uiGapP95Ms": 31.5417,
+      "uiGapMaxMs": 32.3167,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 7,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.0238,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 7,
+          "totalMs": 0.0156,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 64,
+        "viewportChanges": 0,
+        "timerInvalidations": 63,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 63,
+          "totalMs": 0.2116,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 63,
+          "totalMs": 0.1309,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "idle",
+      "elapsedMs": 2365.3504,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 73624,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.6857,
+      "uiGapP95Ms": 31.6694,
+      "uiGapMaxMs": 31.8794,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0043,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0029,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 63,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0043,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0029,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "pan",
+      "elapsedMs": 2377.2313,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 1330128,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6298,
+      "uiGapP95Ms": 31.5539,
+      "uiGapMaxMs": 31.7826,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.003,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.002,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 68,
+        "viewportChanges": 60,
+        "timerInvalidations": 60,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 61,
+          "totalMs": 0.1851,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 61,
+          "totalMs": 0.1177,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "zoom",
+      "elapsedMs": 2626.327,
+      "processCpuMs": 281.25,
+      "processAllocatedBytes": 1365584,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.292,
+      "uiGapP95Ms": 31.4613,
+      "uiGapMaxMs": 49.4192,
+      "gapsOver33Ms": 3,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0044,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.003,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 76,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 69,
+          "totalMs": 0.2621,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 69,
+          "totalMs": 0.1692,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "combined",
+      "elapsedMs": 2550.3261,
+      "processCpuMs": 312.5,
+      "processAllocatedBytes": 1378240,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.2239,
+      "uiGapP95Ms": 31.2034,
+      "uiGapMaxMs": 31.7191,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0043,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0026,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 71,
+        "viewportChanges": 64,
+        "timerInvalidations": 64,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 65,
+          "totalMs": 0.2372,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 65,
+          "totalMs": 0.1517,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "rapid",
+      "elapsedMs": 1378.8679,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 1037416,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.3514,
+      "uiGapP95Ms": 16.0652,
+      "uiGapMaxMs": 16.1669,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0054,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0032,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.1376,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 38,
+          "totalMs": 0.0886,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "resize",
+      "elapsedMs": 2681.4647,
+      "processCpuMs": 359.375,
+      "processAllocatedBytes": 2533560,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5537,
+      "uiGapP95Ms": 31.5273,
+      "uiGapMaxMs": 32.594,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0057,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0038,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 79,
+        "viewportChanges": 72,
+        "timerInvalidations": 72,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 146,
+          "totalMs": 0.3521,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 146,
+          "totalMs": 0.2142,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "NoPin",
+      "scenario": "loading",
+      "elapsedMs": 2565.0729,
+      "processCpuMs": 31.25,
+      "processAllocatedBytes": 245760,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.3129,
+      "uiGapP95Ms": 31.1464,
+      "uiGapMaxMs": 31.4836,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "NoPin",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.0257,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 7,
+          "totalMs": 0.0162,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "NoPin",
+        "polls": 69,
+        "viewportChanges": 0,
+        "timerInvalidations": 68,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 69,
+          "totalMs": 0.2338,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 0,
+          "totalMs": 0,
+          "allocatedBytes": 0
+        },
+        "projection": {
+          "calls": 69,
+          "totalMs": 0.1436,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "idle",
+      "elapsedMs": 2553.8221,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 81752,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.3219,
+      "uiGapP95Ms": 31.1252,
+      "uiGapMaxMs": 31.3514,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0115,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0087,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0019,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 71,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0115,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0087,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0019,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "pan",
+      "elapsedMs": 2693.2535,
+      "processCpuMs": 156.25,
+      "processAllocatedBytes": 1390768,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5527,
+      "uiGapP95Ms": 31.4146,
+      "uiGapMaxMs": 31.5855,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0151,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.011,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0032,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 75,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 69,
+          "totalMs": 0.2473,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.011,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 69,
+          "totalMs": 0.1501,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "zoom",
+      "elapsedMs": 2589.0788,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 1404744,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.4576,
+      "uiGapP95Ms": 31.1963,
+      "uiGapMaxMs": 31.5857,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0263,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0208,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0034,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 74,
+        "viewportChanges": 66,
+        "timerInvalidations": 66,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 67,
+          "totalMs": 0.2586,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0208,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 67,
+          "totalMs": 0.1539,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "combined",
+      "elapsedMs": 2588.2079,
+      "processCpuMs": 140.625,
+      "processAllocatedBytes": 1372368,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.4004,
+      "uiGapP95Ms": 31.3288,
+      "uiGapMaxMs": 31.8021,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0106,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0077,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0017,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 74,
+        "viewportChanges": 66,
+        "timerInvalidations": 66,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 67,
+          "totalMs": 0.244,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0077,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 67,
+          "totalMs": 0.1478,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "rapid",
+      "elapsedMs": 1379.7468,
+      "processCpuMs": 140.625,
+      "processAllocatedBytes": 988568,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.2688,
+      "uiGapP95Ms": 16.0574,
+      "uiGapMaxMs": 16.4399,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0205,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0151,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0038,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 43,
+        "viewportChanges": 35,
+        "timerInvalidations": 35,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 36,
+          "totalMs": 0.1388,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0151,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 36,
+          "totalMs": 0.0766,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "resize",
+      "elapsedMs": 2555.6879,
+      "processCpuMs": 515.625,
+      "processAllocatedBytes": 2639248,
+      "collections": [
+        1,
+        1,
+        1
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6346,
+      "uiGapP95Ms": 31.5992,
+      "uiGapMaxMs": 31.7955,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0127,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0086,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0031,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 76,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 140,
+          "totalMs": 0.388,
+          "allocatedBytes": 2328
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0246,
+          "allocatedBytes": 2328
+        },
+        "projection": {
+          "calls": 140,
+          "totalMs": 0.2229,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Debounced",
+      "scenario": "loading",
+      "elapsedMs": 2498.171,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 848416,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.5339,
+      "uiGapP95Ms": 31.4423,
+      "uiGapMaxMs": 31.5879,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Debounced",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.6083,
+          "allocatedBytes": 25424
+        },
+        "pin": {
+          "calls": 7,
+          "totalMs": 0.5755,
+          "allocatedBytes": 25424
+        },
+        "projection": {
+          "calls": 7,
+          "totalMs": 0.0228,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Debounced",
+        "polls": 69,
+        "viewportChanges": 0,
+        "timerInvalidations": 68,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 69,
+          "totalMs": 5.9151,
+          "allocatedBytes": 250608
+        },
+        "pin": {
+          "calls": 69,
+          "totalMs": 5.6365,
+          "allocatedBytes": 250608
+        },
+        "projection": {
+          "calls": 69,
+          "totalMs": 0.1881,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "idle",
+      "elapsedMs": 2453.0265,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 73744,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.7312,
+      "uiGapP95Ms": 31.5454,
+      "uiGapMaxMs": 32.0599,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0021,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0512,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0091,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0021,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0512,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0091,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "pan",
+      "elapsedMs": 2616.5262,
+      "processCpuMs": 78.125,
+      "processAllocatedBytes": 1595920,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5776,
+      "uiGapP95Ms": 31.5066,
+      "uiGapMaxMs": 31.693,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0023,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 2,
+          "totalMs": 0.0341,
+          "allocatedBytes": 176
+        },
+        "projection": {
+          "calls": 3,
+          "totalMs": 0.0077,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 76,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 69,
+          "totalMs": 0.2621,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 91,
+          "totalMs": 1.8498,
+          "allocatedBytes": 8008
+        },
+        "projection": {
+          "calls": 160,
+          "totalMs": 0.4372,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "zoom",
+      "elapsedMs": 2510.358,
+      "processCpuMs": 359.375,
+      "processAllocatedBytes": 1581000,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6955,
+      "uiGapP95Ms": 31.5479,
+      "uiGapMaxMs": 31.7499,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0043,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0637,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0128,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 72,
+        "viewportChanges": 63,
+        "timerInvalidations": 63,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 64,
+          "totalMs": 0.2382,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 91,
+          "totalMs": 1.6784,
+          "allocatedBytes": 8008
+        },
+        "projection": {
+          "calls": 155,
+          "totalMs": 0.3976,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "combined",
+      "elapsedMs": 2393.11,
+      "processCpuMs": 218.75,
+      "processAllocatedBytes": 1562552,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5917,
+      "uiGapP95Ms": 31.5706,
+      "uiGapMaxMs": 31.8037,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0042,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.048,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.0098,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 70,
+        "viewportChanges": 62,
+        "timerInvalidations": 62,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 63,
+          "totalMs": 0.2434,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 92,
+          "totalMs": 1.6809,
+          "allocatedBytes": 8096
+        },
+        "projection": {
+          "calls": 155,
+          "totalMs": 0.435,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "rapid",
+      "elapsedMs": 1395.2734,
+      "processCpuMs": 78.125,
+      "processAllocatedBytes": 1216536,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.5285,
+      "uiGapP95Ms": 16.1341,
+      "uiGapMaxMs": 16.4458,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0027,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0454,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.009,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.1372,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 65,
+          "totalMs": 1.1754,
+          "allocatedBytes": 5720
+        },
+        "projection": {
+          "calls": 103,
+          "totalMs": 0.2565,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "resize",
+      "elapsedMs": 2532.3942,
+      "processCpuMs": 562.5,
+      "processAllocatedBytes": 2933496,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5414,
+      "uiGapP95Ms": 31.6682,
+      "uiGapMaxMs": 32.5394,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0037,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 3,
+          "totalMs": 0.0538,
+          "allocatedBytes": 264
+        },
+        "projection": {
+          "calls": 4,
+          "totalMs": 0.009,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 76,
+        "viewportChanges": 67,
+        "timerInvalidations": 67,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 139,
+          "totalMs": 0.3641,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 120,
+          "totalMs": 2.2561,
+          "allocatedBytes": 10560
+        },
+        "projection": {
+          "calls": 259,
+          "totalMs": 0.6031,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Layer",
+      "scenario": "loading",
+      "elapsedMs": 2425.9708,
+      "processCpuMs": 171.875,
+      "processAllocatedBytes": 874448,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 57,
+      "uiGapMedianMs": 30.6979,
+      "uiGapP95Ms": 31.5735,
+      "uiGapMaxMs": 32.0134,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Layer",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.029,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 7,
+          "totalMs": 0.1804,
+          "allocatedBytes": 616
+        },
+        "projection": {
+          "calls": 14,
+          "totalMs": 0.0404,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Layer",
+        "polls": 64,
+        "viewportChanges": 0,
+        "timerInvalidations": 63,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 64,
+          "totalMs": 0.2371,
+          "allocatedBytes": 0
+        },
+        "pin": {
+          "calls": 65,
+          "totalMs": 1.7846,
+          "allocatedBytes": 5720
+        },
+        "projection": {
+          "calls": 129,
+          "totalMs": 0.3423,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "idle",
+      "elapsedMs": 2397.1877,
+      "processCpuMs": 0,
+      "processAllocatedBytes": 65520,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.4085,
+      "uiGapP95Ms": 31.5267,
+      "uiGapMaxMs": 31.9163,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0185,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.014,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0028,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0185,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.014,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0028,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "pan",
+      "elapsedMs": 2563.3195,
+      "processCpuMs": 250,
+      "processAllocatedBytes": 1425704,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6055,
+      "uiGapP95Ms": 31.8403,
+      "uiGapMaxMs": 50.8838,
+      "gapsOver33Ms": 2,
+      "before": {
+        "mode": "Floating",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0157,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.011,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0031,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 73,
+        "viewportChanges": 65,
+        "timerInvalidations": 65,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 53,
+          "totalMs": 0.9606,
+          "allocatedBytes": 41128
+        },
+        "pin": {
+          "calls": 53,
+          "totalMs": 0.7129,
+          "allocatedBytes": 41128
+        },
+        "projection": {
+          "calls": 53,
+          "totalMs": 0.1602,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "zoom",
+      "elapsedMs": 2570.7972,
+      "processCpuMs": 453.125,
+      "processAllocatedBytes": 1845200,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.6346,
+      "uiGapP95Ms": 31.3579,
+      "uiGapMaxMs": 31.5032,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 6,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0223,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0159,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.005,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 72,
+        "viewportChanges": 65,
+        "timerInvalidations": 65,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 66,
+          "totalMs": 1.0562,
+          "allocatedBytes": 51216
+        },
+        "pin": {
+          "calls": 66,
+          "totalMs": 0.8045,
+          "allocatedBytes": 51216
+        },
+        "projection": {
+          "calls": 66,
+          "totalMs": 0.1673,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "combined",
+      "elapsedMs": 2615.07,
+      "processCpuMs": 343.75,
+      "processAllocatedBytes": 1827120,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.5877,
+      "uiGapP95Ms": 31.5046,
+      "uiGapMaxMs": 32.457,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.018,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0127,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0044,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 74,
+        "viewportChanges": 66,
+        "timerInvalidations": 66,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 67,
+          "totalMs": 1.1035,
+          "allocatedBytes": 51992
+        },
+        "pin": {
+          "calls": 67,
+          "totalMs": 0.8493,
+          "allocatedBytes": 51992
+        },
+        "projection": {
+          "calls": 67,
+          "totalMs": 0.171,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "rapid",
+      "elapsedMs": 1383.3229,
+      "processCpuMs": 187.5,
+      "processAllocatedBytes": 1208568,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 15.2918,
+      "uiGapP95Ms": 16.0739,
+      "uiGapMaxMs": 16.2325,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 8,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.013,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0097,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0025,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 45,
+        "viewportChanges": 37,
+        "timerInvalidations": 37,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 38,
+          "totalMs": 0.5781,
+          "allocatedBytes": 29488
+        },
+        "pin": {
+          "calls": 38,
+          "totalMs": 0.4396,
+          "allocatedBytes": 29488
+        },
+        "projection": {
+          "calls": 38,
+          "totalMs": 0.0914,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "resize",
+      "elapsedMs": 2480.6085,
+      "processCpuMs": 578.125,
+      "processAllocatedBytes": 2971336,
+      "collections": [
+        0,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 89,
+      "uiGapMedianMs": 30.7611,
+      "uiGapP95Ms": 31.6031,
+      "uiGapMaxMs": 32.4421,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 0,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 1,
+          "totalMs": 0.0128,
+          "allocatedBytes": 776
+        },
+        "pin": {
+          "calls": 1,
+          "totalMs": 0.0092,
+          "allocatedBytes": 776
+        },
+        "projection": {
+          "calls": 1,
+          "totalMs": 0.0025,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 76,
+        "viewportChanges": 68,
+        "timerInvalidations": 68,
+        "measures": 89,
+        "arranges": 89,
+        "overlay": {
+          "calls": 144,
+          "totalMs": 1.5037,
+          "allocatedBytes": 111744
+        },
+        "pin": {
+          "calls": 144,
+          "totalMs": 1.1315,
+          "allocatedBytes": 111744
+        },
+        "projection": {
+          "calls": 144,
+          "totalMs": 0.2253,
+          "allocatedBytes": 0
+        }
+      }
+    },
+    {
+      "repeat": 1,
+      "mode": "Floating",
+      "scenario": "loading",
+      "elapsedMs": 2468.7735,
+      "processCpuMs": 234.375,
+      "processAllocatedBytes": 792752,
+      "collections": [
+        1,
+        0,
+        0
+      ],
+      "mapRefreshRequests": 0,
+      "uiGapMedianMs": 30.7002,
+      "uiGapP95Ms": 31.4751,
+      "uiGapMaxMs": 31.7532,
+      "gapsOver33Ms": 0,
+      "before": {
+        "mode": "Floating",
+        "polls": 7,
+        "viewportChanges": 0,
+        "timerInvalidations": 6,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 7,
+          "totalMs": 0.5591,
+          "allocatedBytes": 25424
+        },
+        "pin": {
+          "calls": 7,
+          "totalMs": 0.5306,
+          "allocatedBytes": 25424
+        },
+        "projection": {
+          "calls": 7,
+          "totalMs": 0.0198,
+          "allocatedBytes": 0
+        }
+      },
+      "after": {
+        "mode": "Floating",
+        "polls": 65,
+        "viewportChanges": 0,
+        "timerInvalidations": 64,
+        "measures": 0,
+        "arranges": 0,
+        "overlay": {
+          "calls": 65,
+          "totalMs": 5.0304,
+          "allocatedBytes": 236080
+        },
+        "pin": {
+          "calls": 65,
+          "totalMs": 4.7944,
+          "allocatedBytes": 236080
+        },
+        "projection": {
+          "calls": 65,
+          "totalMs": 0.1516,
+          "allocatedBytes": 0
+        }
+      }
+    }
+  ]
+}

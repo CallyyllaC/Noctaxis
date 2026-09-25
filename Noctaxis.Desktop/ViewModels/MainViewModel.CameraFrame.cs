@@ -45,6 +45,8 @@ public partial class MainViewModel
     public CameraTerrainDepth? TerrainFrameDepth => Settings.EnableTerrainCalculations
         ? DerivedCameraFraming?.CameraDepth : null;
     public double TerrainFrameThreshold => Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent / 100;
+    public string TerrainFrameDirection => TerrainFrameDepth?.UpperAltitude <= 0
+        ? "Ground-facing · frame below horizontal horizon" : string.Empty;
     public string TerrainFrameStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled"
         : TerrainFrameDepth is not null ? string.Empty
         : PlannerRefresh.GroundTerrainState is PlannerRefreshWorkState.Running or PlannerRefreshWorkState.Pending
@@ -65,7 +67,28 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(CameraFramingGuide)); OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus)); OnPropertyChanged(nameof(TerrainFrameDepth));
         OnPropertyChanged(nameof(TerrainFrameStatus)); OnPropertyChanged(nameof(TerrainFrameThreshold));
+        OnPropertyChanged(nameof(TerrainFrameDirection));
         OnPropertyChanged(nameof(CameraFrameDiagnostics)); OnPropertyChanged(nameof(TerrainDebugBearing));
+        CaptureTerrainValidity();
+    }
+
+    private string? _lastTerrainValidityCapture;
+    private void CaptureTerrainValidity()
+    {
+        var directory = System.Environment.GetEnvironmentVariable("NOCTAXIS_TERRAIN_VALIDITY_DIRECTORY");
+        if (string.IsNullOrWhiteSpace(directory) || CurrentTerrain is not { } terrain) return;
+        var key = $"{_refreshGeneration}:{terrain.GenerationId}:{terrain.GeneratedAt}:{CameraBearingDegrees}:{CameraPitchDegrees}:{PlannerRefresh.GroundTerrainState}";
+        if (_lastTerrainValidityCapture == key) return;
+        _lastTerrainValidityCapture = key;
+        try
+        {
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, $"terrain-{DateTime.UtcNow.Ticks}.json"),
+                Noctaxis.Core.Terrain.TerrainProfileDiagnostics.ExportValidityJson(terrain, _refreshGeneration,
+                    TerrainFrameStatus, $"ground={PlannerRefresh.GroundTerrainState}; camera={PlannerRefresh.CameraTerrainState}"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { _logger.LogWarning(ex, "Could not capture terrain profile validity"); }
     }
 
     private bool _cameraSavePending;

@@ -18,6 +18,7 @@ using Noctaxis.Desktop.ViewModels;
 using Noctaxis.Desktop.Views;
 using NodaTime;
 using Noctaxis.Desktop.Services;
+using Noctaxis.Core.Supporter;
 
 namespace Noctaxis.Desktop;
 
@@ -25,7 +26,13 @@ public partial class App : Application
 {
     private ServiceProvider? _services;
 
-    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+    public Themes.ThemeService? Themes { get; private set; }
+
+    public override void Initialize()
+    {
+        AvaloniaXamlLoader.Load(this);
+        Themes = new Themes.ThemeService(this);
+    }
 
     public override void OnFrameworkInitializationCompleted()
     {
@@ -33,9 +40,14 @@ public partial class App : Application
         {
             _services = ConfigureServices();
             var viewModel = _services.GetRequiredService<MainViewModel>();
+            viewModel.AttachThemeService(Themes!);
             var dialogs = _services.GetRequiredService<DesktopDialogService>();
             desktop.MainWindow = new MainWindow(viewModel, dialogs);
-            desktop.Exit += async (_, _) => await viewModel.PersistAsync(CancellationToken.None);
+            desktop.Exit += async (_, _) =>
+            {
+                await viewModel.PersistAsync(CancellationToken.None);
+                Themes?.Dispose();
+            };
             _ = viewModel.InitializeAsync();
         }
         base.OnFrameworkInitializationCompleted();
@@ -137,7 +149,18 @@ public partial class App : Application
         services.AddSingleton<IDeviceLocationAvailabilityService>(provider => provider.GetRequiredService<PlatformDeviceLocationProvider>());
         services.AddSingleton<ILocationResolver, LocationResolver>();
         services.AddSingleton<IUserDataPathProvider, PlatformUserDataPathProvider>();
+        services.AddHttpClient("LorenzAtlas", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(45);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (optional local Lorenz atlas installation)");
+        });
+        services.AddSingleton(provider => new Noctaxis.Core.LightPollution.LorenzInstallation(
+            provider.GetRequiredService<IUserDataPathProvider>(),
+            provider.GetRequiredService<IHttpClientFactory>().CreateClient("LorenzAtlas")));
         services.AddSingleton<IUserDataStore, JsonUserDataStore>();
+        services.AddSingleton<IAwooSupporterLicenceVerifier, AwooSupporterLicenceVerifier>();
+        services.AddSingleton<IExternalUriLauncher, ShellExternalUriLauncher>();
+        services.AddSingleton<ExternalMapService>();
         services.AddSingleton<IPlanningService, PlanningService>();
         services.AddSingleton<IScoutingCardExporter, ScoutingCardExporter>();
         services.AddSingleton<LocationSearchViewModel>();

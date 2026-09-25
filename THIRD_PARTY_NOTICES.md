@@ -70,3 +70,16 @@ the application environmental-data cache:
 
 Noctaxis caches these source files locally but does not claim ownership,
 endorsement, or redistribution rights beyond the applicable source terms.
+
+Light Pollution colour tables (Turbo, Viridis, Inferno, Magma and Cividis) are
+extracted without changing entries from Matplotlib v3.10.8 `_cm_listed.py`:
+https://github.com/matplotlib/matplotlib/blob/v3.10.8/lib/matplotlib/_cm_listed.py
+Copyright (c) 2012- Matplotlib Development Team; All Rights Reserved.
+The Matplotlib licence and change summary are distributed in
+`Noctaxis.Desktop/ThirdParty/Matplotlib-LICENSE.txt` and copied to app output.
+Noctaxis converts the tables to C# arrays and linearly interpolates RGB values.
+Turbo was contributed to Matplotlib by its author (Google's Anton Mikhailov,
+PR #15275). Viridis, Inferno and Magma originate with Nathaniel J. Smith and
+Stéfan van der Walt (Viridis also Eric Firing), who additionally released their
+tables under CC0 at https://bids.github.io/colormap/. Cividis is the standard
+Matplotlib table originating with Nuñez, Anderton and Renslow.

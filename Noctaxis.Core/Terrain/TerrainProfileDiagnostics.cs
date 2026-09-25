@@ -12,6 +12,35 @@ public static class TerrainProfileDiagnostics
 {
     private static readonly CultureInfo Invariant = CultureInfo.InvariantCulture;
 
+    public static string ExportValidityJson(TerrainHorizonProfile profile, long? observerGeneration = null,
+        string? frameStatus = null, string? workState = null)
+    {
+        var bearings = profile.Samples.Select(sample => new
+        {
+            bearing = sample.BearingDegrees,
+            horizonAngle = sample.TerrainHorizonElevationDegrees,
+            sightlinePresent = sample.Sightline is { Count: > 0 },
+            validSamples = sample.Sightline?.Count(p => p.TerrainElevationAngleDegrees is double a && double.IsFinite(a)) ?? 0,
+            state = sample.Sightline is not { Count: > 0 } ? "unresolved" :
+                sample.Sightline.Any(p => p.TerrainElevationAngleDegrees is double a && double.IsFinite(a)) ? "valid" : "resolved-no-data"
+        }).ToArray();
+        var ranges = new List<object>();
+        for (var start = 0; start < bearings.Length;)
+        {
+            var end = start;
+            while (end + 1 < bearings.Length && bearings[end + 1].state == bearings[start].state) end++;
+            ranges.Add(new { from = bearings[start].bearing, to = bearings[end].bearing, state = bearings[start].state });
+            start = end + 1;
+        }
+        return System.Text.Json.JsonSerializer.Serialize(new
+        {
+            profile.GenerationId, observerGeneration, profile.Observer,
+            generatedAt = profile.GeneratedAt.ToString(), profile.IsComplete,
+            completedBearings = profile.EffectiveCompletedBearingCount, profile.HasTerrainCoverage,
+            coverageState = profile.GroundHorizonState.ToString(), frameStatus, workState, ranges, bearings
+        }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+    }
+
     public static string ExportHorizonCsv(TerrainHorizonProfile profile)
     {
         var text = new StringBuilder();

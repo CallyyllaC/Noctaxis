@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" />
     <PackageReference Include="CosineKitty.AstronomyEngine" />
     <PackageReference Include="Microsoft.Extensions.Http" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
@@ -12,5 +13,6 @@
     <EmbeddedResource Include="Data\OpenNGC-NGC.csv" />
     <EmbeddedResource Include="Data\OpenNGC-addendum.csv" />
     <EmbeddedResource Include="Data\OpenNGC-LICENSE.txt" />
+    <EmbeddedResource Include="Data\Awoo\awoo-support-public.pem" />
   </ItemGroup>
 </Project>

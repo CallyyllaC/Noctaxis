@@ -5,7 +5,7 @@ using Noctaxis.Core.Domain;
 
 namespace Noctaxis.Desktop.Controls;
 
-public sealed class HorizonGraph : Control
+public sealed class HorizonGraph : ChromeDrawingControl
 {
     public static readonly StyledProperty<PlanningSnapshot?> SnapshotProperty =
         AvaloniaProperty.Register<HorizonGraph, PlanningSnapshot?>(nameof(Snapshot));
@@ -17,12 +17,12 @@ public sealed class HorizonGraph : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.FillRectangle(new SolidColorBrush(Color.Parse("#0F151F")), Bounds);
+        context.FillRectangle(ChromeBackground, new Rect(Bounds.Size));
         if (Snapshot is null || Bounds.Width < 20 || Bounds.Height < 20) return;
-        var plot = new Rect(42, 12, Math.Max(1, Bounds.Width - 58), Math.Max(1, Bounds.Height - 38));
+        var plot = new Rect(42, ChromeFontSize + 12, Math.Max(1, Bounds.Width - 58), Math.Max(1, Bounds.Height - ChromeFontSize * 3 - 18));
         double Y(double altitude) => plot.Bottom - Math.Clamp((altitude + 20) / 110, 0, 1) * plot.Height;
         var horizonY = Y(0);
-        context.DrawLine(new Pen(new SolidColorBrush(Color.Parse("#4A5568")), 1), new Point(plot.Left, horizonY), new Point(plot.Right, horizonY));
+        context.DrawLine(new Pen(ChromeForeground, 1), new Point(plot.Left, horizonY), new Point(plot.Right, horizonY));
 
         if (Snapshot.Terrain.Samples.Count > 1 && Snapshot.Path.Samples.Count > 1)
         {
@@ -59,13 +59,15 @@ public sealed class HorizonGraph : Control
             DrawMarker(context, Snapshot.Path.Events.Rise, "R", plot);
             DrawMarker(context, Snapshot.Path.Events.Transit, "T", plot);
             DrawMarker(context, Snapshot.Path.Events.Set, "S", plot);
-            DrawMarker(context, Snapshot.Session.Instant, "NOW", plot, Color.Parse("#FFFFFF"));
+            DrawMarker(context, Snapshot.Session.Instant, "NOW", plot);
         }
 
-        var label = new FormattedText("ALTITUDE  +90°", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 10, new SolidColorBrush(Color.Parse("#8390A3")));
-        context.DrawText(label, new Point(5, 10));
-        var axis = new FormattedText("00:00                     LOCAL TIME                     24:00", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 10, new SolidColorBrush(Color.Parse("#8390A3")));
-        context.DrawText(axis, new Point(plot.Left, plot.Bottom + 8));
+        context.DrawText(ChromeText("ALTITUDE  +90\u00B0"), new Point(5, 2));
+        var start = ChromeText("00:00"); var middle = ChromeText("LOCAL TIME"); var end = ChromeText("24:00");
+        var labelY = plot.Bottom + 6;
+        context.DrawText(start, new Point(plot.Left, labelY));
+        context.DrawText(middle, new Point(plot.Center.X - middle.Width / 2, labelY));
+        context.DrawText(end, new Point(plot.Right - end.Width, labelY));
     }
 
     private void DrawMarker(DrawingContext context, NodaTime.Instant? instant, string label, Rect plot, Color? colour = null)
@@ -75,9 +77,9 @@ public sealed class HorizonGraph : Control
         if (duration <= NodaTime.Duration.Zero) return;
         var fraction = (instant.Value - Snapshot.Path.Samples[0].Instant).TotalSeconds / duration.TotalSeconds;
         var x = plot.Left + fraction * plot.Width;
-        var brush = new SolidColorBrush(colour ?? Color.Parse("#AAB4C3"));
+        var brush = colour is { } c ? new SolidColorBrush(c) : ChromeForeground;
         context.DrawLine(new Pen(brush, 1, dashStyle: DashStyle.Dot), new Point(x, plot.Top), new Point(x, plot.Bottom));
-        var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, 9, brush);
+        var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight, Typeface.Default, ChromeFontSize, brush);
         context.DrawText(text, new Point(x + 3, plot.Top + 3));
     }
 }

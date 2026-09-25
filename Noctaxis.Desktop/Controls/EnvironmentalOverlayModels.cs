@@ -10,6 +10,7 @@ public enum EnvironmentalPixelClassification
     OutsideCone,
     Clear,
     TerrainObstructed,
+    GroundFacing,
     BeyondVisibility,
     TerrainObstructedAndBeyondVisibility
 }
@@ -84,7 +85,10 @@ public sealed record EnvironmentalOverlayState(
     EnvironmentalOverlayKey OverlayKey,
     long ProfileRevision,
     long TerrainTextureRevision,
-    long OverlayRevision);
+    long OverlayRevision)
+{
+    public PlanTerrainFan? TerrainFan { get; init; }
+}
 
 public readonly record struct EnvironmentalOverlayFrame(
     float Width,
@@ -135,6 +139,9 @@ public sealed class EnvironmentalOverlayStateCoordinator(
     private long _profileRevision;
     private long _terrainTextureRevision;
     private long _overlayRevision;
+    private TerrainHorizonProfile? _terrain;
+    private CameraTerrainDepth? _cameraDepth;
+    public long PlanSampleEvaluations { get; private set; }
 
     public EnvironmentalOverlayDiagnostics Diagnostics => _diagnostics;
 
@@ -142,10 +149,44 @@ public sealed class EnvironmentalOverlayStateCoordinator(
         GeoCoordinate observer,
         GeoSector sector,
         FramingVisibilityAssessment? visibility,
-        EnvironmentalProfileKey profileKey)
+        EnvironmentalProfileKey profileKey,
+        TerrainHorizonProfile? terrain = null)
     {
-        var source = EnvironmentalOverlayStateFactory.OrderSamples(sector, visibility);
+        var depth = terrain is null ? null : visibility?.CameraDepth;
+        var sameDepth = ReferenceEquals(depth, _cameraDepth) || depth is not null && _cameraDepth is not null &&
+            depth.LowerAltitude == _cameraDepth.LowerAltitude && depth.UpperAltitude == _cameraDepth.UpperAltitude &&
+            depth.Bearings.AsSpan().SequenceEqual(_cameraDepth.Bearings.AsSpan()) &&
+            depth.DistancesMetres.AsSpan().SequenceEqual(_cameraDepth.DistancesMetres.AsSpan());
+        var reuse = terrain is not null && ReferenceEquals(_terrain, terrain) &&
+                    sameDepth &&
+                    _state is not null && _state.ProfileKey == profileKey &&
+                    _state.CentreBearingDegrees == sector.CentreBearingDegrees &&
+                    _state.HorizontalFovDegrees == sector.HorizontalFovDegrees &&
+                    _state.MaximumDistanceMetres == sector.DistanceMetres;
+        var fan = reuse ? _state!.TerrainFan : terrain is not null
+            ? depth is not null ? PlanTerrainFan.Build(sector, terrain, depth) : new PlanTerrainFan([], false, [])
+            : null;
+        var source = reuse ? _state!.SourceSamples : fan is not null
+            ? fan.Rays.Select(ray => new EnvironmentalTerrainSample(ray.BearingDegrees,
+                sector.LeftBearingDegrees + Angles.NormaliseDegrees(ray.BearingDegrees - sector.LeftBearingDegrees),
+                Angles.NormaliseDegrees(ray.BearingDegrees - sector.LeftBearingDegrees),
+                !ray.Bands.IsEmpty, ray.Bands.IsEmpty ? null : ray.Bands[0].StartDistanceMetres,
+                ray.Bands.IsEmpty ? 0 : 1)).ToImmutableArray()
+            : EnvironmentalOverlayStateFactory.OrderSamples(sector, visibility);
+        if (terrain is not null && !reuse) PlanSampleEvaluations += source.Length;
+        _terrain = terrain;
+        _cameraDepth = depth;
         var terrainTextureKey = EnvironmentalOverlayStateFactory.CreateTerrainTextureKey(profileKey, sector, source);
+        if (fan is not null)
+        {
+            var hash = new HashCode();
+            hash.Add(terrainTextureKey.TerrainSampleFingerprint); hash.Add(fan.GroundFacing);
+            foreach (var ray in fan.Rays)
+                foreach (var band in ray.Bands)
+                { hash.Add(band.StartDistanceMetres); hash.Add(band.EndDistanceMetres); hash.Add(band.Strength);
+                    hash.Add(band.ApparentAltitudeDegrees); }
+            terrainTextureKey = terrainTextureKey with { TerrainSampleFingerprint = hash.ToHashCode() };
+        }
         var overlayKey = EnvironmentalOverlayStateFactory.CreateOverlayKey(
             terrainTextureKey, observer, visibility, sector.DistanceMetres);
         if (_profileKey != profileKey)
@@ -160,8 +201,9 @@ public sealed class EnvironmentalOverlayStateCoordinator(
         {
             _terrainTextureKey = terrainTextureKey;
             _terrainTextureRevision++;
-            _profileTexels = EnvironmentalOverlayStateFactory.Resample(
-                source, sector.HorizontalFovDegrees, profileTextureWidth);
+            _profileTexels = fan is null
+                ? EnvironmentalOverlayStateFactory.Resample(source, sector.HorizontalFovDegrees, profileTextureWidth)
+                : [default, default]; // Base/weather shader only; solid bands own production terrain.
         }
 
         _overlayKey = overlayKey;
@@ -179,7 +221,7 @@ public sealed class EnvironmentalOverlayStateCoordinator(
             overlayKey,
             _profileRevision,
             _terrainTextureRevision,
-            _overlayRevision);
+            _overlayRevision) { TerrainFan = fan };
         return _state;
     }
 
@@ -195,6 +237,36 @@ public sealed class EnvironmentalOverlayStateCoordinator(
 public static class EnvironmentalOverlayStateFactory
 {
     public const int DefaultProfileTextureWidth = 512;
+
+    // No positive-angle deadband: retain shallow resolved terrain. The texture's existing
+    // square-root presentation maps this bounded weight to 45–100% of the tint setting.
+    public const double PlanFullStrengthAngleDegrees = 5;
+    public const double PlanMinimumStrength = .45;
+
+    public static ImmutableArray<EnvironmentalTerrainSample> PlanSamples(
+        GeoSector sector, TerrainHorizonProfile terrain)
+    {
+        if (!terrain.TerrainCalculationsEnabled || !terrain.HasTerrainCoverage || terrain.Samples.Count == 0)
+            return [];
+        var offsets = terrain.Samples.Select(s => Angles.NormaliseDegrees(s.AzimuthDegrees - sector.LeftBearingDegrees))
+            .Where(o => o > 1e-7 && o < sector.HorizontalFovDegrees - 1e-7)
+            .Append(0).Append(sector.HorizontalFovDegrees).Order().ToArray();
+        var result = ImmutableArray.CreateBuilder<EnvironmentalTerrainSample>(offsets.Length);
+        foreach (var offset in offsets)
+        {
+            var bearing = Angles.NormaliseDegrees(sector.LeftBearingDegrees + offset);
+            var angle = terrain.TerrainAltitudeAt(bearing);
+            var distance = angle is > 0 && double.IsFinite(angle.Value)
+                ? ValidDistance(terrain.TerrainObstructionAt(bearing).EffectiveFirstObstructionDistanceMetres, sector.DistanceMetres)
+                : null;
+            var strength = distance.HasValue
+                ? PlanMinimumStrength + (1 - PlanMinimumStrength) * Math.Sqrt(Math.Clamp(angle!.Value / PlanFullStrengthAngleDegrees, 0, 1))
+                : 0;
+            result.Add(new(bearing, sector.LeftBearingDegrees + offset, offset, distance.HasValue,
+                distance, strength * strength));
+        }
+        return result.MoveToImmutable();
+    }
 
     public static EnvironmentalProfileKey CreateProfileKey(
         TerrainHorizonProfile terrain,
@@ -361,6 +433,19 @@ public static class EnvironmentalOverlayMath
             return EnvironmentalPixelClassification.OutsideCone;
         var signed = Angles.NormaliseSignedDegrees(bearingDegrees - state.CentreBearingDegrees);
         var offset = signed + state.HorizontalFovDegrees / 2;
+        if (state.TerrainFan is { } fan)
+        {
+            if (fan.GroundFacing) return EnvironmentalPixelClassification.GroundFacing;
+            var visible = fan.ContainsTerrain(offset, distanceMetres);
+            var beyond = state.WeatherVisibilityDistanceMetres is double limit && distanceMetres >= limit;
+            return (visible, beyond) switch
+            {
+                (true, true) => EnvironmentalPixelClassification.TerrainObstructedAndBeyondVisibility,
+                (true, false) => EnvironmentalPixelClassification.TerrainObstructed,
+                (false, true) => EnvironmentalPixelClassification.BeyondVisibility,
+                _ => EnvironmentalPixelClassification.Clear
+            };
+        }
         var texelIndex = (int)Math.Round(Math.Clamp(offset / state.HorizontalFovDegrees, 0, 1) *
                                          (state.ProfileTexels.Length - 1));
         var terrain = !state.ProfileTexels.IsDefaultOrEmpty &&

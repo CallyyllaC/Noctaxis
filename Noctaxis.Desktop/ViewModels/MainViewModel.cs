@@ -19,6 +19,7 @@ using System.Diagnostics;
 using System.Collections.Specialized;
 using Noctaxis.Core.Measurements;
 using Noctaxis.Desktop.Services;
+using Noctaxis.Core.Supporter;
 
 namespace Noctaxis.Desktop.ViewModels;
 
@@ -35,6 +36,8 @@ public partial class MainViewModel : ObservableObject
     private readonly IFramingVisibilityCalculator _framingVisibilityCalculator;
     private readonly ILocalHorizonCalculator _localHorizonCalculator;
     private readonly IClock _clock;
+    private readonly IAwooSupporterLicenceVerifier _supporterLicenceVerifier;
+    private readonly IExternalUriLauncher _externalUriLauncher;
     private readonly IPlannerDialogService _dialogs;
     private readonly IReverseGeocodingProvider _reverseGeocoding;
     private readonly ITerrainDebugMapService? _terrainDebugMaps;
@@ -69,7 +72,11 @@ public partial class MainViewModel : ObservableObject
         IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
         ILocationMapThumbnailService? locationMapThumbnails = null,
         ITerrainDebugMapService? terrainDebugMaps = null, TerrainDiskCache? terrainDiskCache = null,
-        IHorizonService? terrainDiagnostics = null)
+        IHorizonService? terrainDiagnostics = null,
+        IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
+        IExternalUriLauncher? externalUriLauncher = null,
+        ExternalMapService? externalMaps = null,
+        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null)
     {
         _planning = planning;
         _catalogue = catalogue;
@@ -82,6 +89,10 @@ public partial class MainViewModel : ObservableObject
         _framingVisibilityCalculator = framingVisibilityCalculator;
         _localHorizonCalculator = localHorizonCalculator;
         _clock = clock;
+        _supporterLicenceVerifier = supporterLicenceVerifier ?? new AwooSupporterLicenceVerifier();
+        _externalUriLauncher = externalUriLauncher ?? new ShellExternalUriLauncher();
+        _externalMaps = externalMaps ?? new ExternalMapService(_externalUriLauncher);
+        LightPollutionInstallation = lightPollutionInstallation;
         _dialogs = dialogs;
         _reverseGeocoding = reverseGeocoding;
         _terrainDebugMaps = terrainDebugMaps;
@@ -142,8 +153,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private double _minutesOfDay;
     [ObservableProperty] private string _timeText;
     [ObservableProperty] private string _timeZoneId;
-    [ObservableProperty] private double _latitude;
-    [ObservableProperty] private double _longitude;
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(OpenInMapsCommand))] private double _latitude;
+    [ObservableProperty, NotifyCanExecuteChangedFor(nameof(OpenInMapsCommand))] private double _longitude;
     [ObservableProperty] private double _elevation;
     [ObservableProperty] private CameraProfile? _selectedCamera;
     [ObservableProperty] private LensProfile? _selectedLens;
@@ -467,6 +478,7 @@ public partial class MainViewModel : ObservableObject
             CameraHeightAboveGroundMetres = persisted.Settings.EffectiveCameraHeightAboveGroundMetres,
             Equipment = persisted.Settings.EffectiveEquipment(persisted.Session.Lens)
         };
+        LoadSupporterLicenceState();
         _suppressChanges = true;
         IsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
         ShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
@@ -491,13 +503,15 @@ public partial class MainViewModel : ObservableObject
         EnsureCelestialSelections();
         BuildCelestialObjectItems();
         LoadSettingsEditor();
+        await DetectLightPollutionAsync();
         Locations.Load(SavedLocations, _lastCustomCoordinate, _session.SavedLocationId);
         await Locations.RefreshDeviceAvailabilityAsync(CancellationToken.None);
         LoadSessionIntoControls();
         PreviewObserver = _session.Observer;
         PreviewMinutesOfDay = MinutesOfDay;
         _dateSliderAnchor = LocalDate ?? _startupInstant.ToDateTimeOffset();
-        SelectedPageIndex = 0;
+        _initialised = true;
+        ActivatePlannerIfReady();
     }
 
     public void MoveObserver(GeoCoordinate coordinate)
@@ -680,6 +694,7 @@ public partial class MainViewModel : ObservableObject
         _suppressChanges = false;
         if (timeZoneChanged) ApplyLocalDateTime(false);
         OnPropertyChanged(nameof(Settings));
+        OnPropertyChanged(nameof(LightPollutionMapPreferences));
         OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
@@ -702,7 +717,10 @@ public partial class MainViewModel : ObservableObject
 
     private void LoadSettingsEditor()
     {
+        LoadLightPollutionEditor();
+        LoadAppearance();
         SettingsUnits = MeasurementUnits.NormaliseId(Settings.Units);
+        SettingsExternalMapProvider = ExternalMapProviders.FirstOrDefault(option => option.Provider == Settings.ExternalMapProvider) ?? ExternalMapProviders[0];
         SettingsMinimumTerrainFrameCoveragePercent = Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent;
         SettingsTimeZoneId = Settings.SelectedTimeZoneId;
         SettingsCameraHeightAboveGroundMetres = Settings.EffectiveCameraHeightAboveGroundMetres;
@@ -772,7 +790,9 @@ public partial class MainViewModel : ObservableObject
         }
         var updated = Settings with
         {
+            LightPollution = LightPollutionMapPreferences with { PaletteId = SettingsLightPollutionColorMap?.Id ?? "grayscale" },
             Units = MeasurementUnits.NormaliseId(SettingsUnits),
+            ExternalMapProvider = SettingsExternalMapProvider?.Provider ?? ExternalMapProvider.OpenStreetMap,
             SelectedTimeZoneId = SettingsTimeZoneId,
             Weather = new WeatherSettings(
                 WeatherFieldOptions.Where(item => item.IsEnabled).Select(item => item.Field).ToArray(),
@@ -803,7 +823,11 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = "Settings saved";
     }
 
-    [RelayCommand] private void ResetSettingsEditor() => LoadSettingsEditor();
+    [RelayCommand] private void ResetSettingsEditor()
+    {
+        LoadSettingsEditor();
+        SettingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Grayscale;
+    }
 
     [RelayCommand]
     private void AddCameraProfile() => EquipmentCameraEditors.Add(new CameraProfileEditorViewModel(
@@ -1038,7 +1062,18 @@ public partial class MainViewModel : ObservableObject
     {
         SelectedPageIndex = 1;
         _logger.LogInformation("Navigated to Planner");
-        if (Snapshot is null) ScheduleObserverRefresh(20);
+        ActivatePlannerIfReady();
+    }
+
+    private bool _initialised;
+    private bool _plannerActivated;
+    partial void OnSelectedPageIndexChanged(int value) => ActivatePlannerIfReady();
+
+    private void ActivatePlannerIfReady()
+    {
+        if (!_initialised || SelectedPageIndex != 1 || _plannerActivated) return;
+        _plannerActivated = true;
+        ScheduleObserverRefresh(0);
     }
     [RelayCommand] private void ShowSettings() { SelectedPageIndex = 2; _logger.LogInformation("Navigated to Settings"); }
 
@@ -1046,8 +1081,8 @@ public partial class MainViewModel : ObservableObject
     {
         _lastCustomCoordinate = resolution.Coordinate;
         if (!string.IsNullOrWhiteSpace(resolution.TimeZoneId)) TimeZoneId = _timeZones.GetEffectiveId(resolution.TimeZoneId);
-        SelectedPageIndex = 1;
         CommitObserverLocation(resolution.Coordinate, resolution.DisplayName, resolvePlaceName: resolution.DisplayName is null);
+        SelectedPageIndex = 1;
         await PersistAsync(CancellationToken.None);
     }
 
@@ -1096,11 +1131,11 @@ public partial class MainViewModel : ObservableObject
         };
         SyncLocationHomepage();
         LocationName = updated.Name;
-        SelectedPageIndex = 1;
         LoadSessionIntoControls();
         PreviewObserver = updated.Coordinate;
         OnPropertyChanged(nameof(Observer));
         ScheduleObserverRefresh(20);
+        SelectedPageIndex = 1;
         await PersistAsync(CancellationToken.None);
     }
 
@@ -1806,6 +1841,8 @@ public partial class MainViewModel : ObservableObject
 
     private void ScheduleObserverRefresh(int delayMilliseconds = 80)
     {
+        // A normal observer request already initialises the same presentation workflow.
+        if (_initialised) _plannerActivated = true;
         SchedulePlannerRefresh(PlannerRefreshScope.Observer, delayMilliseconds);
         ScheduleTerrainDebugMapRefresh();
     }

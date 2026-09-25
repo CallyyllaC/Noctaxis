@@ -12,6 +12,10 @@ namespace Noctaxis.Desktop.Views;
 public partial class MainWindow : Window
 {
     private MainViewModel _viewModel = null!;
+    private bool _closeCleanupStarted;
+    private bool _closeCleanupComplete;
+    private readonly TaskCompletionSource _closeCleanup = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    internal Task CloseCleanup => _closeCleanup.Task;
 
     public MainWindow()
     {
@@ -23,10 +27,43 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         dialogs.Owner = this;
         DataContext = viewModel;
+        PlannerMap.Layers.PreferencesEdited += (_, _) => viewModel.PreviewPlannerLayers(
+            PlannerMap.Layers.ShowLightPollution, PlannerMap.Layers.LightPollutionOpacityPercent);
+        PlannerMap.Layers.PersistAsync = viewModel.CommitPlannerLayersAsync;
+        if (viewModel.LightPollutionInstallation is { } lightPollution) PlannerMap.ConfigureLightPollution(lightPollution);
         PlannerMap.PreviewCoordinateChanged += (_, coordinate) => _viewModel.PreviewObserverLocation(coordinate);
         PlannerMap.CoordinateCommitted += (_, coordinate) => _viewModel.CommitUnresolvedObserverLocation(coordinate);
         PlannerMap.InteractionStateChanged += (_, interacting) => _viewModel.SetLocationInteraction(interacting);
         PlannerMap.SaveCurrentPinRequested += async (_, _) => await _viewModel.SaveLocationCommand.ExecuteAsync(null);
+    }
+
+    protected override async void OnClosing(WindowClosingEventArgs e)
+    {
+        base.OnClosing(e);
+        if (e.Cancel || _viewModel is null || _closeCleanupComplete) return;
+
+        // Keep the window and Avalonia lifetime alive until the local reader gate and
+        // Mapsui render resources have shut down. A second Close while this is pending
+        // is coalesced; the final Close below passes through after cleanup completes.
+        e.Cancel = true;
+        if (_closeCleanupStarted) return;
+        _closeCleanupStarted = true;
+        _viewModel.CancelEnvironmentalInstall();
+        try
+        {
+            await PlannerMap.Layers.CommitSafelyAsync();
+            await PlannerMap.ReleaseLightPollutionAsync();
+            _closeCleanup.TrySetResult();
+        }
+        catch (Exception ex)
+        {
+            _closeCleanup.TrySetException(ex);
+        }
+        finally
+        {
+            _closeCleanupComplete = true;
+            Close();
+        }
     }
 
     private async void ExportPngClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)

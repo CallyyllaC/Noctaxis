@@ -6,10 +6,10 @@
         Width="460" Height="230" MinWidth="380" MinHeight="210">
   <Border Classes="noctaxisDialogSurface">
   <Grid RowDefinitions="*,Auto" Margin="22" RowSpacing="18">
-    <StackPanel Spacing="10">
-      <TextBlock x:Name="HeadingText" FontSize="23" FontWeight="SemiBold"/>
-      <TextBlock x:Name="MessageText" Foreground="#AAB5C5" TextWrapping="Wrap"/>
-    </StackPanel>
+    <ScrollViewer><StackPanel Spacing="10">
+      <TextBlock TextWrapping="Wrap" x:Name="HeadingText" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold"/>
+      <TextBlock x:Name="MessageText" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
+    </StackPanel></ScrollViewer>
     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
       <Button Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="88"/>
       <Button x:Name="ConfirmButton" Classes="destructive" Click="ConfirmClick" IsDefault="True" MinWidth="88"/>

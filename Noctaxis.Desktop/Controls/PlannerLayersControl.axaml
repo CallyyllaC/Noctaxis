@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Noctaxis.Desktop.ViewModels"
+             x:Class="Noctaxis.Desktop.Controls.PlannerLayersControl"
+             x:DataType="vm:PlannerLayersViewModel">
+  <Button Name="LayersButton" Content="Layers ▾"
+          AutomationProperties.Name="Map layers"
+          AutomationProperties.HelpText="Choose the map layers shown in the Planner."
+          ToolTip.Tip="Choose the map layers shown in the Planner.">
+    <Button.Flyout>
+      <Flyout Placement="BottomEdgeAlignedRight" Closed="CommitEdit">
+        <Flyout.FlyoutPresenterTheme>
+          <ControlTheme TargetType="FlyoutPresenter" BasedOn="{StaticResource {x:Type FlyoutPresenter}}">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
+          </ControlTheme>
+        </Flyout.FlyoutPresenterTheme>
+        <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Width="280" Spacing="8">
+            <TextBlock Text="Map layers" Classes="section"/>
+            <TextBlock Text="Overlays" Foreground="{DynamicResource SecondaryText}"/>
+            <CheckBox Name="LightPollutionToggle" Content="Light Pollution"
+                      FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
+                      AutomationProperties.HelpText="Show modelled artificial zenith sky brightness on the map."
+                      IsChecked="{Binding ShowLightPollution, Mode=TwoWay}"
+                      ToolTip.Tip="Show modelled artificial zenith sky brightness on the map."/>
+            <StackPanel Name="OpacityControls" IsVisible="{Binding ShowLightPollution}" Spacing="4">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Opacity"/>
+                <TextBlock Grid.Column="1" Text="{Binding LightPollutionOpacityPercent, StringFormat='{}{0:F0}%'}"/>
+              </Grid>
+              <Slider Name="OpacitySlider" Minimum="0" Maximum="100"
+                      Value="{Binding LightPollutionOpacityPercent, Mode=TwoWay}"
+                      AutomationProperties.Name="Light Pollution opacity"
+                      AutomationProperties.HelpText="Adjust how strongly the Light Pollution overlay covers the base map."
+                      ToolTip.Tip="Adjust how strongly the Light Pollution overlay covers the base map."/>
+            </StackPanel>
+            <TextBlock Text="{Binding PersistenceError}" IsVisible="{Binding HasPersistenceError}"
+                       TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>
+          </StackPanel>
+        </ScrollViewer>
+      </Flyout>
+    </Button.Flyout>
+  </Button>
+</UserControl>

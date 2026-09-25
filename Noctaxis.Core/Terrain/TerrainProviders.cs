@@ -220,12 +220,15 @@ public sealed class HorizonService : IHorizonService
 
     private sealed class ProgressiveSession
     {
+        private static long _nextGenerationId;
+        private readonly long _generationId = Interlocked.Increment(ref _nextGenerationId);
         private const int BearingChunkSize = 24;
         private readonly GeoCoordinate _observer;
         private readonly TerrainProfileRequest _request;
         private readonly ITerrainSurfaceResolver _surface;
         private readonly ILogger _logger;
         private readonly CancellationTokenSource _cancellation;
+        private readonly CancellationToken _producerToken;
         private readonly int _degreeOfParallelism;
         private readonly int[] _states;
         private readonly TaskCompletionSource<bool>[] _bearingReady;
@@ -272,6 +275,7 @@ public sealed class HorizonService : IHorizonService
             }
             _computeSlots = new SemaphoreSlim(degreeOfParallelism, degreeOfParallelism);
             _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _producerToken = _cancellation.Token;
             var completion = Task.Run(BuildCompleteAsync, CancellationToken.None);
             Work = new TerrainHorizonWork(completion, PrioritiseAsync, degreeOfParallelism);
         }
@@ -294,6 +298,10 @@ public sealed class HorizonService : IHorizonService
                     workers[worker] = RunBackgroundWorkerAsync(() =>
                         Interlocked.Add(ref nextChunk, BearingChunkSize), _cancellation.Token);
                 await Task.WhenAll(workers).ConfigureAwait(false);
+                // Priority callers can own bearings skipped by every background worker.
+                // Completion and cache publication must join those producers as well.
+                await Task.WhenAll(_bearingReady.Select(ready => ready.Task))
+                    .WaitAsync(_producerToken).ConfigureAwait(false);
                 total.Stop();
                 _timings.TotalMilliseconds = total.Elapsed.TotalMilliseconds;
                 var profile = CreateProfile(isComplete: true);
@@ -368,9 +376,18 @@ public sealed class HorizonService : IHorizonService
             }
         }
 
-        private async Task<TerrainHorizonProfile> PrioritiseAsync(IReadOnlyList<double> bearings,
+        private Task<TerrainHorizonProfile> PrioritiseAsync(IReadOnlyList<double> bearings,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            // The caller owns its wait, not the reserved profile slots. A superseded UI
+            // request must not strand bearings in an otherwise reusable producer.
+            return ProducePriorityAsync(bearings).WaitAsync(cancellationToken);
+        }
+
+        private async Task<TerrainHorizonProfile> ProducePriorityAsync(IReadOnlyList<double> bearings)
+        {
+            var cancellationToken = _producerToken;
             if (bearings.Count == 0) throw new ArgumentException("At least one priority bearing is required.", nameof(bearings));
             var required = RequiredBearingIndices(bearings);
             var claimed = new List<int>(required.Length);
@@ -508,7 +525,7 @@ public sealed class HorizonService : IHorizonService
                     _observerSurfaceResolution.Classification,
                     _observerSurfaceResolution.SurfaceElevationMetres,
                     _observerSurfaceResolution.WasAdjusted,
-                    _observerSurfaceResolution.Reason));
+                    _observerSurfaceResolution.Reason)) { GenerationId = _generationId };
         }
 
         private void ChooseObserverDatum()

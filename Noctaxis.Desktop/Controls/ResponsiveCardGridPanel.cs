@@ -119,11 +119,17 @@ public sealed class ResponsiveCardGridPanel : Panel
         set => SetValue(VerticalSpacingProperty, value);
     }
 
+    private double _measuredCardHeight;
+
+    static ResponsiveCardGridPanel() => AffectsMeasure<ResponsiveCardGridPanel>(CardHeightProperty, MinimumCardWidthProperty, PreferredCardWidthProperty, MaximumCardWidthProperty);
+
     protected override Size MeasureOverride(Size availableSize)
     {
         var metrics = Calculate(availableSize.Width);
         foreach (var child in Children)
-            child.Measure(new Size(metrics.CardWidth, metrics.CardHeight));
+            child.Measure(new Size(metrics.CardWidth, double.PositiveInfinity));
+        _measuredCardHeight = Math.Max(CardHeight, Children.Count == 0 ? 0 : Children.Max(c => c.DesiredSize.Height));
+        metrics = metrics with { CardHeight = _measuredCardHeight };
 
         var rows = metrics.RowCount(Children.Count);
         var desiredHeight = rows == 0
@@ -137,7 +143,7 @@ public sealed class ResponsiveCardGridPanel : Panel
 
     protected override Size ArrangeOverride(Size finalSize)
     {
-        var metrics = Calculate(finalSize.Width);
+        var metrics = Calculate(finalSize.Width) with { CardHeight = Math.Max(CardHeight, _measuredCardHeight) };
         for (var index = 0; index < Children.Count; index++)
         {
             var column = index % metrics.ColumnCount;

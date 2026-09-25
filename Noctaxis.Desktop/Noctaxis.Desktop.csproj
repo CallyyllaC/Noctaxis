@@ -28,5 +28,6 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="Styles\noctaxis_galaxy_style_v1.json" />
+    <Content Include="ThirdParty\Matplotlib-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

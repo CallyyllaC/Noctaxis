@@ -12,9 +12,7 @@ public sealed class WindowPolicyTests
     [Fact]
     public void TerrainDebugOverlay_IsOptionalBoundAndCopyable()
     {
-        var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml"));
-        var markup = File.ReadAllText(sourcePath);
+        var markup = File.ReadAllText(TestPaths.MainWindowMarkup);
         Assert.DoesNotContain("Terrain cast angular detail", markup);
         Assert.DoesNotContain("SettingsTerrainCastAngularDetailDegrees", markup);
         Assert.Contains("Content=\"Enable terrain diagnostics\"", markup);
@@ -34,11 +32,12 @@ public sealed class WindowPolicyTests
         Assert.Single(data.Descendants(), element => (string?)element.Attribute("Command") == "{Binding ClearTerrainCacheCommand}");
         var minimap = Assert.Single(planner.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
         Assert.Equal("208", (string?)minimap.Attribute("Width"));
-        Assert.Equal("False", (string?)minimap.Parent!.Parent!.Attribute("IsHitTestVisible"));
-        Assert.Equal("Top", (string?)minimap.Parent.Parent.Attribute("VerticalAlignment"));
-        Assert.Equal("Left", (string?)minimap.Parent.Parent.Attribute("HorizontalAlignment"));
-        Assert.Null(minimap.Parent.Parent.Attribute("IsVisible"));
-        Assert.Single(minimap.Parent.Elements(), element => (string?)element.Attribute("Text") == "Terrain");
+        var minimapChrome = minimap.Ancestors().Single(element => element.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "PlannerTerrainMinimap"));
+        Assert.Equal("False", (string?)minimapChrome.Attribute("IsHitTestVisible"));
+        Assert.Equal("Top", (string?)minimapChrome.Attribute("VerticalAlignment"));
+        Assert.Equal("Left", (string?)minimapChrome.Attribute("HorizontalAlignment"));
+        Assert.Null(minimapChrome.Attribute("IsVisible"));
+        Assert.Single(minimap.Parent!.Elements(), element => (string?)element.Attribute("Text") == "Terrain");
         Assert.DoesNotContain(planner.Descendants(), element => (string?)element.Attribute("Text") == "Local terrain");
         Assert.Equal("{Binding GroundMetresPerPixel, ElementName=PlannerMap}", (string?)minimap.Attribute("MetresPerPixel"));
         Assert.Single(document.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");

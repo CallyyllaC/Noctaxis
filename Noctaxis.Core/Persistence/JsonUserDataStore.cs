@@ -50,6 +50,7 @@ public sealed class JsonUserDataStore : IUserDataStore
         StorageDirectory = paths.GetApplicationDataDirectory();
         _filePath = Path.Combine(StorageDirectory, "state.json");
         _options = new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true };
+        _options.Converters.Add(new ExternalMapProviderJsonConverter());
         _options.Converters.Add(new JsonStringEnumConverter());
     }
 

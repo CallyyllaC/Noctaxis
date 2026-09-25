@@ -1,0 +1,25 @@
+# Appearance family capture index
+
+Representative captures from the model normalisation tests. System captures use an injected platform preference source; these are headless Avalonia images, not native OS/GPU validation. Populated Locations uses the existing synthetic image fixture. The existing capture tests also regenerated their broader matrices under family/mode filenames.
+
+- [family-builtin.noctaxis-Dark-os-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.noctaxis-Dark-os-Dark-Tritanopia.png)
+- [family-builtin.noctaxis-Light-os-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.noctaxis-Light-os-Light-Tritanopia.png)
+- [family-builtin.noctaxis-System-os-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.noctaxis-System-os-Dark-Tritanopia.png)
+- [family-builtin.noctaxis-System-os-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.noctaxis-System-os-Light-Tritanopia.png)
+- [states-semantic-builtin.noctaxis-Dark-None.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.noctaxis-Dark-None.png)
+- [states-semantic-builtin.noctaxis-Light-None.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.noctaxis-Light-None.png)
+- [states-semantic-builtin.noctaxis-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.noctaxis-Dark-Tritanopia.png)
+- [states-semantic-builtin.noctaxis-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.noctaxis-Light-Tritanopia.png)
+- [family-builtin.highcontrast-Dark-os-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.highcontrast-Dark-os-Dark-Tritanopia.png)
+- [family-builtin.highcontrast-Light-os-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.highcontrast-Light-os-Light-Tritanopia.png)
+- [family-builtin.highcontrast-System-os-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.highcontrast-System-os-Dark-Tritanopia.png)
+- [family-builtin.highcontrast-System-os-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/family-builtin.highcontrast-System-os-Light-Tritanopia.png)
+- [states-semantic-builtin.highcontrast-Dark-None.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.highcontrast-Dark-None.png)
+- [states-semantic-builtin.highcontrast-Light-None.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.highcontrast-Light-None.png)
+- [states-semantic-builtin.highcontrast-Dark-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.highcontrast-Dark-Tritanopia.png)
+- [states-semantic-builtin.highcontrast-Light-Tritanopia.png](H:/Noctaxis/artifacts/appearance-polish/states-semantic-builtin.highcontrast-Light-Tritanopia.png)
+- [locations-builtin.highcontrast-Light-selected-hover.png](H:/Noctaxis/artifacts/appearance-polish/locations-builtin.highcontrast-Light-selected-hover.png)
+- [locations-builtin.highcontrast-Light-selected-favourite-hover.png](H:/Noctaxis/artifacts/appearance-polish/locations-builtin.highcontrast-Light-selected-favourite-hover.png)
+- [card-builtin.highcontrast-Light-selected-focus.png](H:/Noctaxis/artifacts/appearance-polish/card-builtin.highcontrast-Light-selected-focus.png)
+- [settings-builtin.highcontrast-Light-section-0-live-100.png](H:/Noctaxis/artifacts/appearance-polish/settings-builtin.highcontrast-Light-section-0-live-100.png)
+- [settings-builtin.highcontrast-Light-section-0-live-200.png](H:/Noctaxis/artifacts/appearance-polish/settings-builtin.highcontrast-Light-section-0-live-200.png)

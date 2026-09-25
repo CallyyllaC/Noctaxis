@@ -8,19 +8,19 @@
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
     <StackPanel x:Name="PageContent" Margin="32" Spacing="22" HorizontalAlignment="Stretch">
       <StackPanel Spacing="5">
-        <TextBlock Text="Locations" FontSize="32" FontWeight="SemiBold"/>
-        <TextBlock Text="Keep the places worth returning to close at hand." Foreground="#9AA8BA" TextWrapping="Wrap"/>
+        <TextBlock TextWrapping="Wrap" Text="Locations" FontSize="{DynamicResource TextDisplay}" FontWeight="SemiBold"/>
+        <TextBlock Text="Keep the places worth returning to close at hand." Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
       </StackPanel>
 
       <Border Classes="currentLocationPanel">
         <Grid x:Name="CurrentLocationLayout" ColumnDefinitions="*,Auto" ColumnSpacing="22">
           <StackPanel Spacing="7">
-            <TextBlock Text="CURRENT LOCATION" Classes="eyebrow"/>
-            <TextBlock Text="{Binding LocationName}" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-            <TextBlock Text="{Binding PreviewObserver}" Foreground="#9EABC0"/>
-            <TextBlock Text="The active Planner pin is used when this location is saved." Foreground="#7F8B9D" FontSize="11" TextWrapping="Wrap"/>
-            <TextBlock Text="{Binding CurrentLocationAttribution}" IsVisible="{Binding HasCurrentLocationAttribution}" Foreground="#748196" FontSize="9"/>
-            <TextBlock Text="{Binding Locations.ResolutionMessage}" Foreground="#A7B5C8" TextWrapping="Wrap"/>
+            <TextBlock TextWrapping="Wrap" Text="CURRENT LOCATION" Classes="eyebrow"/>
+            <TextBlock TextWrapping="Wrap" Text="{Binding LocationName}" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+            <TextBlock TextWrapping="Wrap" Text="{Binding PreviewObserver}" Foreground="{DynamicResource SecondaryText}"/>
+            <TextBlock Text="The active Planner pin is used when this location is saved." Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextSmall}" TextWrapping="Wrap"/>
+            <TextBlock TextWrapping="Wrap" Text="{Binding CurrentLocationAttribution}" IsVisible="{Binding HasCurrentLocationAttribution}" Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextCaption}"/>
+            <TextBlock Text="{Binding Locations.ResolutionMessage}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
           </StackPanel>
           <WrapPanel x:Name="CurrentLocationActions" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
             <Button Content="Search for a place" Command="{Binding Locations.SearchForPlaceCommand}" Margin="0,0,8,8"/>
@@ -33,8 +33,8 @@
       <Border Classes="emptyLocationPanel" IsVisible="{Binding Locations.IsFirstRun}">
         <StackPanel Spacing="12">
           <StackPanel Spacing="5">
-            <TextBlock Text="No saved locations yet" FontSize="18" FontWeight="SemiBold"/>
-            <TextBlock Text="Save the current Planner pin to create your first location card." Foreground="#8F9CAF" TextWrapping="Wrap"/>
+            <TextBlock TextWrapping="Wrap" Text="No saved locations yet" FontSize="{DynamicResource TextSubheading}" FontWeight="SemiBold"/>
+            <TextBlock Text="Save the current Planner pin to create your first location card." Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
           </StackPanel>
           <Button Content="Save current location" Command="{Binding SaveCurrentAsNewLocationCommand}" HorizontalAlignment="Left"/>
         </StackPanel>
@@ -43,13 +43,13 @@
       <StackPanel Spacing="12">
         <Grid x:Name="SavedLocationsHeader" ColumnDefinitions="*,Auto" ColumnSpacing="12">
           <StackPanel>
-            <TextBlock Text="Saved locations" FontSize="22" FontWeight="SemiBold"/>
-            <TextBlock Text="Favourites are always kept first." Foreground="#7F8B9D" FontSize="11"/>
+            <TextBlock TextWrapping="Wrap" Text="Saved locations" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold"/>
+            <TextBlock TextWrapping="Wrap" Text="Favourites are always kept first." Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextSmall}"/>
           </StackPanel>
           <StackPanel x:Name="SavedLocationsSort" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-            <TextBlock Text="Sort within groups" Classes="fieldLabel" VerticalAlignment="Center" Margin="0"/>
+            <TextBlock TextWrapping="Wrap" Text="Sort within groups" Classes="fieldLabel" VerticalAlignment="Center" Margin="0"/>
             <ComboBox ItemsSource="{Binding Locations.SortOptions}" SelectedItem="{Binding Locations.SelectedSortOption}" MinWidth="150">
-              <ComboBox.ItemTemplate><DataTemplate><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
+              <ComboBox.ItemTemplate><DataTemplate><TextBlock TextWrapping="Wrap" Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
             </ComboBox>
           </StackPanel>
         </Grid>
@@ -60,7 +60,7 @@
               <controls:ResponsiveCardGridPanel MinimumCardWidth="530"
                                                 PreferredCardWidth="580"
                                                 MaximumCardWidth="640"
-                                                CardHeight="240"
+                                                CardHeight="{DynamicResource LocationCardHeight}"
                                                 HorizontalSpacing="14"
                                                 VerticalSpacing="14"/>
             </ItemsPanelTemplate>
@@ -70,7 +70,7 @@
               <Border Classes="editorialLocationCard" Classes.favourite="{Binding IsFavourite}" Classes.selected="{Binding IsSelected}"
                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
                 <Grid ClipToBounds="True" ColumnDefinitions="3*,5*">
-                  <Border Grid.Column="1" Background="#101827" ClipToBounds="True" IsHitTestVisible="False">
+                  <Border Grid.Column="1" Background="{DynamicResource SurfaceBackground}" ClipToBounds="True" IsHitTestVisible="False">
                     <Grid>
                       <Image Source="{Binding MapThumbnail}" Stretch="UniformToFill"/>
                       <ProgressBar Width="70" IsIndeterminate="True" IsVisible="{Binding IsMapThumbnailLoading}"
@@ -81,11 +81,11 @@
                   <Border Grid.ColumnSpan="2" IsHitTestVisible="False">
                     <Border.Background>
                       <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
-                        <GradientStop Color="#FF101827" Offset="0"/>
-                        <GradientStop Color="#F2101827" Offset="0.33"/>
-                        <GradientStop Color="#A8101827" Offset="0.46"/>
-                        <GradientStop Color="#00101827" Offset="0.61"/>
-                        <GradientStop Color="#00101827" Offset="1"/>
+                        <GradientStop Color="{DynamicResource CardOpaque}" Offset="0"/>
+                        <GradientStop Color="{DynamicResource CardScrim}" Offset="0.33"/>
+                        <GradientStop Color="{DynamicResource CardFade}" Offset="0.46"/>
+                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="0.61"/>
+                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="1"/>
                       </LinearGradientBrush>
                     </Border.Background>
                   </Border>
@@ -94,41 +94,44 @@
                           ToolTip.Tip="Open location in Planner"
                           AutomationProperties.Name="Open saved location in Planner"/>
 
-                  <Grid Grid.ColumnSpan="2" ColumnDefinitions="1*,1*" IsHitTestVisible="False">
+                  <controls:LocationCardTextGrid Grid.ColumnSpan="2" FullWidth="{DynamicResource LocationCardFullWidth}" IsHitTestVisible="False">
                     <Border Padding="22,18,12,62" Background="Transparent">
                       <StackPanel Spacing="7">
-                        <TextBlock Text="{Binding Eyebrow}" Classes="eyebrow"/>
-                        <TextBlock Text="{Binding Name}" FontSize="23" FontWeight="SemiBold"
-                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxHeight="58"/>
-                        <TextBlock Text="{Binding Coordinates}" Foreground="#A8B4C7" FontSize="14"/>
-                        <TextBlock Text="{Binding RegionDescription}" IsVisible="{Binding HasRegionDescription}"
-                                   Foreground="#78869A" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock TextWrapping="Wrap" Text="{Binding Eyebrow}" Classes="eyebrow"/>
+                        <Border Background="{DynamicResource SelectionBackground}" Padding="5,2" HorizontalAlignment="Left" IsVisible="{Binding IsSelected}">
+                          <TextBlock Text="✓ Current location" Foreground="{DynamicResource SelectionForeground}" FontSize="{DynamicResource TextCaption}" TextWrapping="Wrap"/>
+                        </Border>
+                        <TextBlock Text="{Binding Name}" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold"
+                                   TextWrapping="Wrap" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock TextWrapping="Wrap" Text="{Binding Coordinates}" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextBody}"/>
+                        <TextBlock TextWrapping="Wrap" Text="{Binding RegionDescription}" IsVisible="{Binding HasRegionDescription}"
+                                   Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextSmall}" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding UserDescription}" IsVisible="{Binding HasUserDescription}"
-                                   Foreground="#AAB4C3" TextWrapping="Wrap" MaxHeight="42"
+                                   Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"
                                    TextTrimming="CharacterEllipsis"/>
                       </StackPanel>
                     </Border>
-                  </Grid>
+                  </controls:LocationCardTextGrid>
 
-                  <Border Grid.ColumnSpan="2" Background="#C8141E30" CornerRadius="12" Padding="9,4"
+                  <Border Grid.ColumnSpan="2" Background="{DynamicResource SurfaceBackground}" CornerRadius="12" Padding="9,4"
                           Margin="20,0,0,16" HorizontalAlignment="Left" VerticalAlignment="Bottom"
                           IsVisible="{Binding HasLastUsed}">
-                    <TextBlock Text="{Binding LastUsedText}" FontSize="10" Foreground="#B9C3D1"/>
+                    <TextBlock TextWrapping="Wrap" Text="{Binding LastUsedText}" FontSize="{DynamicResource TextCaption}" Foreground="{DynamicResource SecondaryText}"/>
                   </Border>
 
                   <Button Grid.ColumnSpan="2" Classes="cardAction cornerOverflow"
                           HorizontalAlignment="Right" VerticalAlignment="Bottom"
                           ToolTip.Tip="{Binding SemanticStatusSummary}" AutomationProperties.Name="More location actions">
-                    <TextBlock Text="•••" FontSize="12" LetterSpacing="1"/>
+                    <TextBlock TextWrapping="Wrap" Text="•••" FontSize="{DynamicResource TextLabel}" LetterSpacing="1"/>
                     <Button.Flyout>
                       <MenuFlyout>
                         <MenuItem Header="Edit location" Command="{Binding EditCommand}"/>
                         <MenuItem Header="Regenerate map image" Command="{Binding RefreshMapThumbnailCommand}"/>
                         <MenuItem Header="Refresh settlement imagery" Command="{Binding RefreshSettlementCacheCommand}"/>
                         <MenuItem Header="{Binding SettlementStatusSummary}" IsEnabled="False"
-                                  IsVisible="{Binding HasSettlementWarning}" Foreground="#9AA6B8"/>
+                                  IsVisible="{Binding HasSettlementWarning}" Foreground="{DynamicResource SecondaryText}"/>
                         <Separator/>
-                        <MenuItem Header="Delete location" Command="{Binding DeleteCommand}" Foreground="#E88991"/>
+                        <MenuItem Header="Delete location" Command="{Binding DeleteCommand}" Foreground="{DynamicResource Error}"/>
                       </MenuFlyout>
                     </Button.Flyout>
                   </Button>
@@ -138,9 +141,9 @@
                           ToolTip.Tip="{Binding FavouriteAccessibleName}" AutomationProperties.Name="{Binding FavouriteAccessibleName}">
                     <Grid Width="20" Height="20">
                       <Path Data="M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z"
-                            Fill="#F3C94F" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsFavourite}"/>
+                            Fill="{DynamicResource Warning}" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsFavourite}"/>
                       <Path Data="M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z"
-                            Fill="Transparent" Stroke="#A9B3C2" StrokeThickness="1.8" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsNotFavourite}"/>
+                            Fill="Transparent" Stroke="{DynamicResource SecondaryText}" StrokeThickness="1.8" Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsNotFavourite}"/>
                     </Grid>
                   </Button>
                 </Grid>
@@ -163,14 +166,14 @@
                     </Border.Background>
                   </Border>
                   <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10">
-                    <Border Width="48" Height="48" CornerRadius="24" Background="#241F2A43"
-                            BorderBrush="#776BC0" BorderThickness="1" HorizontalAlignment="Center">
-                      <TextBlock Text="+" FontSize="29" FontWeight="Light" Foreground="#B6AAFF"
+                    <Border Width="48" Height="48" CornerRadius="24" Background="{DynamicResource ButtonBackground}"
+                            BorderBrush="{DynamicResource Accent}" BorderThickness="1" HorizontalAlignment="Center">
+                      <TextBlock TextWrapping="Wrap" Text="+" FontSize="{DynamicResource TextTitle}" FontWeight="Light" Foreground="{DynamicResource Accent}"
                                  HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
                     </Border>
                     <StackPanel Spacing="4">
-                      <TextBlock Text="Add location" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                      <TextBlock Text="Save the current Planner pin" Foreground="#7F8B9D" FontSize="11"
+                      <TextBlock TextWrapping="Wrap" Text="Add location" FontSize="{DynamicResource TextSubheading}" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                      <TextBlock TextWrapping="Wrap" Text="Save the current Planner pin" Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextSmall}"
                                  HorizontalAlignment="Center"/>
                     </StackPanel>
                   </StackPanel>
@@ -182,7 +185,7 @@
 
         <TextBlock Text="{Binding Locations.ThumbnailAttributionSummary}"
                    IsVisible="{Binding Locations.HasThumbnailAttributions}"
-                   Foreground="#748196" FontSize="9" TextWrapping="Wrap"/>
+                   Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextCaption}" TextWrapping="Wrap"/>
 
       </StackPanel>
     </StackPanel>

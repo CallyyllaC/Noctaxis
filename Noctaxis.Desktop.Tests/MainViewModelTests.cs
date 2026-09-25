@@ -12,6 +12,7 @@ using Noctaxis.Core.Locations;
 using Noctaxis.Core.Environment;
 using Noctaxis.Desktop.Controls;
 using Noctaxis.Desktop.Services;
+using Noctaxis.Core.Supporter;
 using Noctaxis.Desktop.ViewModels;
 using NodaTime;
 using SkiaSharp;
@@ -1254,9 +1255,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void PlannerSidebarAndSettings_HaveTheRequestedSingleOwnershipStructure()
     {
-        var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml"));
-        var document = XDocument.Load(sourcePath);
+        var document = XDocument.Load(TestPaths.MainWindowMarkup);
         var planner = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Planner");
         var expanders = planner.Descendants().Where(element => element.Name.LocalName == "Expander")
@@ -1342,11 +1341,9 @@ public sealed partial class MainViewModelTests
     }
 
     [Fact]
-    public void GeneralSettings_ContainsOneDisabledKofiPlaceholderWithoutBehavior()
+    public void GeneralSettings_ContainsSupporterLicenceAndEnabledKofiLink()
     {
-        var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml"));
-        var document = XDocument.Load(sourcePath);
+        var document = XDocument.Load(TestPaths.MainWindowMarkup);
         var settings = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
         var general = settings.Descendants().Single(element =>
@@ -1355,24 +1352,33 @@ public sealed partial class MainViewModelTests
         var supportButton = Assert.Single(general.Descendants(), element =>
             element.Name.LocalName == "Button" &&
             element.Attribute("Content")?.Value == "Support on Ko-fi");
-        Assert.Equal("False", supportButton.Attribute("IsEnabled")?.Value);
-        Assert.Null(supportButton.Attribute("Command"));
+        Assert.Null(supportButton.Attribute("IsEnabled"));
+        Assert.Equal("{Binding OpenKoFiCommand}", supportButton.Attribute("Command")?.Value);
         Assert.Null(supportButton.Attribute("CommandParameter"));
         Assert.Null(supportButton.Attribute("Click"));
-        Assert.Null(supportButton.Attribute("Classes"));
+        Assert.Equal("Support on Ko-fi", supportButton.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name")?.Value ?? supportButton.Attribute("AutomationProperties.Name")?.Value);
 
         Assert.Contains(general.Descendants(), element =>
             element.Name.LocalName == "TextBlock" && element.Attribute("Text")?.Value == "Support");
         Assert.Contains(general.Descendants(), element =>
             element.Name.LocalName == "TextBlock" &&
-            element.Attribute("Text")?.Value == "Supporter features coming later.");
+            element.Attribute("Text")?.Value == "Supporter licence");
+        Assert.Contains(general.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" &&
+            element.Attribute("Text")?.Value == "Unlock supporter cosmetic themes with an Awoo supporter licence.");
 
-        var generalInputs = general.Descendants()
-            .Where(element => element.Name.LocalName is "TextBox" or "ComboBox" or "NumericUpDown" or "CheckBox" or "Button")
-            .ToArray();
-        Assert.Equal(["ComboBox", "Button"], generalInputs.Select(element => element.Name.LocalName));
-        Assert.Equal("{Binding UnitsOptions}", generalInputs[0].Attribute("ItemsSource")?.Value);
-        Assert.Equal("{Binding SettingsUnits}", generalInputs[0].Attribute("SelectedItem")?.Value);
+        var supportHeading = Assert.Single(general.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && element.Attribute("Text")?.Value == "Support");
+        Assert.Equal("{DynamicResource TextTitle}", supportHeading.Attribute("FontSize")?.Value);
+        Assert.Equal("SemiBold", supportHeading.Attribute("FontWeight")?.Value);
+
+        var generalInputs = general.Descendants().ToArray();
+        var theme = Assert.Single(generalInputs, e => e.Name.LocalName == "ComboBox" && e.Attribute("ItemsSource")?.Value == "{Binding ThemeOptions}");
+        Assert.Equal("{Binding SelectedTheme}", theme.Attribute("SelectedItem")?.Value);
+        Assert.Equal(10, generalInputs.Count(e => e.Name.LocalName == "RadioButton"));
+        var slider = Assert.Single(generalInputs, e => e.Name.LocalName == "Slider");
+        Assert.Contains("TextSizePercent", slider.Attribute("Value")?.Value);
+        Assert.DoesNotContain(generalInputs, e => e.Name.LocalName == "NumericUpDown");
     }
 
     [Fact]
@@ -1428,9 +1434,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void EverySettingsInput_HasDeclaredBehavioralTestCoverage()
     {
-        var sourcePath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml"));
-        var document = XDocument.Load(sourcePath);
+        var document = XDocument.Load(TestPaths.MainWindowMarkup);
         var settingsTab = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
         var bindingAttributes = new Dictionary<string, string>
@@ -1441,6 +1445,7 @@ public sealed partial class MainViewModelTests
             ["Slider"] = "Value",
             ["NumericUpDown"] = "Value",
             ["CheckBox"] = "IsChecked",
+            ["RadioButton"] = "IsChecked",
             ["Button"] = "Command"
         };
         var settingsInputs = settingsTab.Descendants()
@@ -1699,7 +1704,10 @@ public sealed partial class MainViewModelTests
         IPlannerDialogService? dialogs = null, IDeviceLocationAvailabilityService? availability = null,
         ILocationMapThumbnailService? thumbnails = null, IReverseGeocodingProvider? reverseGeocoding = null,
         ITerrainDebugMapService? terrainDebugMaps = null, TerrainDiskCache? terrainDiskCache = null,
-        IClock? clock = null, IFramingVisibilityCalculator? framingVisibility = null)
+        IClock? clock = null, IFramingVisibilityCalculator? framingVisibility = null,
+        IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
+        IExternalUriLauncher? externalUriLauncher = null,
+        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null)
     {
         var locationSearch = new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance);
         var resolver = new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance);
@@ -1710,7 +1718,9 @@ public sealed partial class MainViewModelTests
             clock ?? new FixedClock(store is FakeStore fake ? fake.State.Session.Instant : Instant.FromUtc(2024, 1, 1, 0, 0)),
             locationSearch, resolver, availability ?? new UnavailableDeviceLocationProvider(),
             new LocalTargetSearchService(catalogue), dialogs ?? new FakeDialogs(),
-            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps, terrainDiskCache);
+            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps, terrainDiskCache,
+            supporterLicenceVerifier: supporterLicenceVerifier, externalUriLauncher: externalUriLauncher,
+            lightPollutionInstallation: lightPollutionInstallation);
     }
 
     private sealed class FakeLocationSearchProvider : ILocationSearchProvider
@@ -1772,8 +1782,10 @@ public sealed partial class MainViewModelTests
         public int ForcedRefreshes { get; private set; }
         public int SnapshotCalculations { get; private set; }
         public int EnvironmentRequests { get; private set; }
+        public int WeatherRequests { get; private set; }
         public double? LastCameraHeightAboveGroundMetres { get; private set; }
         public double? GroundElevationMetres { get; set; }
+        public bool IncludeTerrainSightlines { get; set; }
         public double? ChosenGroundElevationMetres { get; set; }
         public PlanningSession? LastCalculatedSession { get; private set; }
         public int CalculateDelayMilliseconds { get; set; }
@@ -1809,7 +1821,7 @@ public sealed partial class MainViewModelTests
             return Task.FromResult(EnvironmentFor(session));
         }
         public Task<WeatherResult> LoadWeatherAsync(PlanningSession session, WeatherSettings weatherSettings,
-            CancellationToken cancellationToken) => Task.FromResult(ReadyWeather(session.Instant));
+            CancellationToken cancellationToken) { WeatherRequests++; return Task.FromResult(ReadyWeather(session.Instant)); }
         public Task<WeatherResult> RefreshWeatherAsync(PlanningSession session, WeatherSettings weatherSettings, CancellationToken cancellationToken)
         {
             ForcedRefreshes++;
@@ -1833,7 +1845,9 @@ public sealed partial class MainViewModelTests
                                  session.Observer.ElevationMetres;
             var cameraHeight = LastCameraHeightAboveGroundMetres ??
                                AppSettings.DefaultCameraHeightAboveGroundMetres;
-            var horizon = new TerrainHorizonProfile(session.Observer, [], GroundElevationMetres.HasValue,
+            var horizon = new TerrainHorizonProfile(session.Observer, IncludeTerrainSightlines
+                ? Enumerable.Range(0, 360).Select(b => new TerrainHorizonSample(b, 3, 1000,
+                    Sightline: [new TerrainSightlineSample(1000, 10, 0, 3)])).ToArray() : [], GroundElevationMetres.HasValue,
                 GroundElevationMetres.HasValue ? "Ready" : "Unavailable", session.Instant,
                 TerrainElevationAtObserver: ground,
                 ObserverHeightAboveGroundMetres: cameraHeight,

@@ -20,6 +20,86 @@ namespace Noctaxis.Desktop.Tests;
 public sealed partial class EnvironmentalOverlayTests
 {
     [AvaloniaFact]
+    public void ExportOptionalTerrainFanComparison()
+    {
+        var output = System.Environment.GetEnvironmentVariable("NOCTAXIS_FAN_COMPARISON");
+        if (string.IsNullOrEmpty(output)) return;
+        var root = new StackPanel { Spacing = 12, Margin = new Thickness(12) };
+        var hosts = new List<EnvironmentalOverlayTestControl>();
+        var metrics = new List<object>();
+        foreach (var scenario in new[] { (Name: "Flat · wide", Fov: 72d, Vertical: 50d, Kind: 0),
+                     (Name: "Single · wide", Fov: 72d, Vertical: 50d, Kind: 1),
+                     (Name: "Layers · wide", Fov: 72d, Vertical: 50d, Kind: 2),
+                     (Name: "Hidden · wide", Fov: 72d, Vertical: 50d, Kind: 3),
+                     (Name: "Unequal · wide", Fov: 72d, Vertical: 50d, Kind: 4),
+                     (Name: "Layers · tele", Fov: 4.5d, Vertical: 3d, Kind: 2),
+                     (Name: "Above top · normal", Fov: 24d, Vertical: 20d, Kind: 5) })
+        {
+            TerrainHorizonSample Sample(int b)
+            {
+                var height = Math.Max(0, 1 - Math.Pow((b - 84) / 22d, 2));
+                var shift = 1 + .2 * Math.Sin(b * .27) + .12 * Math.Cos(b * .61);
+                var angles = scenario.Kind switch
+                {
+                    0 => new[] { 0d, -1, -2, -3, -4 },
+                    1 => new[] { 5 * height, 2 * height, height, 0, -1 },
+                    3 => new[] { 5 * height, 2 * height, height, 0, -1 },
+                    5 => new[] { 15 * height, 5 * height, 2 * height, height, 0 },
+                    4 => new[] { height, 3 * height * Math.Sin(b * .2), 4 * height,
+                        7 * height * Math.Cos(b * .19), 10 * height * Math.Sin(b * .13) },
+                    _ => new[] { height, .5 * height, 3 * height, 2 * height, 10 * height }
+                };
+                var distances = new[] { 2000d, 5000, 9000, 15000, 30000 };
+                // Single ridge and hidden-farther cases have the same skyline. The
+                // latter retains extra lower terrain at different radial positions.
+                if (scenario.Kind == 1) angles = [5 * height, -1, -2, -3, -4];
+                return new(b, angles.Max(), null, Sightline: distances.Select((d, i) =>
+                    new TerrainSightlineSample(d * shift, 10, 0, angles[i])).ToArray());
+            }
+            var terrain = Snapshot(Observer).Terrain with { HasDemCoverage = true,
+                Samples = Enumerable.Range(0, 360).Select(Sample).ToArray() };
+            var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
+            root.Children.Add(row);
+            foreach (var pitch in new[] { 0d, 32, 40, -40 })
+            {
+                var assessment = new FramingVisibilityCalculator().Calculate(new(DataState.Loading, null, "Offline"),
+                    terrain, 50, 90, scenario.Fov, cameraFrame: new(pitch, scenario.Vertical, 5));
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                var state = new EnvironmentalOverlayStateCoordinator().Update(Observer,
+                    new(Observer, 90, scenario.Fov, 500000), assessment, ProfileKey(), terrain);
+                timer.Stop();
+                metrics.Add(new { scenario.Name, pitch, rays = state.TerrainFan!.Rays.Length,
+                    samples = state.TerrainFan.SamplesInspected, polygons = state.TerrainFan.Patches.Length,
+                    vertices = state.TerrainFan.Patches.Sum(p => p.Corners.Length), buildMs = timer.Elapsed.TotalMilliseconds });
+                var point = WebMercator.FromWgs84(Angles.Destination(Observer, 90, 22000));
+                var frame = EnvironmentalOverlayMath.CreateFrame(new Viewport(point.X, point.Y, 400, 0, 208, 160),
+                    208, 160, EnvironmentalRenderParameters.Default);
+                var host = new EnvironmentalOverlayTestControl(state, frame, Colors.LightGray) { Width = 208, Height = 160 };
+                hosts.Add(host);
+                row.Children.Add(new StackPanel { Width = 208, Spacing = 6, Children =
+                {
+                    new TextBlock { Text = $"{scenario.Name} · {pitch:+0;-0;0}°", Foreground = Brushes.White, FontSize = 14 },
+                    new TerrainFrameView { Width = 208, Height = 160, Depth = assessment.CameraDepth, Threshold = .05 },
+                    new TextBlock { Text = state.TerrainFan!.GroundFacing ? "Ground-facing" :
+                        $"{state.TerrainFan.Patches.Length} joined regions", Foreground = Brushes.White },
+                    new Border { Background = new SolidColorBrush(Color.Parse("#F2EFE9")), Child = host }
+                }});
+            }
+        }
+        var window = new Window { Width = 892, Height = 2764,
+            Background = new SolidColorBrush(Color.Parse("#101620")), Content = root };
+        try
+        {
+            window.Show(); Dispatcher.UIThread.RunJobs();
+            using var bitmap = new RenderTargetBitmap(new PixelSize(892, 2764));
+            bitmap.Render(window); bitmap.Save(output, PngBitmapEncoderOptions.Default);
+            File.WriteAllText(Path.ChangeExtension(output, ".json"), JsonSerializer.Serialize(metrics,
+                new JsonSerializerOptions { WriteIndented = true }));
+        }
+        finally { window.Close(); foreach (var host in hosts) host.Dispose(); }
+    }
+
+    [AvaloniaFact]
     public void ExportOptionalPitchComparison()
     {
         var output = System.Environment.GetEnvironmentVariable("NOCTAXIS_TINT_COMPARISON");
@@ -28,8 +108,11 @@ public sealed partial class EnvironmentalOverlayTests
             new TerrainHorizonSample(b, 10, null, Sightline: [new TerrainSightlineSample(1000, 100, 0, 10)])).ToArray() };
         var root = new StackPanel { Spacing = 12, Margin = new Thickness(12) };
         var hosts = new List<EnvironmentalOverlayTestControl>();
-        foreach (var colour in new[] { 0xff9a6f9eu, 0xff22bb88u })
+        foreach (var angle in new[] { 1d, 0 })
         {
+        const uint colour = 0xff9a6f9e;
+        terrain = terrain with { Samples = Enumerable.Range(0, 360).Select(b =>
+            new TerrainHorizonSample(b, angle, null, Sightline: [new TerrainSightlineSample(1000, 100, 0, angle)])).ToArray() };
         var row = new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 12 };
         root.Children.Add(row);
         foreach (var pitch in new[] { 0d, 15, 30, 45 })
@@ -37,7 +120,8 @@ public sealed partial class EnvironmentalOverlayTests
             var assessment = new FramingVisibilityCalculator().Calculate(new(DataState.Loading, null, "Offline"), terrain,
                 50, 90, 70, cameraFrame: new(pitch, 60, 5));
             var sector = new GeoSector(Observer, 90, 70, 500000);
-            var state = new EnvironmentalOverlayStateCoordinator().Update(Observer, sector, assessment, ProfileKey());
+            var state = new EnvironmentalOverlayStateCoordinator().Update(Observer, sector, assessment, ProfileKey(),
+                System.Environment.GetEnvironmentVariable("NOCTAXIS_PLAN_BEFORE") == "1" ? null : terrain);
             var point = WebMercator.FromWgs84(Angles.Destination(Observer, 90, 3000));
             var frame = EnvironmentalOverlayMath.CreateFrame(new Viewport(point.X, point.Y, 40, 0, 208, 160), 208, 160,
                 EnvironmentalRenderParameters.Default with { TerrainColourArgb = colour });
@@ -47,10 +131,10 @@ public sealed partial class EnvironmentalOverlayTests
             row.Children.Add(new StackPanel { Width = 208, Spacing = 6, Children =
             {
                 new TextBlock { Text = $"Pitch +{pitch:0}°", Foreground = Brushes.White, FontSize = 16 },
-                new TextBlock { Text = $"Terrain #{colour & 0xffffff:X6}", Foreground = Brushes.White },
+                new TextBlock { Text = $"Synthetic horizon {angle:0}°", Foreground = Brushes.White },
                 new TerrainFrameView { Width = 208, Height = 160, Depth = assessment.CameraDepth, Threshold = .05 },
                 new TextBlock { Text = $"Coverage {assessment.EffectiveTerrainObstructions[35].EffectiveCoverage:P0}", Foreground = Brushes.White },
-                new Border { Background = new SolidColorBrush(Color.Parse("#839399")), Child = host }
+                new Border { Background = new SolidColorBrush(Color.Parse("#F2EFE9")), Child = host }
             }});
         }
         }
@@ -122,9 +206,17 @@ public sealed partial class EnvironmentalOverlayTests
                 var sample = assessment.EffectiveTerrainObstructions[35];
                 Assert.True(sample.RawCoverage < previousRaw); previousRaw = sample.RawCoverage;
                 Assert.True(sample.EffectiveCoverage < previousEffective); previousEffective = sample.EffectiveCoverage;
-                Assert.True(state.TerrainTextureRevision > revision); revision = state.TerrainTextureRevision;
-                Assert.Equal(sample.EffectiveCoverage, state.SourceSamples[35].EffectiveCoverage);
-                var alpha = HatchProbeAlpha(state); Assert.True(alpha < previousAlpha); previousAlpha = alpha;
+                Assert.True(state.TerrainTextureRevision >= revision);
+                revision = state.TerrainTextureRevision;
+                Assert.Equal(pitch < 45, state.TerrainFan!.Rays[35].Bands.Length > 0);
+                var alpha = HatchProbeAlpha(state);
+                // The skyline persists past the ridge; pitching above it clears the shadow.
+                if (previousAlpha != 256)
+                {
+                    if (pitch < 45) Assert.Equal(previousAlpha, alpha);
+                    else Assert.True(alpha < previousAlpha);
+                }
+                previousAlpha = alpha;
                 var depthCoverage = assessment.CameraDepth!.DistancesMetres.Count(d => d > 0) / (double)assessment.CameraDepth.DistancesMetres.Length;
                 Assert.InRange(Math.Abs(depthCoverage - sample.RawCoverage), 0, 1d / 72);
                 rows.Add(new { pitch, raw = sample.RawCoverage, effective = sample.EffectiveCoverage,
@@ -172,11 +264,17 @@ public sealed partial class MainViewModelTests
             var calculations = calculator.Count; var depths = calculator.DepthCount;
             var writes = store.WriteCount; store.BlockSaves = true;
             var changes = 0;
+            var performanceRows = new List<object>();
             foreach (var value in Enumerable.Range(-10, 56))
             {
                 var before = calculator.Count;
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var allocated = GC.GetAllocatedBytesForCurrentThread();
                 pitch.Value = value;
                 var result = vm.CameraFramingVisibility;
+                performanceRows.Add(new { input = "pitch", value = (double)value,
+                    milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    bytes = GC.GetAllocatedBytesForCurrentThread() - allocated, depthCalculations = calculator.Count - before });
                 Assert.Equal(value, vm.CameraPitchDegrees); Assert.Equal((decimal)value, pitchNumber.Value);
                 Assert.Equal(before + 1, calculator.Count);
                 Assert.Same(result, vm.CameraFramingVisibility); _ = vm.TerrainFrameDepth;
@@ -184,7 +282,14 @@ public sealed partial class MainViewModelTests
             }
             foreach (var value in new[] { 359d, 0, 1, 358, 359, 0 })
             {
-                var before = calculator.Count; bearing.Value = value;
+                var before = calculator.Count;
+                var started = System.Diagnostics.Stopwatch.GetTimestamp();
+                var allocated = GC.GetAllocatedBytesForCurrentThread();
+                bearing.Value = value;
+                _ = vm.TerrainFrameDepth;
+                performanceRows.Add(new { input = "bearing", value,
+                    milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                    bytes = GC.GetAllocatedBytesForCurrentThread() - allocated, depthCalculations = calculator.Count - before });
                 Assert.Equal(value, vm.CameraBearingDegrees, 8); Assert.Equal((decimal)value, bearingNumber.Value);
                 Assert.Equal(value, vm.CameraFramingGuide!.CentreBearingDegrees, 8);
                 _ = vm.TerrainFrameDepth; _ = vm.CameraFramingVisibility;
@@ -202,6 +307,13 @@ public sealed partial class MainViewModelTests
             Assert.Same(cached, vm.CameraFramingVisibility);
             Assert.Equal(generation, vm.PlannerRefresh.Generation); Assert.Same(terrain, vm.Snapshot.Terrain);
             Assert.Equal(environment, planning.EnvironmentRequests); Assert.Equal(core, planning.SnapshotCalculations);
+            var performanceOutput = System.Environment.GetEnvironmentVariable("NOCTAXIS_CAMERA_INPUT_PERFORMANCE");
+            if (!string.IsNullOrEmpty(performanceOutput)) File.WriteAllText(performanceOutput, JsonSerializer.Serialize(new {
+                source = "Headless Avalonia slider binding through derived depth; synthetic single ridge; excludes frame presentation",
+                changes, profileGenerationChanges = vm.PlannerRefresh.Generation - generation,
+                environmentRequests = planning.EnvironmentRequests - environment,
+                snapshotCalculations = planning.SnapshotCalculations - core, performanceRows
+            }, new JsonSerializerOptions { WriteIndented = true }));
             pitch.Value = 12.5; bearing.Value = 123.5;
             Assert.Equal(12.5m, pitchNumber.Value); Assert.Equal(123.5m, bearingNumber.Value);
             Assert.Equal(12.5, pitch.Value); Assert.Equal(123.5, bearing.Value);
@@ -247,8 +359,7 @@ public sealed class TerrainLivePresentationTests
         Assert.Equal(TerrainFrameView.DepthColour(100), TerrainFrameView.NearBrush.Color);
         Assert.Equal(TerrainFrameView.DepthColour(500000), TerrainFrameView.FarBrush.Color);
         Assert.Equal(TerrainFrameView.DepthColour(0), TerrainFrameView.SkyBrush.Color);
-        var source = File.ReadAllText(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,
-            "..", "..", "..", "..", "Noctaxis.Desktop", "Views", "MainWindow.axaml")));
+        var source = File.ReadAllText(TestPaths.MainWindowMarkup);
         Assert.Contains("x:Static controls:TerrainFrameView.NearBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.FarBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.SkyBrush", source);

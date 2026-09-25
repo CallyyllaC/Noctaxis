@@ -14,10 +14,11 @@ using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Planning;
 using Noctaxis.Core.Terrain;
 using Noctaxis.Desktop.ViewModels;
+using Noctaxis.Desktop.Mapping;
 
 namespace Noctaxis.Desktop.Controls;
 
-public sealed class NoctaxisMapView : UserControl
+public class NoctaxisMapView : UserControl
 {
     public static readonly StyledProperty<double> GroundMetresPerPixelProperty =
         AvaloniaProperty.Register<NoctaxisMapView, double>(nameof(GroundMetresPerPixel), double.PositiveInfinity);
@@ -69,8 +70,32 @@ public sealed class NoctaxisMapView : UserControl
         AvaloniaProperty.Register<NoctaxisMapView, bool>(nameof(ShowTerrainDebug));
 
     private readonly MapControl _mapControl;
+    private readonly PlannerMapComposition _composition;
+    private readonly TextBlock _attribution;
+    private LightPollutionMapBinding? _lightPollution;
+    public static readonly StyledProperty<LightPollutionPreferences> LightPollutionPreferencesProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, LightPollutionPreferences>(nameof(LightPollutionPreferences), new());
+    public LightPollutionPreferences LightPollutionPreferences
+    {
+        get => GetValue(LightPollutionPreferencesProperty);
+        set => SetValue(LightPollutionPreferencesProperty, value);
+    }
+    public void ConfigureLightPollution(Noctaxis.Core.LightPollution.LorenzInstallation installation)
+    {
+        if (_lightPollution is not null) throw new InvalidOperationException("Light Pollution is already configured.");
+        _lightPollution = new(_composition, installation);
+        _lightPollution.SetPalette(LightPollutionPreferences.PaletteId);
+        if (_attached) _lightPollution.Attach();
+    }
+    // Final window close only; ordinary visual detachment must remain reattachable.
+    public async ValueTask ReleaseLightPollutionAsync()
+    {
+        if (_lightPollution is not null) await _lightPollution.DisposeAsync();
+        _mapControl.Dispose();
+    }
     private readonly MapOverlay _overlay;
     private readonly DispatcherTimer _renderTimer;
+    private readonly ViewportRedrawScheduler _viewportRedraw;
     private bool _attached;
     private bool _draggingPin;
     private bool _committingPin;
@@ -79,10 +104,13 @@ public sealed class NoctaxisMapView : UserControl
     private readonly PlanningPinInteractionState _pinInteraction;
     private ViewportSignature? _lastViewportSignature;
 
-    public NoctaxisMapView()
+    public NoctaxisMapView() : this(new PlannerMapComposition()) { }
+
+    public NoctaxisMapView(PlannerMapComposition composition)
     {
-        var map = new Map();
-        map.Layers.Add(Mapsui.Tiling.OpenStreetMap.CreateTileLayer());
+        ArgumentNullException.ThrowIfNull(composition);
+        _composition = composition;
+        var map = _composition.Map;
         _mapControl = new MapControl { Map = map };
         var setPinMenuItem = new MenuItem { Header = "Set planning pin here" };
         setPinMenuItem.Click += (_, _) =>
@@ -102,50 +130,65 @@ public sealed class NoctaxisMapView : UserControl
             IsHitTestVisible = false,
             ClipToBounds = true
         };
-        var attribution = new TextBlock
+        var attribution = _attribution = new TextBlock
         {
-            Text = MapProvider.Attribution, FontSize = 11, Foreground = Brushes.White,
-            Background = new SolidColorBrush(Color.FromArgb(190, 15, 20, 29)), Padding = new Thickness(7, 3),
+            Text = _composition.Runtime.AttributionText, Padding = new Thickness(7, 3),
             HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
             VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom, Margin = new Thickness(8)
         };
+        attribution.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeText"));
+        attribution.Bind(TextBlock.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeBackground"));
+        attribution.Bind(TextBlock.FontSizeProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("TextSmall"));
         Content = new Grid { Children = { _mapControl, _overlay, attribution } };
+
+        _composition.Runtime.SetActive("camera-framing", ShowCameraOverlay);
+        _composition.Runtime.SetActive("celestial-rays", ShowCelestialOverlays);
+        UpdateEnvironmentalLayerGate();
+        foreach (var id in new[] { "environmental-shading", "camera-framing", "celestial-rays", "observer-pin" })
+            _composition.Runtime.BindAdapter(id, new DelegateMapLayerStateAdapter(ApplyOverlayLayerState));
 
         AddHandler(PointerPressedEvent, PinPointerPressed, RoutingStrategies.Tunnel);
         AddHandler(PointerMovedEvent, PinPointerMoved, RoutingStrategies.Tunnel);
         AddHandler(PointerReleasedEvent, PinPointerReleased, RoutingStrategies.Tunnel);
         AddHandler(PointerCaptureLostEvent, PinCaptureLost, RoutingStrategies.Tunnel);
 
-        // Viewport movement only shifts the cached overlay geometry on screen. It never changes planning state.
-        _renderTimer = new DispatcherTimer(TimeSpan.FromMilliseconds(33), DispatcherPriority.Render,
-            (_, _) =>
+        _viewportRedraw = new ViewportRedrawScheduler(
+            Dispatcher.UIThread.CheckAccess,
+            action => Dispatcher.UIThread.Post(action, DispatcherPriority.Render),
+            () =>
             {
-                var current = _mapControl.Map?.Navigator.Viewport;
-                if (!current.HasValue) return;
-                var signature = ViewportSignature.From(current.Value);
-                var viewportChanged = _lastViewportSignature != signature;
-                if (viewportChanged)
-                {
-                    _lastViewportSignature = signature;
-                    _pinInteraction.ViewportChanged();
-                }
-                if (viewportChanged || _overlay.PinActivity != PlannerPinActivity.None)
-                    _overlay.InvalidateVisual();
+                _overlay.SyncProbe?.Invalidated();
+                _overlay.InvalidateVisual();
             });
-        _renderTimer.Start();
+        _overlay.RenderStarting = _viewportRedraw.RenderStarting;
+        // Animation keeps its cadence; navigation has no polling timer in production.
+        _renderTimer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(33) };
+        _renderTimer.Tick += (_, _) => TickOverlayAnimation();
         AttachedToVisualTree += (_, _) =>
         {
             _attached = true;
+            _lightPollution?.Attach();
+            _composition.Runtime.AttributionChanged += RefreshAttribution;
+            RefreshAttribution();
+            _viewportRedraw.Attach();
             map.Navigator.ViewportChanged += UpdateGroundScale;
+            map.Navigator.ViewportChanged += ViewportChanged;
             _pinInteraction.SetCommittedCoordinate(Observer);
             UpdateOverlay();
             CenterOn(Observer);
             UpdateGroundScale();
+            UpdateAnimationTimer();
         };
         DetachedFromVisualTree += (_, _) =>
         {
             _attached = false;
+            _lightPollution?.Detach();
+            _composition.Runtime.AttributionChanged -= RefreshAttribution;
+            _viewportRedraw.Detach();
+            _renderTimer.Stop();
+            _lastViewportSignature = null;
             map.Navigator.ViewportChanged -= UpdateGroundScale;
+            map.Navigator.ViewportChanged -= ViewportChanged;
             _overlay.ReleaseRenderer();
         };
     }
@@ -165,7 +208,22 @@ public sealed class NoctaxisMapView : UserControl
     public event EventHandler? SaveCurrentPinRequested;
 
     internal MapControl MapControlForTesting => _mapControl;
+    protected MapLayerStateController LayerRuntime => _composition.Runtime;
+    internal PlannerMapComposition CompositionForTesting => _composition;
+    internal string? AttributionForTesting => _attribution.Text;
+    internal bool EnvironmentalLayerVisibleForTesting => _overlay.ShowEnvironmentalShading;
+    internal bool CameraLayerVisibleForTesting => _overlay.ShowCameraOverlay;
+    internal bool CelestialLayerVisibleForTesting => _overlay.ShowCelestialOverlays;
     internal Control OverlayForTesting => _overlay;
+    internal PlannerPinProbe? PinProbe { get => _overlay.Probe; set { _overlay.Probe = value; UpdateAnimationTimer(); } }
+    internal OverlaySynchronizationProbe? SyncProbe
+    {
+        get => _overlay.SyncProbe;
+        set { _overlay.SyncProbe = value; _lastViewportSignature = null; UpdateAnimationTimer(); }
+    }
+    internal bool AnimationTimerEnabled => _renderTimer.IsEnabled;
+    internal void TickAnimationForTesting() => TickOverlayAnimation();
+    internal Point? PinScreenPointForTesting => _overlay.PinScreenPoint;
     internal EnvironmentalOverlayState? EnvironmentalStateForTesting => _overlay.EnvironmentalStateForTesting;
 
     public void CenterOn(GeoCoordinate coordinate)
@@ -180,6 +238,11 @@ public sealed class NoctaxisMapView : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == LightPollutionPreferencesProperty && _composition is not null)
+        {
+            LightPollutionMapBinding.ApplyPreferences(_composition, LightPollutionPreferences);
+            _lightPollution?.SetPalette(LightPollutionPreferences.PaletteId);
+        }
         if (change.Property == ObserverProperty && _mapControl is not null) UpdateGroundScale();
         if (change.Property == SnapshotProperty)
         {
@@ -193,12 +256,20 @@ public sealed class NoctaxisMapView : UserControl
         }
         else if (change.Property == FramingVisibilityProperty)
         {
+            var changed = (_overlay.FramingVisibility is null) != (FramingVisibility is null) ||
+                _overlay.FramingVisibility?.CameraDepth != FramingVisibility?.CameraDepth ||
+                _overlay.FramingVisibility?.WeatherVisibilityDistanceMetres != FramingVisibility?.WeatherVisibilityDistanceMetres;
             _overlay.FramingVisibility = FramingVisibility;
-            _overlay.InvalidateVisual();
+            if (changed) _overlay.InvalidateVisual();
         }
         else if (change.Property == FramingSettingsProperty)
         {
-            _overlay.FramingSettings = FramingSettings.Normalised();
+            var settings = FramingSettings.Normalised();
+            if ((_overlay.FramingSettings with { CameraPitchDegrees = settings.CameraPitchDegrees,
+                    MinimumTerrainFrameCoveragePercent = settings.MinimumTerrainFrameCoveragePercent }) == settings)
+                return;
+            _overlay.FramingSettings = settings;
+            UpdateEnvironmentalLayerGate();
             _overlay.InvalidateVisual();
         }
         else if (change.Property == ObserverProperty)
@@ -211,17 +282,17 @@ public sealed class NoctaxisMapView : UserControl
         else if (change.Property == PinActivityProperty)
         {
             _overlay.PinActivity = PinActivity;
+            UpdatePinProbe();
+            UpdateAnimationTimer();
             _overlay.InvalidateVisual();
         }
         else if (change.Property == ShowCelestialOverlaysProperty)
         {
-            _overlay.ShowCelestialOverlays = ShowCelestialOverlays;
-            _overlay.InvalidateCelestialGeometry();
+            _composition!.Runtime.SetActive("celestial-rays", ShowCelestialOverlays);
         }
         else if (change.Property == ShowCameraOverlayProperty)
         {
-            _overlay.ShowCameraOverlay = ShowCameraOverlay;
-            _overlay.InvalidateCameraGeometry();
+            _composition!.Runtime.SetActive("camera-framing", ShowCameraOverlay);
         }
         else if (change.Property == ShowTerrainDebugProperty)
         {
@@ -287,7 +358,97 @@ public sealed class NoctaxisMapView : UserControl
     private void UpdateOverlay()
     {
         _overlay.Observer = _pinInteraction.PreviewCoordinate;
+        UpdatePinProbe();
         _overlay.InvalidateVisual();
+    }
+
+    private void RefreshAttribution(object? sender = null, EventArgs? args = null) =>
+        _attribution.Text = _composition.Runtime.AttributionText;
+
+    private void UpdateEnvironmentalLayerGate() =>
+        _composition.Runtime.SetActive("environmental-shading",
+            _composition.Runtime["camera-framing"].IsRenderable && _overlay.FramingSettings.ShadingOpacityPercent > 0);
+
+    // One control-plane adapter for the existing shared surface. Draw order and renderer
+    // ownership stay in MapOverlay. Existing readiness bindings remain authoritative gates.
+    private void ApplyOverlayLayerState(MapLayerState state)
+    {
+        switch (state.Id)
+        {
+            case "camera-framing":
+                if (_overlay.ShowCameraOverlay != state.IsRenderable)
+                {
+                    _overlay.ShowCameraOverlay = state.IsRenderable;
+                    _overlay.InvalidateCameraGeometry();
+                }
+                UpdateEnvironmentalLayerGate();
+                break;
+            case "celestial-rays":
+                if (_overlay.ShowCelestialOverlays != state.IsRenderable)
+                {
+                    _overlay.ShowCelestialOverlays = state.IsRenderable;
+                    _overlay.InvalidateCelestialGeometry();
+                }
+                break;
+            case "environmental-shading":
+                if (_overlay.ShowEnvironmentalShading == state.IsRenderable) break;
+                _overlay.ShowEnvironmentalShading = state.IsRenderable;
+                _overlay.InvalidateVisual();
+                break;
+            case "observer-pin":
+                if (_overlay.ShowObserverPin == state.IsRenderable) break;
+                _overlay.ShowObserverPin = state.IsRenderable;
+                _overlay.InvalidateVisual();
+                break;
+        }
+    }
+
+    private void UpdatePinProbe()
+    {
+        if (_overlay.Probe is not { } probe) return;
+        probe.Poll(false, _draggingPin, _overlay.Observer, _overlay.PinActivity);
+        if (probe.Mode == PlannerPinMode.Layer) _mapControl.Map?.RefreshGraphics();
+    }
+
+    private void ViewportChanged(object? sender, ViewportChangedEventArgs args)
+    {
+        // Use the current viewport at Render time, not a queued frame's coordinates.
+        _overlay.SyncProbe?.ViewportChanged(_mapControl.Map!.Navigator.Viewport);
+        if (_overlay.SyncProbe?.UsePolling == true) return; // Historical A/B diagnostic only.
+        if (!_viewportRedraw.Request()) _overlay.SyncProbe?.Coalesced();
+    }
+
+    private void UpdateAnimationTimer()
+    {
+        if (_renderTimer is null) return;
+        var needed = _attached && (PinActivity != PlannerPinActivity.None ||
+            _overlay.Probe is not null || _overlay.SyncProbe?.UsePolling == true);
+        if (needed) _renderTimer.Start();
+        else _renderTimer.Stop();
+    }
+
+    private void TickOverlayAnimation()
+    {
+        if (!_attached) return;
+        var changed = false;
+        var visibilityChanged = false;
+        // Retain the first investigation's comparison modes, never enabled by the product.
+        if (_overlay.Probe is not null || _overlay.SyncProbe?.UsePolling == true)
+        {
+            if (_mapControl.Map is not { } map) return;
+            var signature = ViewportSignature.From(map.Navigator.Viewport);
+            changed = _lastViewportSignature != signature;
+            _lastViewportSignature = signature;
+            visibilityChanged = _overlay.Probe?.Poll(changed, _draggingPin, _overlay.Observer, _overlay.PinActivity) == true;
+        }
+        if (_overlay.Probe?.Mode == PlannerPinMode.Layer && PinActivity != PlannerPinActivity.None)
+            _mapControl.Map?.RefreshGraphics();
+        if (changed || visibilityChanged || PinActivity != PlannerPinActivity.None)
+        {
+            _overlay.Probe?.CountTimerInvalidation();
+            _overlay.SyncProbe?.Invalidated();
+            _overlay.InvalidateVisual();
+        }
     }
 
     private void MapContextRequested(object? sender, ContextRequestedEventArgs e)
@@ -360,6 +521,19 @@ public sealed class NoctaxisMapView : UserControl
 
     private sealed class MapOverlay(Func<Viewport?> viewport) : Control
     {
+        internal PlannerPinProbe? Probe { get; set; }
+        internal OverlaySynchronizationProbe? SyncProbe { get; set; }
+        internal Action? RenderStarting { get; set; }
+        protected override Size MeasureOverride(Size availableSize)
+        {
+            Probe?.CountMeasure();
+            return base.MeasureOverride(availableSize);
+        }
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            Probe?.CountArrange();
+            return base.ArrangeOverride(finalSize);
+        }
         private static readonly IBrush MarkerFill = new SolidColorBrush(Color.Parse("#0B0F17"));
         private static readonly Pen MarkerOutline = new(Brushes.White, 3);
         private static readonly StreamGeometry MarkerGeometry = CreateMarkerGeometry();
@@ -378,6 +552,8 @@ public sealed class NoctaxisMapView : UserControl
         public PlannerPinActivity PinActivity { get; set; }
         public bool ShowCelestialOverlays { get; set; }
         public bool ShowCameraOverlay { get; set; }
+        public bool ShowEnvironmentalShading { get; set; } = true;
+        public bool ShowObserverPin { get; set; } = true;
         public bool ShowTerrainDebug { get; set; }
 
         public PlanningSnapshot? Snapshot
@@ -411,7 +587,11 @@ public sealed class NoctaxisMapView : UserControl
             set
             {
                 if (_framingVisibility == value) return;
+                var changed = (_framingVisibility is null) != (value is null) ||
+                    _framingVisibility?.CameraDepth != value?.CameraDepth ||
+                    _framingVisibility?.WeatherVisibilityDistanceMetres != value?.WeatherVisibilityDistanceMetres;
                 _framingVisibility = value;
+                if (!changed) return;
                 _cameraGeometry = null;
                 _environmentalState = null;
             }
@@ -443,7 +623,7 @@ public sealed class NoctaxisMapView : UserControl
             }
         }
 
-        public Point? PinScreenPoint => Project(Observer, viewport());
+        public Point? PinScreenPoint => ShowObserverPin ? Project(Observer, viewport()) : null;
 
         public void InvalidateCelestialGeometry()
         {
@@ -467,9 +647,14 @@ public sealed class NoctaxisMapView : UserControl
 
         public override void Render(DrawingContext context)
         {
+            RenderStarting?.Invoke();
+            using var measurement = Probe?.MeasureOverlay();
             base.Render(context);
             var currentViewport = viewport();
+            if (currentViewport.HasValue) SyncProbe?.OverlayRendered(currentViewport.Value);
+            var projectionMeasurement = Probe?.MeasureProjection();
             var pin = Project(Observer, currentViewport);
+            projectionMeasurement?.Dispose();
             if (pin is null || !currentViewport.HasValue) return;
 
             EnsureGeographicGeometry();
@@ -489,11 +674,14 @@ public sealed class NoctaxisMapView : UserControl
                         (path, pen) => DrawPath(context, path, pen, currentViewport.Value));
             }
 
+            if (!ShowObserverPin || Probe?.HideFloatingPin == true) return;
+            using var pinMeasurement = Probe?.MeasurePin();
             using (context.PushTransform(Matrix.CreateTranslation(pin.Value.X, pin.Value.Y)))
             {
                 DrawPinActivity(context);
                 context.DrawGeometry(MarkerFill, MarkerOutline, MarkerGeometry);
             }
+            SyncProbe?.RecordComposition(context, Bounds, currentViewport.Value);
         }
 
         private void EnsureGeographicGeometry()
@@ -525,7 +713,8 @@ public sealed class NoctaxisMapView : UserControl
                     terrain, CameraFramingSettings.DefaultTerrainCastAngularDetailDegrees);
                 var previousRevision = _environmentalCoordinator.Diagnostics.OverlayStateRebuilds;
                 _environmentalState = _environmentalCoordinator.Update(
-                    Observer, _cameraGeometry.Sector, FramingVisibility, profileKey);
+                    Observer, _cameraGeometry.Sector, FramingVisibility, profileKey,
+                    FramingVisibility is null ? TerrainHorizonProfile.Disabled(Observer, terrain.GeneratedAt, 0) : terrain);
 #if DEBUG
                 if (_environmentalCoordinator.Diagnostics.OverlayStateRebuilds != previousRevision)
                     TerrainConeTopologyDiagnostics.Write(_environmentalState);
@@ -600,7 +789,7 @@ public sealed class NoctaxisMapView : UserControl
             var settings = framingSettings.Normalised();
             // The environmental shader owns the complete base/weather/terrain composition when
             // state is available. The geographic fallback fill is used only before that state exists.
-            if (baseFill is not null && _environmentalState is null && settings.ShadingOpacityPercent > 0)
+            if (ShowEnvironmentalShading && baseFill is not null && _environmentalState is null && settings.ShadingOpacityPercent > 0)
             {
                 var geometry = CreateProjectedGeometry(baseFill, currentViewport, close: true);
                 if (geometry is not null)
@@ -611,7 +800,7 @@ public sealed class NoctaxisMapView : UserControl
                         null, geometry);
                 }
             }
-            if (_environmentalState is not null && settings.ShadingOpacityPercent > 0)
+            if (ShowEnvironmentalShading && _environmentalState is not null && settings.ShadingOpacityPercent > 0)
             {
                 var parameters = EnvironmentalRenderParameters.Default with
                 {

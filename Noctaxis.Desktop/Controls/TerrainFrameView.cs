@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 namespace Noctaxis.Desktop.Controls;
 
 /// <summary>Temporary depth preview. All reusable camera-space geometry belongs to CameraTerrainDepth.</summary>
-public sealed class TerrainFrameView : Control
+public sealed class TerrainFrameView : ChromeDrawingControl
 {
     public static ISolidColorBrush NearBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(DepthColour(100));
     public static ISolidColorBrush FarBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(DepthColour(500000));
@@ -23,7 +23,13 @@ public sealed class TerrainFrameView : Control
     public string Status { get => GetValue(StatusProperty); set => SetValue(StatusProperty, value); }
     private CameraTerrainDepth? _source;
     private WriteableBitmap? _bitmap;
-    static TerrainFrameView() => AffectsRender<TerrainFrameView>(DepthProperty, ThresholdProperty, StatusProperty);
+    static TerrainFrameView()
+    {
+        AffectsRender<TerrainFrameView>(DepthProperty, ThresholdProperty, StatusProperty);
+        AffectsMeasure<TerrainFrameView>(DepthProperty, StatusProperty);
+    }
+    protected override Size MeasureOverride(Size availableSize) => new(208,
+        Depth is { Width: > 0 } ? 160 : ChromeText(Status, 196).Height + 24);
 
     public static Color DepthColour(double distance)
     {
@@ -49,7 +55,7 @@ public sealed class TerrainFrameView : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.FillRectangle(SkyBrush, new Rect(Bounds.Size));
+        context.FillRectangle(ChromeBackground, new Rect(Bounds.Size));
         if (!ReferenceEquals(_source, Depth))
         {
             _bitmap?.Dispose(); _bitmap = null; _source = Depth;
@@ -71,8 +77,7 @@ public sealed class TerrainFrameView : Control
         }
         if (_bitmap is null)
         {
-            var text = new FormattedText(Status, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                new Typeface("Inter"), 11, Brushes.LightGray) { MaxTextWidth = Math.Max(1, Bounds.Width - 12) };
+            var text = ChromeText(Status, Bounds.Width - 12);
             context.DrawText(text, new Point(6, 12)); return;
         }
         var frame = FrameRectangle;

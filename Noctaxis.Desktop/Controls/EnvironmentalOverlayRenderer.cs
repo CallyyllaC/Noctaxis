@@ -5,6 +5,8 @@ using Avalonia.Rendering.SceneGraph;
 using Avalonia.Skia;
 using Noctaxis.Core.Domain;
 using SkiaSharp;
+using System.Diagnostics;
+using Noctaxis.Desktop.Diagnostics;
 
 namespace Noctaxis.Desktop.Controls;
 
@@ -52,7 +54,13 @@ public sealed class EnvironmentalOverlayRenderer : IDisposable
         {
             if (_disposed) return;
             _resources ??= new SkiaEnvironmentalOverlayResources(_diagnostics);
-            _resources.Draw(lease.SkCanvas, state, frame, coneColour);
+            Action? synchronize = ViewportRenderProbe.Sink is not null && ViewportRenderProbe.SynchronizeGpu && lease.GrContext is not null
+                ? () => { lease.SkSurface?.Flush(); lease.GrContext.Flush(); lease.GrContext.Submit(true); } : null;
+            var priorStarted = Stopwatch.GetTimestamp();
+            synchronize?.Invoke();
+            var priorMs = synchronize is null ? 0 : Stopwatch.GetElapsedTime(priorStarted).TotalMilliseconds;
+            _resources.Draw(lease.SkCanvas, state, frame, coneColour, lease.GrContext is not null, synchronize, priorMs);
+            if (lease.GrContext is { } gpuContext) ViewportRenderProbe.GpuValidation?.Invoke(gpuContext, state);
         }
     }
 
@@ -143,8 +151,22 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
     private readonly EnvironmentalOverlayResourceCache<ProfileTexture> _profiles = new();
     private bool _disposed;
 
+    private readonly Func<PlanTerrainFan, int, PlanTerrainPatch, double>? _terrainStrength;
+    private PlanTerrainFan? _toneFan;
+    private double[] _terrainTones = [];
+    private PlanTerrainFan? _rasterFan;
+    private TerrainFanRaster? _terrainRaster;
+    internal int TonePreparationCount { get; private set; }
+    internal bool HasPreparedTerrain => _rasterFan is not null;
+
     public SkiaEnvironmentalOverlayResources(EnvironmentalOverlayDiagnostics diagnostics)
+        : this(diagnostics, null) { }
+
+    // Allows deterministic palette comparisons over the very same production mesh.
+    internal SkiaEnvironmentalOverlayResources(EnvironmentalOverlayDiagnostics diagnostics,
+        Func<PlanTerrainFan, int, PlanTerrainPatch, double>? terrainStrength)
     {
+        _terrainStrength = terrainStrength;
         _diagnostics = diagnostics;
         _effect = SKRuntimeEffect.CreateShader(EnvironmentalOverlayShader.Source, out var errors) ??
                   throw new InvalidOperationException($"Environmental overlay shader compilation failed: {errors}");
@@ -153,9 +175,16 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
         _diagnostics.ShaderCompiled();
     }
 
-    public void Draw(SKCanvas canvas, EnvironmentalOverlayState state, EnvironmentalOverlayFrame frame, Color colour)
+    public void Draw(SKCanvas canvas, EnvironmentalOverlayState state, EnvironmentalOverlayFrame frame, Color colour, bool? gpu = null,
+        Action? synchronize = null, double priorGpuMs = 0)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        var probe = ViewportRenderProbe.Sink;
+        var started = probe is null ? 0 : Stopwatch.GetTimestamp();
+        var allocated = probe is null ? 0 : GC.GetAllocatedBytesForCurrentThread();
+        var preparations = TonePreparationCount;
+        _projectionTicks = _fillTicks = 0;
+        _pathBuildTicks = _gpuCompletionTicks = _tonePreparationTicks = 0;
         var profile = _profiles.GetOrCreate(state.TerrainTextureRevision, () =>
         {
             _diagnostics.ProfileUploaded();
@@ -189,18 +218,101 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
         _paint.Shader = shader;
         canvas.DrawRect(0, 0, frame.Width, frame.Height, _paint);
         _paint.Shader = null;
+        synchronize?.Invoke();
+        var baseDone = probe is null ? 0 : Stopwatch.GetTimestamp();
+        if (state.TerrainFan is { } fan) DrawTerrainFan(canvas, fan, frame, parameters, state);
+        else ClearTerrainPreparation();
+        var completionStarted = synchronize is null ? 0 : Stopwatch.GetTimestamp();
+        synchronize?.Invoke();
+        if (synchronize is not null) _gpuCompletionTicks = Stopwatch.GetTimestamp() - completionStarted;
         _diagnostics.Drawn();
+        if (probe is not null) probe(new(gpu, Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(started, baseDone).TotalMilliseconds,
+            Stopwatch.GetElapsedTime(baseDone).TotalMilliseconds,
+            _tonePreparationTicks * 1000d / Stopwatch.Frequency,
+            _projectionTicks * 1000d / Stopwatch.Frequency, _pathBuildTicks * 1000d / Stopwatch.Frequency,
+            _fillTicks * 1000d / Stopwatch.Frequency, _gpuCompletionTicks * 1000d / Stopwatch.Frequency,
+            GC.GetAllocatedBytesForCurrentThread() - allocated, state.TerrainFan?.Patches.Length ?? 0,
+            TonePreparationCount - preparations) { PriorGpuMs = priorGpuMs });
+    }
+
+    private long _projectionTicks, _pathBuildTicks, _fillTicks, _gpuCompletionTicks, _tonePreparationTicks;
+
+    private void DrawTerrainFan(SKCanvas canvas, PlanTerrainFan fan,
+        EnvironmentalOverlayFrame frame, EnvironmentalRenderParameters parameters, EnvironmentalOverlayState state)
+    {
+        using var restore = new SKAutoCanvasRestore(canvas);
+        canvas.ClipRect(new SKRect(0, 0, frame.Width, frame.Height));
+        using var paint = new SKPaint { Color = SKColors.White, IsAntialias = false, Style = SKPaintStyle.Fill };
+        void Fill(IReadOnlyList<GeoCoordinate> coordinates, SKColor colour)
+        {
+            if (coordinates.Count < 3) return;
+            var measure = ViewportRenderProbe.Sink is not null;
+            var started = measure ? Stopwatch.GetTimestamp() : 0;
+            long projectionTicks = 0;
+            using var path = new SKPath();
+            for (var index = 0; index < coordinates.Count; index++)
+            {
+                var projectionStarted = measure ? Stopwatch.GetTimestamp() : 0;
+                var p = EnvironmentalOverlayMath.GeographicToScreen(frame, coordinates[index]);
+                if (measure) projectionTicks += Stopwatch.GetTimestamp() - projectionStarted;
+                if (!double.IsFinite(p.X) || !double.IsFinite(p.Y)) return;
+                if (index == 0) path.MoveTo((float)p.X, (float)p.Y); else path.LineTo((float)p.X, (float)p.Y);
+            }
+            path.Close(); paint.Color = colour;
+            var projected = measure ? Stopwatch.GetTimestamp() : 0;
+            if (measure) { _projectionTicks += projectionTicks; _pathBuildTicks += projected - started - projectionTicks; }
+            canvas.DrawPath(path, paint);
+            if (measure) { _fillTicks += Stopwatch.GetTimestamp() - projected; }
+        }
+        if (fan.GroundFacing)
+        {
+            ClearTerrainPreparation();
+            Fill(fan.GroundOutline, new SKColor(153, 105, 53, 75));
+            return;
+        }
+        if (_terrainStrength is null && !ReferenceEquals(_toneFan, fan))
+        {
+            var toneStarted = Stopwatch.GetTimestamp();
+            _terrainTones = TerrainFanLocalContrast.Prepare(fan, out _);
+            if (ViewportRenderProbe.Sink is not null) _tonePreparationTicks = Stopwatch.GetTimestamp() - toneStarted;
+            _toneFan = fan;
+            TonePreparationCount++;
+        }
+        if (!ReferenceEquals(_rasterFan, fan))
+        {
+            var started = Stopwatch.GetTimestamp();
+            var tones = _terrainStrength is null ? _terrainTones : fan.Patches.Select((p, i) => _terrainStrength(fan, i, p)).ToArray();
+            var replacement = new TerrainFanRaster(fan, tones);
+            _terrainRaster?.Dispose();
+            _terrainRaster = replacement;
+            _rasterFan = fan;
+            if (ViewportRenderProbe.Sink is not null) _pathBuildTicks += Stopwatch.GetTimestamp() - started;
+        }
+        var fillStarted = Stopwatch.GetTimestamp();
+        _terrainRaster!.Draw(canvas, frame, state.Observer, state.CentreBearingDegrees, state.HorizontalFovDegrees, state.MaximumDistanceMetres);
+        if (ViewportRenderProbe.Sink is not null) _fillTicks += Stopwatch.GetTimestamp() - fillStarted;
     }
 
     public void Dispose()
     {
         if (_disposed) return;
         _disposed = true;
+        ClearTerrainPreparation();
         _profiles.Dispose();
         _paint.Dispose();
         _children.Dispose();
         _uniforms.Dispose();
         _effect.Dispose();
+    }
+
+    private void ClearTerrainPreparation()
+    {
+        _toneFan = null;
+        _terrainTones = [];
+        _rasterFan = null;
+        _terrainRaster?.Dispose();
+        _terrainRaster = null;
     }
 
     private static SKColorF ToColor(Color colour) => new(

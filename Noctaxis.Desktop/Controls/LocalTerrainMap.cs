@@ -12,7 +12,7 @@ using Noctaxis.Core.Terrain;
 namespace Noctaxis.Desktop.Controls;
 
 /// <summary>Informational north-up terrain minimap using an immutable production surface grid.</summary>
-public sealed class LocalTerrainMap : Control
+public sealed class LocalTerrainMap : ChromeDrawingControl
 {
     private const double GlobalReliefSpanFloorMetres = 20;
     private const double MinimumLocalSpanMetres = 6;
@@ -64,6 +64,22 @@ public sealed class LocalTerrainMap : Control
     internal double EffectiveLocalContrastGain => _contrastAnalysis.EffectiveGain;
     internal double EffectiveLocalContrastBlend => _contrastAnalysis.EffectiveBlend;
 
+    public static readonly StyledProperty<bool> ExternalChromeProperty = AvaloniaProperty.Register<LocalTerrainMap, bool>(nameof(ExternalChrome));
+    public bool ExternalChrome { get => GetValue(ExternalChromeProperty); set => SetValue(ExternalChromeProperty, value); }
+    private string StatusLabel => LoadState switch
+    {
+        TerrainDebugMapLoadState.Disabled => "Terrain calculations disabled",
+        TerrainDebugMapLoadState.Resolving => "Resolving terrain…",
+        _ => "Terrain unavailable"
+    };
+    protected override Size MeasureOverride(Size availableSize) => new(208, !ExternalChrome ? 208 :
+        LoadState == TerrainDebugMapLoadState.Ready && Map is not null
+            ? 208 + ChromeFontSize * 3 + 30
+            : ChromeText(StatusLabel, 194).Height + 24);
+    internal Rect RasterBounds => ExternalChrome
+        ? new Rect(0, ChromeFontSize + 10, Bounds.Width, Math.Min(208, Math.Max(0, Bounds.Height - ChromeFontSize * 3 - 30)))
+        : new Rect(Bounds.Size);
+
     public LocalTerrainMap()
     {
         DetachedFromVisualTree += (_, _) =>
@@ -91,9 +107,13 @@ public sealed class LocalTerrainMap : Control
     public static readonly StyledProperty<double> HorizontalFieldOfViewDegreesProperty =
         AvaloniaProperty.Register<LocalTerrainMap, double>(nameof(HorizontalFieldOfViewDegrees), 60);
 
-    static LocalTerrainMap() => AffectsRender<LocalTerrainMap>(MapProperty, ProfileProperty,
+    static LocalTerrainMap()
+    {
+        AffectsMeasure<LocalTerrainMap>(ExternalChromeProperty, LoadStateProperty, MapProperty);
+        AffectsRender<LocalTerrainMap>(ExternalChromeProperty, MapProperty, ProfileProperty,
         ObserverProperty, GenerationProperty, LoadStateProperty, CentreBearingDegreesProperty,
         HorizontalFieldOfViewDegreesProperty, MetresPerPixelProperty, MainViewportHeightPixelsProperty, ContextMultiplierProperty);
+    }
 
     public TerrainDebugMapSnapshot? Map
     {
@@ -140,18 +160,13 @@ public sealed class LocalTerrainMap : Control
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        var bounds = new Rect(Bounds.Size);
-        context.FillRectangle(new SolidColorBrush(Color.Parse("#0A1018")), bounds);
-        if (bounds.Width < 40 || bounds.Height < 40) return;
+        var bounds = RasterBounds;
+        context.FillRectangle(ChromeBackground, new Rect(Bounds.Size));
+        if (Bounds.Width < 20 || Bounds.Height < 20) return;
         var map = LoadState == TerrainDebugMapLoadState.Ready ? Map : null;
         if (map is null)
         {
-            DrawLabel(context, LoadState switch
-            {
-                TerrainDebugMapLoadState.Disabled => "Terrain calculations disabled",
-                TerrainDebugMapLoadState.Resolving => "Resolving terrain…",
-                _ => "Terrain unavailable"
-            }, new Point(7, bounds.Height / 2), Color.Parse("#91A4B8"));
+            context.DrawText(ChromeText(StatusLabel, Bounds.Width - 14), new Point(7, 12));
             return;
         }
 
@@ -162,11 +177,12 @@ public sealed class LocalTerrainMap : Control
         var centre = bounds.Center;
         context.DrawEllipse(new SolidColorBrush(Color.Parse("#FFF2A8")), new Pen(Brushes.Black, 1),
             centre, 3.5, 3.5);
-        DrawLabel(context, "N ↑", new Point(bounds.Width - 26, 6), Color.Parse("#E4ECF5"));
+        var north = ChromeText("N ↑");
+        DrawLabel(context, "N ↑", new Point(bounds.Width - north.Width - 3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
         DrawScale(context, bounds, DisplayedRadiusMetres);
         DrawLabel(context, DisplayedRadiusMetres >= 1000
                 ? $"{DisplayedRadiusMetres / 1_000:0.##} km radius" : $"{DisplayedRadiusMetres:0.#} m radius",
-            new Point(7, 6), Color.Parse("#E4ECF5"));
+            new Point(3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
     }
 
     private void DrawTerrain(DrawingContext context, Rect bounds, TerrainDebugMapSnapshot map)
@@ -370,18 +386,19 @@ public sealed class LocalTerrainMap : Control
             bounds.Center.Y - local.NorthMetres / map.RangeMetres * bounds.Height / 2);
     }
 
-    private static void DrawScale(DrawingContext context, Rect bounds, double rangeMetres)
+    private void DrawScale(DrawingContext context, Rect bounds, double rangeMetres)
     {
         var scaleMetres = ScaleDistance(rangeMetres);
         var width = scaleMetres / (rangeMetres * 2) * bounds.Width;
-        var y = bounds.Height - 26;
+        var y = ExternalChrome ? bounds.Bottom + 8 : bounds.Height - 26;
         var x = bounds.Width - width - 10;
-        var pen = new Pen(Brushes.White, 1.5);
+        var pen = new Pen(ExternalChrome ? ChromeForeground : Brushes.White, 1.5);
         context.DrawLine(pen, new Point(x, y), new Point(x + width, y));
         context.DrawLine(pen, new Point(x, y - 3), new Point(x, y + 3));
         context.DrawLine(pen, new Point(x + width, y - 3), new Point(x + width, y + 3));
-        DrawLabel(context, scaleMetres >= 1000 ? $"{scaleMetres / 1_000:0.#} km" : $"{scaleMetres:0.#} m",
-            new Point(x, y - 14), Colors.White);
+        var label = scaleMetres >= 1000 ? $"{scaleMetres / 1_000:0.#} km" : $"{scaleMetres:0.#} m";
+        DrawLabel(context, label, new Point(Math.Min(x, Bounds.Width - ChromeText(label).Width),
+            ExternalChrome ? y + 5 : y - ChromeFontSize - 4), ExternalChrome ? ChromeForeground : Brushes.White);
     }
 
     private static double ScaleDistance(double radius)
@@ -405,10 +422,10 @@ public sealed class LocalTerrainMap : Control
         return Color.FromRgb(shade, shade, shade);
     }
 
-    private static void DrawLabel(DrawingContext context, string label, Point point, Color colour)
+    private void DrawLabel(DrawingContext context, string label, Point point, IBrush brush)
     {
         var text = new FormattedText(label, System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, Typeface.Default, 9, new SolidColorBrush(colour));
+            FlowDirection.LeftToRight, Typeface.Default, ChromeFontSize, brush);
         context.DrawText(text, point);
     }
 }
