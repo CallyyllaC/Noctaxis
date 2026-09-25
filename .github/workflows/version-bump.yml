@@ -1,0 +1,62 @@
+name: Version bump (dev into main)
+
+# Increments Y of the repository X.Y (Directory.Build.props) exactly once when a pull request from
+# dev is merged into main, then applies the same X.Y to dev. This is version bookkeeping only:
+# it never tags, creates releases, or builds/publishes anything.
+#
+# Loop safety: commits pushed with GITHUB_TOKEN do not trigger workflows, and this workflow only
+# reacts to a merged pull request, which its own pushes never create.
+# Idempotency: the main commit carries "Noctaxis-Version-Bump-PR: <n>"; a re-run for the same
+# pull request finds it and does not increment again.
+# Concurrency: one repository-wide group, so bumps for different merges never mutate main/dev at
+# the same time. Pushes are never forced; a push rejected because the branch moved is retried on
+# the new tip, and a push rejected for any other reason (e.g. branch protection) fails the job.
+# Verification: bump commits pushed with GITHUB_TOKEN get no CI run, so each version commit is
+# checked with MSBuild (evaluation only, resolving to X.Y.0) before it is pushed.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: noctaxis-version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.ref == 'dev' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      # Only for the pre-push MSBuild version evaluation; nothing is restored, built or tested.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Increment Y on main and apply it to dev
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The script switches branches, so run copies from outside the working tree.
+          cp scripts/version-bump-after-merge.sh scripts/noctaxis_version.py \
+            scripts/verify-msbuild-version.sh "$RUNNER_TEMP/"
+          chmod +x "$RUNNER_TEMP/verify-msbuild-version.sh"
+          VERSION_TOOL="$RUNNER_TEMP/noctaxis_version.py" \
+          VERIFY_VERSION="$RUNNER_TEMP/verify-msbuild-version.sh" \
+            bash "$RUNNER_TEMP/version-bump-after-merge.sh"

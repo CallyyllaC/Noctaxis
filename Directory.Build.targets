@@ -14,4 +14,15 @@
   <Target Name="NoctaxisDisableAvaloniaBuildTelemetry" BeforeTargets="AvaloniaStats">
     <NoctaxisSetAvaloniaTelemetryOptOut />
   </Target>
+
+  <!-- Guards the X.Y.Z scheme declared in Directory.Build.props. Z is capped at 65534 because
+       every component of an assembly/file version must be at most 65534. -->
+  <Target Name="NoctaxisValidateVersion" BeforeTargets="PrepareForBuild">
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NoctaxisVersion)', '^(0|[1-9][0-9]{0,4})\.(0|[1-9][0-9]{0,4})$'))"
+           Text="NoctaxisVersion must be X.Y using non-negative integers without leading zeros (found '$(NoctaxisVersion)')." />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(NoctaxisBuildNumber)', '^(0|[1-9][0-9]{0,4})$'))"
+           Text="NoctaxisBuildNumber must be a non-negative integer without leading zeros (found '$(NoctaxisBuildNumber)')." />
+    <Error Condition="$(NoctaxisBuildNumber) &gt; 65534"
+           Text="NoctaxisBuildNumber $(NoctaxisBuildNumber) exceeds 65534, the largest assembly version component." />
+  </Target>
 </Project>

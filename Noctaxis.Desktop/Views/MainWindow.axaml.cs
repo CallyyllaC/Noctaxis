@@ -51,8 +51,19 @@ public partial class MainWindow : Window
         _viewModel.CancelEnvironmentalInstall();
         try
         {
-            await PlannerMap.Layers.CommitSafelyAsync();
+            // The application lifetime does not await Exit handlers, so the final save must
+            // complete here while the window is still held open. FlushAsync completes any pending
+            // debounced save and writes the newest state; it writes nothing if startup never
+            // finished loading, so a failed start cannot overwrite the saved file. An expected
+            // filesystem failure is logged by the save pipeline and does not prevent closing.
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo? persistFailure = null;
+            try { await PlannerMap.Layers.CommitSafelyAsync(); }
+            catch (Exception ex) { persistFailure = System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
+            try { await _viewModel.FlushAsync(); }
+            catch (Exception ex) { persistFailure ??= System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex); }
+            // Native render resources and the local reader gate are released even if saving failed.
             await PlannerMap.ReleaseLightPollutionAsync();
+            persistFailure?.Throw();
             _closeCleanup.TrySetResult();
         }
         catch (Exception ex)

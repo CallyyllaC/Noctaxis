@@ -658,7 +658,7 @@ public sealed partial class MainViewModelTests
         Assert.Equal("openngc:NGC0224", viewModel.Session.TargetId);
         var moon = viewModel.CelestialObjects.Single(item => item.TargetId == "moon");
         moon.IsVisible = false;
-        await viewModel.PersistAsync(CancellationToken.None);
+        await viewModel.FlushAsync();
         Assert.False(store.State.Session.EffectiveVisibleObjects.Single(item => item.TargetId == "moon").IsVisible);
         Assert.False(store.State.Settings.EffectiveCelestialObjects.EffectiveConfiguredObjects.Single(item => item.TargetId == "moon").IsVisible);
         Assert.Equal("openngc:NGC0224", store.State.Settings.EffectiveCelestialObjects.DefaultPrimaryTargetId);
@@ -1707,7 +1707,8 @@ public sealed partial class MainViewModelTests
         IClock? clock = null, IFramingVisibilityCalculator? framingVisibility = null,
         IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
         IExternalUriLauncher? externalUriLauncher = null,
-        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null)
+        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null,
+        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null)
     {
         var locationSearch = new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance);
         var resolver = new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance);
@@ -1720,7 +1721,9 @@ public sealed partial class MainViewModelTests
             new LocalTargetSearchService(catalogue), dialogs ?? new FakeDialogs(),
             reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDebugMaps, terrainDiskCache,
             supporterLicenceVerifier: supporterLicenceVerifier, externalUriLauncher: externalUriLauncher,
-            lightPollutionInstallation: lightPollutionInstallation);
+            lightPollutionInstallation: lightPollutionInstallation,
+            // No debounce by default, so tests observe saves as soon as the triggering change completes.
+            persistenceDelay: persistenceDelay ?? ((_, _) => Task.CompletedTask));
     }
 
     private sealed class FakeLocationSearchProvider : ILocationSearchProvider

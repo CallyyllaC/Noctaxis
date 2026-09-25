@@ -43,12 +43,11 @@ public partial class App : Application
             viewModel.AttachThemeService(Themes!);
             var dialogs = _services.GetRequiredService<DesktopDialogService>();
             desktop.MainWindow = new MainWindow(viewModel, dialogs);
-            desktop.Exit += async (_, _) =>
-            {
-                await viewModel.PersistAsync(CancellationToken.None);
-                Themes?.Dispose();
-            };
-            _ = viewModel.InitializeAsync();
+            // Final state is saved by MainWindow.OnClosing, which holds the window open until the
+            // save completes. The lifetime does not await Exit handlers, so nothing asynchronous
+            // may be started here.
+            desktop.Exit += (_, _) => Themes?.Dispose();
+            _ = viewModel.StartAsync();
         }
         base.OnFrameworkInitializationCompleted();
     }
@@ -56,7 +55,21 @@ public partial class App : Application
     internal static ServiceProvider ConfigureServices(Action<IServiceCollection>? configureForTest = null)
     {
         var services = new ServiceCollection();
-        services.AddLogging(builder => builder.AddConsole().SetMinimumLevel(LogLevel.Information));
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole().SetMinimumLevel(LogLevel.Information);
+            if (Program.FileLogging is { } file)
+            {
+                // Owned and disposed by Program. The file keeps warnings for noisy or location-revealing
+                // categories only: HTTP request URIs and terrain/environment Information messages
+                // contain precise coordinates and per-tile chatter.
+                builder.AddProvider(file);
+                builder.AddFilter<Diagnostics.RollingFileLoggerProvider>("System.Net.Http", LogLevel.Warning);
+                builder.AddFilter<Diagnostics.RollingFileLoggerProvider>("Microsoft", LogLevel.Warning);
+                builder.AddFilter<Diagnostics.RollingFileLoggerProvider>("Noctaxis.Core.Environment", LogLevel.Warning);
+                builder.AddFilter<Diagnostics.RollingFileLoggerProvider>("Noctaxis.Core.Terrain", LogLevel.Warning);
+            }
+        });
         services.AddSingleton<ITimeZoneResolver, TimeZoneResolver>();
         services.AddSingleton<IClock>(SystemClock.Instance);
         services.AddSingleton<ITargetCatalogue, OpenNgcTargetCatalogue>();

@@ -35,7 +35,14 @@ public partial class MainViewModel
         Settings = Settings with { LightPollution = next };
         OnPropertyChanged(nameof(LightPollutionMapPreferences));
     }
-    public Task CommitPlannerLayersAsync() => PersistAsync(CancellationToken.None);
+    /// <summary>
+    /// Persists layer preferences now. Throws <see cref="IOException"/> when they could not be saved
+    /// (already logged and shown), so the Layers panel keeps them marked unsaved and shows its inline error.
+    /// </summary>
+    public async Task CommitPlannerLayersAsync()
+    {
+        if (!await FlushAsync()) throw new IOException("Layer preferences could not be saved.");
+    }
     private async Task DetectLightPollutionAsync()
     {
         if (LightPollutionInstallation is null) return;

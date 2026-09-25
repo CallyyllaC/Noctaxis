@@ -6,4 +6,20 @@
     <LangVersion>14.0</LangVersion>
     <Deterministic>true</Deterministic>
   </PropertyGroup>
+
+  <!--
+    Noctaxis version X.Y.Z for every project in the repository.
+      X.Y  NoctaxisVersion (below) is the only repository-controlled source of truth.
+           X is changed by hand only. Y is incremented automatically, once, when dev is merged
+           into main (.github/workflows/version-bump.yml via scripts/noctaxis_version.py), which
+           rewrites the NoctaxisVersion element text and nothing else in this file.
+      Z    NoctaxisBuildNumber, supplied by CI (the NoctaxisBuildNumber environment variable or
+           -p:NoctaxisBuildNumber=N). Local builds fall back to 0.
+    Directory.Build.targets rejects malformed values.
+  -->
+  <PropertyGroup>
+    <NoctaxisVersion>0.1</NoctaxisVersion>
+    <NoctaxisBuildNumber Condition="'$(NoctaxisBuildNumber)' == ''">0</NoctaxisBuildNumber>
+    <VersionPrefix>$(NoctaxisVersion).$(NoctaxisBuildNumber)</VersionPrefix>
+  </PropertyGroup>
 </Project>

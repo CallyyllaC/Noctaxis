@@ -216,6 +216,31 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         Assert.NotEmpty(Directory.GetFiles(_directory, "state.json.corrupt-*"));
     }
 
+    [Theory]
+    [InlineData("Session")]
+    [InlineData("Lens")]
+    public async Task IncompletePersistence_IsQuarantinedAndDefaultsRecover(string missingMember)
+    {
+        var now = Instant.FromUtc(2024, 1, 1, 0, 0);
+        var store = CreateStore(now);
+        var location = new SavedLocation(Guid.NewGuid(), "Ridge", new GeoCoordinate(51, -1), "UTC");
+        await store.SaveAsync(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        var path = Path.Combine(_directory, "state.json");
+        var document = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!.AsObject();
+        if (missingMember == "Session") document.Remove("Session");
+        else document["Session"]!.AsObject().Remove("Lens");
+        await File.WriteAllTextAsync(path, document.ToJsonString());
+
+        var loaded = await CreateStore(now).LoadAsync(CancellationToken.None);
+
+        Assert.Empty(loaded.Locations);
+        Assert.Equal(now, loaded.Session.Instant);
+        Assert.NotNull(loaded.Session.Lens);
+        Assert.False(File.Exists(path));
+        Assert.NotEmpty(Directory.GetFiles(_directory, "state.json.corrupt-*"));
+    }
+
     [Fact]
     public void LegacyRemovedMapAndMeteosourceSettings_AreIgnored()
     {

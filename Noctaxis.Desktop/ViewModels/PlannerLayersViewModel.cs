@@ -20,7 +20,9 @@ public sealed class PlannerLayersViewModel : ObservableObject
     public async Task CommitSafelyAsync()
     {
         try { await CommitAsync(); _persistenceError = null; }
-        catch (Exception) { _persistenceError = "Layer preferences could not be saved. Reopen Layers and try again."; }
+        // Only expected save failures are recoverable here; anything else is a defect and must surface.
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { _persistenceError = "Layer preferences could not be saved. Reopen Layers and try again."; }
         OnPropertyChanged(nameof(PersistenceError));
         OnPropertyChanged(nameof(HasPersistenceError));
     }

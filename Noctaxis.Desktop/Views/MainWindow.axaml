@@ -51,7 +51,7 @@
       <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
     </Style>
   </Window.Styles>
-  <Grid RowDefinitions="44,*">
+  <Grid RowDefinitions="44,Auto,*">
     <Border Grid.Row="0"
             Background="{DynamicResource SurfaceBackground}"
             BorderBrush="{DynamicResource SurfaceBorder}"
@@ -90,7 +90,7 @@
       </Grid>
     </Border>
 
-    <TabControl Grid.Row="1" Padding="0" SelectedIndex="{Binding SelectedPageIndex}" TabStripPlacement="Top">
+    <TabControl Grid.Row="2" Padding="0" SelectedIndex="{Binding SelectedPageIndex}" TabStripPlacement="Top">
     <TabItem Header="Locations">
       <views:LocationsPage/>
     </TabItem>
@@ -619,5 +619,25 @@
       </Grid>
     </TabItem>
     </TabControl>
+
+    <!-- Declared after the TabControl so existing visual-tree indices are unchanged. -->
+    <StackPanel Grid.Row="1">
+      <Border x:Name="StartupErrorBanner" IsVisible="{Binding HasStartupError}"
+              Background="{DynamicResource ErrorBackground}" BorderBrush="{DynamicResource SurfaceBorder}"
+              BorderThickness="0,0,0,1" Padding="14,10">
+        <TextBlock Text="{Binding StartupError}" Foreground="{DynamicResource Error}" TextWrapping="Wrap"/>
+      </Border>
+      <!-- Recoverable, non-fatal problems (e.g. state could not be saved): a dismissible warning. -->
+      <Border x:Name="OperationalNoticeBar" IsVisible="{Binding HasOperationalNotice}"
+              Background="{DynamicResource WarningBackground}" BorderBrush="{DynamicResource SurfaceBorder}"
+              BorderThickness="0,0,0,1" Padding="14,6">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+          <TextBlock Text="{Binding OperationalNotice}" Foreground="{DynamicResource Warning}"
+                     TextWrapping="Wrap" VerticalAlignment="Center"/>
+          <Button Grid.Column="1" Classes="secondaryAction" Content="Dismiss"
+                  Command="{Binding DismissOperationalNoticeCommand}" VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+    </StackPanel>
   </Grid>
 </Window>

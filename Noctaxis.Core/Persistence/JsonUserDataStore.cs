@@ -67,7 +67,10 @@ public sealed class JsonUserDataStore : IUserDataStore
             var dto = await JsonSerializer.DeserializeAsync<PersistedStateDto>(stream, _options, cancellationToken).ConfigureAwait(false);
             return dto?.ToDomain() ?? fallback;
         }
-        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or ArgumentException)
+        // Recoverable persisted-data failures only: malformed or incomplete state is quarantined and
+        // defaults are used. Anything else is a programming failure and must reach the caller.
+        catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException or
+                                       ArgumentException or InvalidDataException)
         {
             _logger.LogWarning(ex, "Could not read Noctaxis state from {Path}; defaults will be used", _filePath);
             TryQuarantineCorruptFile();
@@ -107,6 +110,11 @@ public sealed class JsonUserDataStore : IUserDataStore
     {
         public PersistedState ToDomain()
         {
+            // Required members may be absent from syntactically valid JSON (hand edits, older or
+            // partial files). Treat that as corrupt state rather than dereferencing null below.
+            if (Session is null) throw new InvalidDataException("Persisted state has no planning session.");
+            if (Session.Lens is null)
+                throw new InvalidDataException("Persisted planning session has no lens configuration.");
             var resolver = new TimeZoneResolver();
             var settings = Settings ?? new();
             if (settings.SelectedTimeZoneId == AppSettings.UseSystemTimeZoneId &&

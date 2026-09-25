@@ -1,0 +1,110 @@
+name: CI
+
+# Validation only: build, test and version/build metadata. Nothing here tags, releases or
+# publishes artifacts beyond test results.
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version-scheme:
+    name: Version scheme logic
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test X.Y parsing and increment
+        run: python3 -m unittest discover -s scripts -p "test_*.py" -v
+
+  build-and-test:
+    name: Build and test (${{ matrix.os }})
+    strategy:
+      # Report every platform independently; a Linux-only failure must stay visible.
+      fail-fast: false
+      matrix:
+        # Windows x64 is the primary build (native OpenCV runtime). Linux exercises the
+        # managed image fallback and the headless Avalonia/Skia test host.
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      # Directory.Build.targets also sets this for Avalonia's build task.
+      AVALONIA_TELEMETRY_OPTOUT: 1
+      # Z of X.Y.Z (see Directory.Build.props). MSBuild reads environment variables as
+      # properties, so restore, build and the version check below all see the same value.
+      # run_number increases for every run of this workflow and is kept on re-runs.
+      NoctaxisBuildNumber: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Noctaxis.slnx
+
+      - name: Resolve and verify version
+        shell: bash
+        run: |
+          set -euo pipefail
+          project=Noctaxis.Core/Noctaxis.Core.csproj
+          xy=$(dotnet msbuild "$project" -getProperty:NoctaxisVersion | tr -d '\r')
+          local_version=$(env -u NoctaxisBuildNumber dotnet msbuild "$project" -getProperty:Version | tr -d '\r')
+          ci_version=$(dotnet msbuild "$project" -getProperty:Version | tr -d '\r')
+          if [ "$local_version" != "$xy.0" ]; then
+            echo "::error::Local fallback version is '$local_version', expected '$xy.0'."; exit 1
+          fi
+          if [ "$ci_version" != "$xy.$NoctaxisBuildNumber" ]; then
+            echo "::error::CI version is '$ci_version', expected '$xy.$NoctaxisBuildNumber'."; exit 1
+          fi
+          echo "NOCTAXIS_EXPECTED_VERSION=$ci_version" >> "$GITHUB_ENV"
+          echo "Noctaxis version: \`$ci_version\` (${{ matrix.os }})" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Build
+        id: build
+        run: dotnet build Noctaxis.slnx --configuration Release --no-restore
+
+      # Tests run with --no-build against the assemblies built above, and VersionMetadataTests
+      # checks them against NOCTAXIS_EXPECTED_VERSION.
+      # Network-backed tests are opt-in through NOCTAXIS_RUN_* variables and skip by default.
+      # The LiveTerrain category is excluded explicitly as well so CI never depends on
+      # third-party tile services.
+      - name: Test Noctaxis.Core.Tests
+        run: >-
+          dotnet test Noctaxis.Core.Tests/Noctaxis.Core.Tests.csproj
+          --configuration Release --no-build
+          --filter "Category!=LiveTerrain"
+          --logger "trx;LogFileName=core-tests.trx"
+          --results-directory TestResults
+
+      - name: Test Noctaxis.Desktop.Tests
+        # Run even when Core tests fail, but only against a successful build.
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: >-
+          dotnet test Noctaxis.Desktop.Tests/Noctaxis.Desktop.Tests.csproj
+          --configuration Release --no-build
+          --filter "Category!=LiveTerrain"
+          --logger "trx;LogFileName=desktop-tests.trx"
+          --results-directory TestResults
+
+      - name: Upload test results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults/**/*.trx
+          if-no-files-found: warn

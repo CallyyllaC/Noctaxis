@@ -91,30 +91,8 @@ public partial class MainViewModel
         { _logger.LogWarning(ex, "Could not capture terrain profile validity"); }
     }
 
-    private bool _cameraSavePending;
-    private bool _cameraSaveRunning;
-    private Task _cameraSaveTask = Task.CompletedTask;
-    internal Task WaitForCameraFramingPersistenceAsync() => _cameraSaveTask;
+    internal Task WaitForCameraFramingPersistenceAsync() => WaitForPendingSavesAsync();
 
-    private void QueueCameraFramingSave()
-    {
-        _cameraSavePending = true;
-        if (!_cameraSaveRunning) _cameraSaveTask = SaveLatestCameraFramingAsync();
-    }
-
-    private async Task SaveLatestCameraFramingAsync()
-    {
-        _cameraSaveRunning = true;
-        try
-        {
-            while (_cameraSavePending)
-            {
-                _cameraSavePending = false;
-                await PersistAsync(CancellationToken.None);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { _logger.LogWarning(ex, "Could not persist camera framing"); }
-        finally { _cameraSaveRunning = false; }
-    }
+    // Slider drags change these many times a second; the save pipeline debounces and coalesces them.
+    private void QueueCameraFramingSave() => RequestSave();
 }

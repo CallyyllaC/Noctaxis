@@ -17,6 +17,8 @@ using Noctaxis.Core.Locations;
 using Noctaxis.Core.Environment;
 using System.Diagnostics;
 using System.Collections.Specialized;
+using System.Runtime.ExceptionServices;
+using Avalonia.Threading;
 using Noctaxis.Core.Measurements;
 using Noctaxis.Desktop.Services;
 using Noctaxis.Core.Supporter;
@@ -60,6 +62,10 @@ public partial class MainViewModel : ObservableObject
     private DateTimeOffset _dateSliderAnchor;
     private readonly Instant _startupInstant;
     private long _settingsApplyGeneration;
+    private readonly StateSaveScheduler _stateSaves;
+    // One slot per source, so clearing one source's notice cannot discard another's.
+    private string? _saveFailureNotice;
+    private string? _environmentNotice;
 
     public MainViewModel(IPlanningService planning, ITargetCatalogue catalogue, ITimeZoneResolver timeZones,
         IUserDataStore store, IScoutingCardExporter exporter,
@@ -76,7 +82,8 @@ public partial class MainViewModel : ObservableObject
         IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
         IExternalUriLauncher? externalUriLauncher = null,
         ExternalMapService? externalMaps = null,
-        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null)
+        Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null,
+        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null)
     {
         _planning = planning;
         _catalogue = catalogue;
@@ -98,6 +105,14 @@ public partial class MainViewModel : ObservableObject
         _terrainDebugMaps = terrainDebugMaps;
         _terrainDiagnostics = terrainDiagnostics as HorizonService;
         _terrainDiskCache = terrainDiskCache;
+        _stateSaves = new StateSaveScheduler(store.SaveAsync, logger, delay: persistenceDelay)
+        {
+            // A non-filesystem failure in a debounced save is a programming error with no awaiting
+            // caller; rethrowing it on the UI thread makes it fatal (and logged) instead of lost.
+            UnexpectedBackgroundFailure = exception =>
+                Dispatcher.UIThread.Post(() => ExceptionDispatchInfo.Throw(exception))
+        };
+        _stateSaves.Completed += OnStateSaveCompleted;
         if (_terrainDiskCache is not null) _terrainDiskCache.Changed += QueueTerrainCacheUsage;
         _startupInstant = PlannerStartupTime.RoundedLocalHour(clock, timeZones);
         _session = PlanningSession.Default(_startupInstant, timeZones.MachineTimeZoneId);
@@ -197,6 +212,14 @@ public partial class MainViewModel : ObservableObject
     public int VisibleCelestialCount => CelestialObjects.Count(item => item.IsVisible);
     public string VisibleCelestialCountText => $"Visible objects: {VisibleCelestialCount} / {CelestialVisibilityPolicy.MaximumVisibleObjects}";
     [ObservableProperty] private string _statusMessage = "Starting Noctaxis…";
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasStartupError))] private string? _startupError;
+    public bool HasStartupError => StartupError is not null;
+    /// <summary>
+    /// A recoverable operational problem (e.g. the state file could not be saved), shown as a
+    /// dismissible, non-modal warning. Distinct from <see cref="StartupError"/>, which is fatal to the Planner.
+    /// </summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasOperationalNotice))] private string? _operationalNotice;
+    public bool HasOperationalNotice => OperationalNotice is not null;
 
     public bool IsPlannerRefreshing => PlannerRefresh.IsRefreshing;
     public double PlannerRefreshProgress => PlannerRefresh.Progress;
@@ -470,6 +493,25 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Application entry point for <see cref="InitializeAsync"/>. Expected persisted-data and cache
+    /// failures are recovered inside initialisation; anything reaching here is unexpected, so it is
+    /// logged and shown, and the Planner is left inactive rather than continuing on partial state.
+    /// </summary>
+    public async Task StartAsync()
+    {
+        try
+        {
+            await InitializeAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex, "Noctaxis initialisation failed; the Planner was not activated");
+            StartupError = $"Noctaxis could not start: {ex.Message}";
+            StatusMessage = StartupError;
+        }
+    }
+
     public async Task InitializeAsync()
     {
         var persisted = await _store.LoadAsync(CancellationToken.None);
@@ -488,9 +530,20 @@ public partial class MainViewModel : ObservableObject
         foreach (var location in persisted.Locations) SavedLocations.Add(location);
         if (_terrainDiskCache is not null && Settings.EnableTerrainCalculations)
         {
-            await _terrainDiskCache.ConfigureAsync(Settings.EffectiveTerrainCacheLimitBytes,
-                SavedLocations.Select(location => location.Coordinate));
-            UpdateTerrainCacheUsage();
+            try
+            {
+                await _terrainDiskCache.ConfigureAsync(Settings.EffectiveTerrainCacheLimitBytes,
+                    SavedLocations.Select(location => location.Coordinate));
+                UpdateTerrainCacheUsage();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // The on-disk cache is an optimisation; an unreadable cache directory must not
+                // prevent the rest of the application from starting.
+                _logger.LogWarning(ex, "Terrain cache could not be reconciled at startup");
+                TerrainCacheStatus = $"Terrain cache could not be read: {ex.Message}";
+                ShowOperationalNotice(TerrainCacheStatus);
+            }
         }
         _lastCustomCoordinate = persisted.LastCustomCoordinate;
         var configuredZone = _timeZones.GetEffectiveId(Settings.SelectedTimeZoneId);
@@ -511,6 +564,9 @@ public partial class MainViewModel : ObservableObject
         PreviewMinutesOfDay = MinutesOfDay;
         _dateSliderAnchor = LocalDate ?? _startupInstant.ToDateTimeOffset();
         _initialised = true;
+        // Saving starts only once persisted state is fully loaded: an earlier or failed startup must
+        // never overwrite the user's file with defaults.
+        _stateSaves.Enable();
         ActivatePlannerIfReady();
     }
 
@@ -551,7 +607,12 @@ public partial class MainViewModel : ObservableObject
         => CommitObserverLocation(coordinate, null, resolvePlaceName: true);
 
     public void CommitUnresolvedObserverLocation(GeoCoordinate coordinate)
-        => CommitObserverLocation(coordinate with { ElevationMetres = 0 }, null, resolvePlaceName: true);
+    {
+        // A pin/coordinate interaction that lands on the current observer is not a new location:
+        // it must not detach the saved location, rename it or restart planning work.
+        if (SameObserverPosition(coordinate.Normalised(), _session.Observer)) return;
+        CommitObserverLocation(coordinate with { ElevationMetres = 0 }, null, resolvePlaceName: true);
+    }
 
     private void CommitObserverLocation(GeoCoordinate coordinate, string? resolvedName, bool resolvePlaceName)
     {
@@ -635,7 +696,11 @@ public partial class MainViewModel : ObservableObject
     public void SetLocationInteraction(bool isInteracting) => IsLocationInteracting = isInteracting;
     partial void OnIsLocationInteractingChanged(bool value) => OnPropertyChanged(nameof(CanExport));
 
-    public async Task ApplySettingsAsync(AppSettings settings)
+    /// <summary>
+    /// Applies and persists settings. Returns false only when the settings were applied but could not
+    /// be saved; that failure has already been logged and shown.
+    /// </summary>
+    public async Task<bool> ApplySettingsAsync(AppSettings settings)
     {
         var previous = Settings;
         var physicalChanged = settings.EnableTerrainCalculations != previous.EnableTerrainCalculations ||
@@ -680,11 +745,26 @@ public partial class MainViewModel : ObservableObject
         if (!Settings.EnableTerrainCalculations) ScheduleTerrainDebugMapRefresh();
         if (_terrainDiskCache is not null && configureTerrainCache)
         {
-            await _terrainDiskCache.ConfigureAsync(settings.EffectiveTerrainCacheLimitBytes,
-                SavedLocations.Select(location => location.Coordinate));
-            // A newer toggle owns the UI even if this cache reconciliation completed later.
-            if (settingsGeneration != Volatile.Read(ref _settingsApplyGeneration)) return;
-            UpdateTerrainCacheUsage();
+            string? cacheFailure = null;
+            try
+            {
+                await _terrainDiskCache.ConfigureAsync(settings.EffectiveTerrainCacheLimitBytes,
+                    SavedLocations.Select(location => location.Coordinate));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // As at startup: the cache is an optimisation and must not abort applying settings.
+                _logger.LogWarning(ex, "Terrain cache could not be reconfigured");
+                cacheFailure = $"Terrain cache could not be read: {ex.Message}";
+            }
+            // A newer toggle owns the UI (and its save) even if this reconciliation completed later.
+            if (settingsGeneration != Volatile.Read(ref _settingsApplyGeneration)) return true;
+            if (cacheFailure is null) UpdateTerrainCacheUsage();
+            else
+            {
+                TerrainCacheStatus = cacheFailure;
+                ShowOperationalNotice(cacheFailure);
+            }
         }
         if (equipmentChanged) LoadEquipmentOptions();
         _suppressChanges = true;
@@ -712,7 +792,7 @@ public partial class MainViewModel : ObservableObject
         NotifyTerrainProperties();
         if (physicalChanged || timeZoneChanged) await _activePlannerRefresh;
         else if (weatherPolicyChanged) await RefreshWeather();
-        await PersistAsync(CancellationToken.None);
+        return await FlushAsync();
     }
 
     private void LoadSettingsEditor()
@@ -819,8 +899,9 @@ public partial class MainViewModel : ObservableObject
                 MinimumTerrainFrameCoveragePercent = Math.Clamp(SettingsMinimumTerrainFrameCoveragePercent, 0, 50)
             }
         };
-        await ApplySettingsAsync(updated);
-        StatusMessage = "Settings saved";
+        StatusMessage = await ApplySettingsAsync(updated)
+            ? "Settings saved"
+            : "Settings applied, but they could not be saved";
     }
 
     [RelayCommand] private void ResetSettingsEditor()
@@ -1050,11 +1131,61 @@ public partial class MainViewModel : ObservableObject
         _logger.LogWarning(exception, "PNG export destination failed");
     }
 
-    public async Task PersistAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Persists the newest state now, bypassing the debounce. Returns false when the write failed for
+    /// an expected filesystem reason; that failure has already been logged and shown to the user, so
+    /// callers only need the result when their own feedback depends on it. Nothing is written before
+    /// initialisation has completed.
+    /// </summary>
+    public Task<bool> FlushAsync() =>
+        _stateSaves.IsEnabled ? _stateSaves.FlushAsync(CaptureState()) : Task.FromResult(true);
+
+    /// <summary>Schedules a debounced save for frequent, fire-and-forget state changes.</summary>
+    private void RequestSave()
+    {
+        if (_stateSaves.IsEnabled) _stateSaves.RequestSave(CaptureState());
+    }
+
+    internal Task WaitForPendingSavesAsync() => _stateSaves.WhenIdleAsync();
+
+    /// <summary>
+    /// Snapshots the state to be written. Called synchronously by the two methods above, so it always
+    /// runs on the thread that requested the save; the resulting record is immutable, so the write
+    /// itself never reads this view model. StateSaveScheduler depends on both of those properties.
+    /// </summary>
+    private PersistedState CaptureState()
     {
         _terrainDiskCache?.SetSavedLocations(SavedLocations.Select(location => location.Coordinate));
-        var state = new PersistedState(4, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
-        await _store.SaveAsync(state, cancellationToken);
+        return new PersistedState(4, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
+    }
+
+    private void OnStateSaveCompleted(StateSaveResult result)
+    {
+        // A successful save resolves only the save-failure notice; an unrelated warning stays.
+        _saveFailureNotice = result.Succeeded
+            ? null
+            : "Your settings and locations could not be saved: " + result.Failure?.Message +
+              " Noctaxis will try again when something changes.";
+        UpdateOperationalNotice();
+    }
+
+    /// <summary>Reports a recoverable problem that is not a state-file save failure.</summary>
+    private void ShowOperationalNotice(string message)
+    {
+        _environmentNotice = message;
+        UpdateOperationalNotice();
+    }
+
+    // A save failure blocks the user's work, so it is shown first when both sources are active.
+    private void UpdateOperationalNotice() => OperationalNotice = _saveFailureNotice ?? _environmentNotice;
+
+    [RelayCommand]
+    private void DismissOperationalNotice()
+    {
+        // Dismiss acknowledges everything currently reported; a later failure raises the bar again.
+        _saveFailureNotice = null;
+        _environmentNotice = null;
+        UpdateOperationalNotice();
     }
 
     [RelayCommand] private void ShowLocations() { SelectedPageIndex = 0; _logger.LogInformation("Navigated to Locations"); }
@@ -1083,7 +1214,7 @@ public partial class MainViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(resolution.TimeZoneId)) TimeZoneId = _timeZones.GetEffectiveId(resolution.TimeZoneId);
         CommitObserverLocation(resolution.Coordinate, resolution.DisplayName, resolvePlaceName: resolution.DisplayName is null);
         SelectedPageIndex = 1;
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private async Task UseSearchResultAsync(LocationSearchResult result, bool save)
@@ -1102,7 +1233,7 @@ public partial class MainViewModel : ObservableObject
             SelectedLocation = location;
             _session = _session with { SavedLocationId = location.Id };
             SyncLocationHomepage();
-            await PersistAsync(CancellationToken.None);
+            await FlushAsync();
             await GenerateSavedLocationMapAsync(location);
         }
     }
@@ -1136,7 +1267,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Observer));
         ScheduleObserverRefresh(20);
         SelectedPageIndex = 1;
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private async Task EditLocationAsync(LocationCardViewModel card)
@@ -1154,7 +1285,7 @@ public partial class MainViewModel : ObservableObject
         var updated = card.Location with { Name = name, Notes = edit.Description };
         card.Update(updated);
         ReplaceLocation(updated);
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private async Task DeleteLocationAsync(LocationCardViewModel card)
@@ -1163,8 +1294,11 @@ public partial class MainViewModel : ObservableObject
         var match = SavedLocations.FirstOrDefault(location => location.Id == card.Id);
         if (match is not null) SavedLocations.Remove(match);
         if (_session.SavedLocationId == card.Id) _session = _session with { SavedLocationId = null };
+        // Matches the Planner delete command: a deleted record must not remain selected, otherwise
+        // it is persisted as the most recent location and SaveLocation would re-create it.
+        if (SelectedLocation?.Id == card.Id) SelectedLocation = null;
         SyncLocationHomepage();
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private async Task ToggleFavouriteAsync(LocationCardViewModel card)
@@ -1172,7 +1306,7 @@ public partial class MainViewModel : ObservableObject
         var updated = card.Location with { IsFavourite = !card.Location.IsFavourite };
         card.Update(updated);
         ReplaceLocation(updated);
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private void ReplaceLocation(SavedLocation updated)
@@ -1446,9 +1580,10 @@ public partial class MainViewModel : ObservableObject
         SelectedLocation = location;
         _session = _session with { SavedLocationId = location.Id };
         SyncLocationHomepage();
-        await PersistAsync(CancellationToken.None);
+        var saved = await FlushAsync();
         if (requiresMapGeneration) await GenerateSavedLocationMapAsync(location);
-        StatusMessage = existing is null ? "Location saved" : "Location updated";
+        StatusMessage = !saved ? "Location could not be saved"
+            : existing is null ? "Location saved" : "Location updated";
     }
 
     [RelayCommand]
@@ -1481,9 +1616,9 @@ public partial class MainViewModel : ObservableObject
         _session = _session with { SavedLocationId = location.Id };
         LocationName = location.Name;
         SyncLocationHomepage();
-        await PersistAsync(CancellationToken.None);
+        var saved = await FlushAsync();
         await GenerateSavedLocationMapAsync(location);
-        StatusMessage = "Location saved";
+        StatusMessage = saved ? "Location saved" : "Location could not be saved";
     }
 
     [RelayCommand(CanExecute = nameof(CanDeleteLocation))]
@@ -1495,7 +1630,7 @@ public partial class MainViewModel : ObservableObject
         SelectedLocation = null;
         _session = _session with { SavedLocationId = null };
         SyncLocationHomepage();
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     private bool CanDeleteLocation() => SelectedLocation is not null;
@@ -1670,7 +1805,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
-        _ = PersistCameraFramingPreferenceAsync();
+        RequestSave();
     }
     partial void OnShowFramingVisibilityLimitsChanged(bool value)
     {
@@ -1683,7 +1818,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
-        _ = PersistCameraFramingPreferenceAsync();
+        RequestSave();
     }
 
     private void ChangeDay(int days)
@@ -1814,19 +1949,6 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex) { _logger.LogDebug(ex, "Camera terrain priority update failed"); }
     }
 
-    private async Task PersistCameraFramingPreferenceAsync()
-    {
-        try
-        {
-            await PersistAsync(CancellationToken.None);
-            _logger.LogDebug("Camera framing overlay preference persisted");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Camera framing overlay preference could not be persisted");
-        }
-    }
-
     private void UpdateCurrentOnly()
     {
         try
@@ -1925,7 +2047,9 @@ public partial class MainViewModel : ObservableObject
                     ? "Planner ready · some environmental data unavailable"
                     : "Planner ready"
             });
-            await PersistAsync(cancellationToken);
+            // Scheduled rather than awaited inside this try: a save failure is reported by the save
+            // pipeline and must not be shown as a planner-calculation failure.
+            RequestSave();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -2414,7 +2538,8 @@ public partial class MainViewModel : ObservableObject
     private bool IsCurrentObserver(GeoCoordinate coordinate) =>
         SameObserverPosition(coordinate, _session.Observer);
 
-    private static bool SameObserverPosition(GeoCoordinate left, GeoCoordinate right) =>
+    /// <summary>The single observer-identity rule; the map view uses it to predict no-op commits.</summary>
+    internal static bool SameObserverPosition(GeoCoordinate left, GeoCoordinate right) =>
         Math.Abs(left.Latitude - right.Latitude) <= 1e-10 &&
         Math.Abs(Angles.NormaliseSignedDegrees(left.Longitude - right.Longitude)) <= 1e-10;
 

@@ -341,8 +341,7 @@ public class NoctaxisMapView : UserControl
         _draggingPin = false;
         e.Pointer.Capture(null);
         e.Handled = true;
-        _committingPin = true;
-        CoordinateCommitted?.Invoke(this, _pinInteraction.CompleteDrag());
+        RaiseCoordinateCommitted(_pinInteraction.CompleteDrag());
         InteractionStateChanged?.Invoke(this, false);
     }
 
@@ -495,8 +494,17 @@ public class NoctaxisMapView : UserControl
         _pinInteraction.SetCommittedCoordinate(normalised);
         UpdateOverlay();
         PreviewCoordinateChanged?.Invoke(this, normalised);
+        RaiseCoordinateCommitted(normalised);
+    }
+
+    private void RaiseCoordinateCommitted(GeoCoordinate coordinate)
+    {
+        // Only a real move produces the Observer update that clears _committingPin. Committing the
+        // current observer (e.g. pressing and releasing the pin without moving it) is not a new
+        // location, and a stale flag would suppress the next genuine re-centre.
+        if (MainViewModel.SameObserverPosition(coordinate.Normalised(), Observer)) return;
         _committingPin = true;
-        CoordinateCommitted?.Invoke(this, normalised);
+        CoordinateCommitted?.Invoke(this, coordinate);
     }
 
     private static double Distance(Point first, Point second) =>

@@ -17,6 +17,9 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
     private readonly SemaphoreSlim _maintenance = new(1);
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, int> _leases = new(StringComparer.OrdinalIgnoreCase);
+    // Paths whose deletion has already been reported, so a persistently locked file is logged
+    // once at Warning rather than on every eviction pass.
+    private readonly HashSet<string> _reportedDeleteFailures = new(StringComparer.OrdinalIgnoreCase);
     private Task? _initialization;
     private TaskCompletionSource? _clearing;
     private TaskCompletionSource? _drained;
@@ -165,7 +168,10 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
                 lock (_gate)
                 {
                     Scan(); // Includes files introduced externally since startup.
-                    foreach (var path in _entries.Keys.ToArray()) Delete(path, eviction: false);
+                    var failed = _entries.Keys.ToArray().Count(path => !TryDelete(path, eviction: false));
+                    // Undeletable files stay counted in Usage; the caller must learn the clear was partial.
+                    if (failed > 0)
+                        throw new IOException($"{failed} terrain cache file(s) could not be deleted and remain on disk.");
                     _clears++;
                 }
             }).ConfigureAwait(false);
@@ -211,7 +217,9 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
             {
                 if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (_leases.Count == 0) File.Delete(path);
+                    // An abandoned staging file that cannot be removed now is retried on the next scan;
+                    // it must not fail cache initialisation for the whole session.
+                    if (_leases.Count == 0) TryDeleteFile(path);
                     continue;
                 }
                 found.Add(path);
@@ -247,20 +255,49 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
             .ThenBy(item => item.Value.Access).ThenBy(item => item.Key, StringComparer.Ordinal).ToArray())
         {
             if (_bytes <= _limit) break;
+            // A leased entry is only pinned until its reader finishes, and Release re-runs eviction.
+            // Stopping here preserves priority order instead of evicting more valuable entries
+            // behind a lower-priority one that will itself be evicted moments later.
             if (_leases.ContainsKey(item.Key)) break;
-            Delete(item.Key);
+            // An undeletable file is not transient within this pass: it stays counted in _bytes and
+            // the budget is met from the remaining candidates.
+            TryDelete(item.Key);
         }
         if (_evictions > count) logger.LogInformation("Terrain cache limit reached: evicted {Count} entries / {Bytes} bytes",
             _evictions - count, _evictedBytes - bytes);
     }
 
-    private void Delete(string path, bool eviction = true)
+    /// <summary>
+    /// Deletes a governed file. Expected filesystem failures (a file held open by another process,
+    /// denied access) leave the entry and its bytes in the accounting, because the file is still on
+    /// disk, and are logged. This runs from lease release and insertion paths, so it must not throw.
+    /// </summary>
+    private bool TryDelete(string path, bool eviction = true)
     {
-        File.Delete(path); // Fail visibly rather than reporting an unenforced hard limit.
+        if (!TryDeleteFile(path)) return false;
         if (_entries.Remove(path, out var entry))
         {
             _bytes -= entry.Size;
             if (eviction) { _evictions++; _evictedBytes += entry.Size; }
+        }
+        return true;
+    }
+
+    private bool TryDeleteFile(string path)
+    {
+        try
+        {
+            File.Delete(path);
+            _reportedDeleteFailures.Remove(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            if (_reportedDeleteFailures.Add(path))
+                logger.LogWarning(ex, "Terrain cache file could not be deleted and remains counted: {Path}", path);
+            else
+                logger.LogDebug(ex, "Terrain cache file still could not be deleted: {Path}", path);
+            return false;
         }
     }
 

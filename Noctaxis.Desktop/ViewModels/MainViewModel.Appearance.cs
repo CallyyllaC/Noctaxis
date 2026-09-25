@@ -58,17 +58,22 @@ public partial class MainViewModel
         ChangeAppearance();
     }
     partial void OnTextSizePercentChanged(double value) => ChangeAppearance();
-    private async void ChangeAppearance()
+    private void ChangeAppearance()
     {
         if (_loadingAppearance || SelectedTheme is null || SelectedColourVision is null) return;
-        try { await ApplyAppearanceAsync(new(SelectedTheme.Id, SelectedColourVision.Mode, TextSizePercent / 100, SelectedAppearanceMode)); }
-        catch (Exception ex) { StatusMessage = $"Could not save appearance: {ex.Message}"; }
+        SetAppearance(new(SelectedTheme.Id, SelectedColourVision.Mode, TextSizePercent / 100, SelectedAppearanceMode));
+        // Text size is a slider: coalesce its rapid changes rather than writing on every step.
+        RequestSave();
     }
     public async Task ApplyAppearanceAsync(AppearancePreferences preferences)
     {
+        SetAppearance(preferences);
+        await FlushAsync();
+    }
+    private void SetAppearance(AppearancePreferences preferences)
+    {
+        // Deliberately bypass ApplySettingsAsync: it owns calculation and equipment changes.
         Settings = Settings with { Appearance = preferences.Normalised() };
         LoadAppearance();
-        // Deliberately bypass ApplySettingsAsync: it owns calculation and equipment changes.
-        await PersistAsync(CancellationToken.None);
     }
 }

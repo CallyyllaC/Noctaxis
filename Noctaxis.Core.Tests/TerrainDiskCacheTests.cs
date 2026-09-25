@@ -243,6 +243,71 @@ public sealed class TerrainDiskCacheTests(ITestOutputHelper output) : IDisposabl
         GC.KeepAlive(reopened);
     }
 
+    [Fact]
+    public async Task UndeletableFile_IsSkippedKeptInUsageAndDoesNotFailEviction()
+    {
+        var manager = Manager(); var cache = Cache(manager);
+        await manager.ConfigureAsync(800, []);
+        var locked = Tile(0, "locked"); var evictable = Tile(0, "evictable");
+        await Insert(manager, cache, locked); await Insert(manager, cache, evictable);
+        using (var hold = HoldUndeletable(manager.PathFor(locked)))
+        {
+            if (hold is null) return; // Deletion cannot be prevented here (for example running as root).
+            // The locked file is the oldest, so it is the first eviction candidate.
+            await manager.ConfigureAsync(400, []);
+            Assert.True(File.Exists(manager.PathFor(locked)));
+            Assert.False(File.Exists(manager.PathFor(evictable)));
+            Assert.Equal(400, manager.Usage.Bytes);
+            Assert.Equal(1, manager.Usage.Entries);
+        }
+        await manager.ConfigureAsync(0, []);
+        Assert.False(File.Exists(manager.PathFor(locked)));
+        Assert.Equal(0, manager.Usage.Bytes);
+    }
+
+    [Fact]
+    public async Task Clear_DeletesEverythingPossibleThenReportsUndeletableFiles()
+    {
+        var manager = Manager(); var cache = Cache(manager);
+        await manager.ConfigureAsync(10000, []);
+        var locked = Tile(0, "locked"); var other = Tile(0, "other");
+        await Insert(manager, cache, locked); await Insert(manager, cache, other);
+        using (var hold = HoldUndeletable(manager.PathFor(locked)))
+        {
+            if (hold is null) return;
+            var failure = await Assert.ThrowsAsync<IOException>(() => manager.ClearAsync());
+            Assert.Contains("1 terrain cache file", failure.Message);
+            Assert.False(File.Exists(manager.PathFor(other)));
+            Assert.True(File.Exists(manager.PathFor(locked)));
+            Assert.Equal(400, manager.Usage.Bytes);
+            Assert.Equal(0, manager.Usage.Clears);
+        }
+        await manager.ClearAsync();
+        Assert.Equal(0, manager.Usage.Bytes);
+    }
+
+    /// <summary>
+    /// Makes <paramref name="path"/> undeletable until disposed: an exclusive handle on Windows,
+    /// a read-only parent directory elsewhere. Returns null where neither can prevent deletion.
+    /// </summary>
+    private static IDisposable? HoldUndeletable(string path)
+    {
+        if (OperatingSystem.IsWindows())
+            return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        var directory = Path.GetDirectoryName(path)!;
+        var original = File.GetUnixFileMode(directory);
+        File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        var restore = new Restore(() => File.SetUnixFileMode(directory, original));
+        var probe = Path.Combine(directory, ".probe");
+        try { File.WriteAllBytes(probe, []); }
+        catch (UnauthorizedAccessException) { return restore; }
+        // Permissions are not enforced (root): the directory is still writable.
+        File.Delete(probe); restore.Dispose();
+        return null;
+    }
+
+    private sealed class Restore(Action action) : IDisposable { public void Dispose() => action(); }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
     private sealed class Paths(string root) : IUserDataPathProvider
     { public string GetApplicationDataDirectory() => root; }

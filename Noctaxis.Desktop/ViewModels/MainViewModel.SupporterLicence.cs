@@ -75,7 +75,7 @@ public partial class MainViewModel
         SupporterLicenceInput = string.Empty;
         SetSupporterState(true, result);
         OnPropertyChanged(nameof(Settings));
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     [RelayCommand]
@@ -95,7 +95,7 @@ public partial class MainViewModel
         IsEditingSupporterLicence = false;
         SetSupporterState(false, null);
         OnPropertyChanged(nameof(Settings));
-        await PersistAsync(CancellationToken.None);
+        await FlushAsync();
     }
 
     [RelayCommand]

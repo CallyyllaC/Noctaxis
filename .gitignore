@@ -11,3 +11,6 @@ appsettings.local.json
 secrets.json
 *.hgt
 /.calibration-input
+# Local build/test isolation outputs (generated; never source)
+.isolated/
+.test-artifacts/
