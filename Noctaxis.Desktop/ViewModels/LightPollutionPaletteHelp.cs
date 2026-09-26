@@ -9,7 +9,7 @@ internal static class LightPollutionPaletteHelp
             .Select(LightPollutionColorMaps.Resolve).ToArray());
     public static string Description(string? id) => id switch
     {
-        "turbo" => "Vivid colours with strong visual separation. Best for quickly spotting darker and brighter regions.",
+        "turbo" => "Vivid colours with strong visual separation. Best for quickly spotting darker and brighter regions. Not colour-vision safe: with red–green or blue–yellow colour-vision deficiencies some levels look alike.",
         "viridis" => "Balanced colours designed for clear quantitative comparison.",
         "inferno" => "High-contrast purple, red and yellow palette with a heat-like appearance.",
         "magma" => "Softer purple, magenta and warm-yellow dark-to-light palette.",

@@ -1102,18 +1102,29 @@ public partial class MainViewModel : ObservableObject
 
     public async Task<byte[]> CreateExportPngAsync(CancellationToken cancellationToken)
     {
-        if (Snapshot is null) throw new InvalidOperationException("The plan is not ready to export.");
+        // Everything the card describes is captured before the first await: the plan being exported
+        // and the labels around it. The weather is then fetched for that plan's own session, so the
+        // card can never pair one plan with weather fetched for another place or another moment.
+        var exported = Snapshot ?? throw new InvalidOperationException("The plan is not ready to export.");
+        var exportedWeather = Settings.EffectiveWeather;
+        var context = new ScoutingCardExportContext(LocationName, SelectedLocation, exportedWeather, Settings.Units);
         StatusMessage = "Refreshing weather for export…";
         _logger.LogInformation("Starting export weather refresh");
         try
         {
-            var result = await _planning.RefreshWeatherAsync(_session, Settings.EffectiveWeather, cancellationToken);
+            var result = await _planning.RefreshWeatherAsync(exported.Session, exportedWeather, cancellationToken);
             if (result.State != DataState.Ready || result.Conditions is null)
                 throw new InvalidOperationException("Export cancelled: " + result.Message);
-            Snapshot = Snapshot with { Weather = result };
-            NotifySnapshotProperties();
-            var context = new ScoutingCardExportContext(LocationName, SelectedLocation, Settings.EffectiveWeather, Settings.Units);
-            var bytes = await _exporter.RenderPngAsync(Snapshot, context, cancellationToken);
+            // The card always pairs the plan the export started from with the weather fetched for it.
+            var rendered = exported with { Weather = result };
+            if (IsCurrentWeatherRequest(exported.Session, exportedWeather) && Snapshot is { } current)
+            {
+                // The plan on screen would still make this same request, so it takes the result too.
+                Snapshot = ReferenceEquals(current, exported) ? rendered : current with { Weather = result };
+                NotifySnapshotProperties();
+            }
+            else _logger.LogInformation("The plan changed during export; the card keeps the plan it started from");
+            var bytes = await _exporter.RenderPngAsync(rendered, context, cancellationToken);
             StatusMessage = "Scouting card ready";
             return bytes;
         }
@@ -1386,7 +1397,7 @@ public partial class MainViewModel : ObservableObject
             var target = Targets.FirstOrDefault(item => item.Id.Equals(selection.TargetId, StringComparison.OrdinalIgnoreCase));
             if (target is null) continue;
             CelestialObjects.Add(new CelestialObjectItemViewModel(target, selection.IsVisible, selection.Order,
-                target.Id.Equals(_session.TargetId, StringComparison.OrdinalIgnoreCase), CelestialColour(target, selection.Order),
+                target.Id.Equals(_session.TargetId, StringComparison.OrdinalIgnoreCase),
                 CelestialObjectChanged, MakePrimaryTarget, RemoveCelestialObject, MoveCelestialObject));
         }
         NotifyCelestialCount();
@@ -1454,7 +1465,7 @@ public partial class MainViewModel : ObservableObject
         if (CelestialObjects.Any(item => item.TargetId.Equals(target.Id, StringComparison.OrdinalIgnoreCase))) return;
         var order = CelestialObjects.Count;
         var visible = VisibleCelestialCount < CelestialVisibilityPolicy.MaximumVisibleObjects;
-        var item = new CelestialObjectItemViewModel(target, visible, order, false, CelestialColour(target, order),
+        var item = new CelestialObjectItemViewModel(target, visible, order, false,
             CelestialObjectChanged, MakePrimaryTarget, RemoveCelestialObject, MoveCelestialObject);
         CelestialObjects.Add(item);
         if (visible) SetPrimaryTarget(item);
@@ -1471,6 +1482,8 @@ public partial class MainViewModel : ObservableObject
 
     private void SaveCelestialSelections()
     {
+        // The list order is the identity slot the chart and map use, so keep each item's swatch in step.
+        for (var index = 0; index < CelestialObjects.Count; index++) CelestialObjects[index].Order = index;
         var selections = CelestialObjects.Select((item, index) => new CelestialObjectSelection(item.TargetId, item.IsVisible, index)).ToArray();
         _session = _session with { VisibleObjects = selections };
         Settings = Settings with { CelestialObjects = new CelestialObjectSettings(selections, _session.TargetId) };
@@ -1503,12 +1516,6 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(VisibleCelestialCountText));
     }
 
-    private static string CelestialColour(AstralTarget target, int order)
-    {
-        string[] deepSky = ["#B790FF", "#63D6C5", "#F48FB1", "#A5D66A", "#FF9F68"];
-        return target.IsSun ? "#F3B34C" : target.IsMoon ? "#79B8FF" : deepSky[Math.Abs(order) % deepSky.Length];
-    }
-
     [RelayCommand]
     private void PreviousDay() => ChangeDay(-1);
 
@@ -1530,9 +1537,20 @@ public partial class MainViewModel : ObservableObject
         RefreshWeatherCommand.NotifyCanExecuteChanged();
         StatusMessage = "Refreshing weather…";
         _logger.LogInformation("Manual weather refresh requested");
+        // Captured before the first await: what this answer describes.
+        var requested = _session;
+        var requestedWeather = Settings.EffectiveWeather;
         try
         {
-            var result = await _planning.RefreshWeatherAsync(_session, Settings.EffectiveWeather, CancellationToken.None);
+            var result = await _planning.RefreshWeatherAsync(requested, requestedWeather, CancellationToken.None);
+            // A superseded request describes a plan the planner has left: another place, or the same
+            // place at another time. It is dropped without a message, because the user did not ask
+            // for it any more and its outcome is not news.
+            if (!IsCurrentWeatherRequest(requested, requestedWeather))
+            {
+                _logger.LogDebug("Discarded a weather result for a superseded request");
+                return;
+            }
             if (result.State == DataState.Ready && result.Conditions is not null && Snapshot is not null)
             {
                 Snapshot = Snapshot with { Weather = result };
@@ -1545,7 +1563,16 @@ public partial class MainViewModel : ObservableObject
                 _logger.LogWarning("Manual weather refresh failed: {Message}", result.Message);
             }
         }
-        catch (Exception ex) { StatusMessage = "Weather refresh failed: " + ex.Message; _logger.LogWarning(ex, "Manual weather refresh failed"); }
+        catch (Exception ex)
+        {
+            if (!IsCurrentWeatherRequest(requested, requestedWeather))
+            {
+                _logger.LogDebug(ex, "Discarded a failed weather request that had been superseded");
+                return;
+            }
+            StatusMessage = "Weather refresh failed: " + ex.Message;
+            _logger.LogWarning(ex, "Manual weather refresh failed");
+        }
         finally { IsWeatherRefreshing = false; RefreshWeatherCommand.NotifyCanExecuteChanged(); }
     }
 
@@ -1725,7 +1752,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnElevationChanged(double value)
     {
         if (_suppressChanges) return;
-        var state = _session.EffectiveObserverElevation.WithManualOverride(value);
+        var state = RememberSuppliedGroundElevation().WithManualOverride(value);
         var observer = _session.Observer with { ElevationMetres = state.ResolveGroundElevationAsl(value) };
         _session = _session with { Observer = observer, ObserverElevation = state };
         PreviewObserver = observer;
@@ -1738,7 +1765,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ResetGroundElevation()
     {
-        var state = _session.EffectiveObserverElevation.ResetManualOverride();
+        var state = RememberSuppliedGroundElevation().ResetManualOverride();
         var groundElevation = state.ResolveGroundElevationAsl(_session.Observer.ElevationMetres);
         var observer = _session.Observer with { ElevationMetres = groundElevation };
         _session = _session with { Observer = observer, ObserverElevation = state };
@@ -2502,7 +2529,7 @@ public partial class MainViewModel : ObservableObject
             ? resolvedSurface
             : horizon.ChosenObserverGroundElevationMetres ?? resolvedSurface;
 
-        var state = _session.EffectiveObserverElevation.WithTerrainGroundElevation(terrainGround.Value);
+        var state = RememberSuppliedGroundElevation().WithTerrainGroundElevation(terrainGround.Value);
         var resolvedGround = state.ResolveGroundElevationAsl(_session.Observer.ElevationMetres);
         var observer = _session.Observer with { ElevationMetres = resolvedGround };
         _session = _session with { Observer = observer, ObserverElevation = state };
@@ -2516,6 +2543,15 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(Observer));
         NotifyObserverElevationProperties();
     }
+
+    /// <summary>
+    /// Records the observer datum as supplied, immediately before a derived elevation replaces it in
+    /// the session. Terrain requests fall back on the recorded value, so resolving the ground here
+    /// cannot change the identity of an otherwise identical horizon request. A location change starts
+    /// a fresh state, whose supplied datum is the elevation that came with the new location.
+    /// </summary>
+    private ObserverElevationState RememberSuppliedGroundElevation() =>
+        _session.EffectiveObserverElevation.WithSuppliedGroundElevation(_session.Observer.ElevationMetres);
 
     private void NotifyObserverElevationProperties()
     {
@@ -2537,6 +2573,15 @@ public partial class MainViewModel : ObservableObject
 
     private bool IsCurrentObserver(GeoCoordinate coordinate) =>
         SameObserverPosition(coordinate, _session.Observer);
+
+    /// <summary>
+    /// True when the plan on screen would still make the weather request this result answers.
+    /// PlanningService.CreateWeatherRequest derives a request from the observer, the planner instant
+    /// and the weather settings, and from nothing else, so nothing else is compared here.
+    /// </summary>
+    private bool IsCurrentWeatherRequest(PlanningSession requested, WeatherSettings settings) =>
+        IsCurrentObserver(requested.Observer) && _session.Instant == requested.Instant &&
+        Settings.EffectiveWeather == settings;
 
     /// <summary>The single observer-identity rule; the map view uses it to predict no-op commits.</summary>
     internal static bool SameObserverPosition(GeoCoordinate left, GeoCoordinate right) =>

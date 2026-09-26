@@ -35,10 +35,22 @@ public sealed record TerrainProfileRequest(
     double ObserverHeightAboveGroundMetres = 1.7,
     TerrainRadialSamplingPolicy? AdaptiveSampling = null,
     double? ManualGroundElevationOverrideMetres = null,
-    bool EnableTerrainCalculations = true)
+    bool EnableTerrainCalculations = true,
+    // The datum to stand in for the observer's ground when there is no manual override and terrain
+    // is unavailable at the observer. It must be a stable input: a caller that lets a resolved
+    // elevation flow back into its observer coordinate would otherwise change this request's
+    // identity without changing its result. Null means the observer coordinate's own elevation.
+    double? FallbackObserverGroundElevationMetres = null)
 {
     public TerrainRadialSamplingPolicy EffectiveAdaptiveSampling =>
         AdaptiveSampling ?? TerrainRadialSamplingPolicy.Default;
+
+    /// <summary>
+    /// The datum this request would fall back on, which is also the only part of the observer's
+    /// elevation that can change a result and therefore the only part that belongs to cache identity.
+    /// </summary>
+    public double EffectiveObserverGroundFallbackMetres(double observerElevationAslMetres) =>
+        FallbackObserverGroundElevationMetres ?? observerElevationAslMetres;
 }
 
 /// <summary>Development timing data. Values are wall-clock stage times, not invented percentages.</summary>
@@ -152,6 +164,17 @@ public sealed class HorizonService : IHorizonService
         int? degreeOfParallelism = null)
         : this(new RawTerrainSurfaceResolver(terrain), logger, degreeOfParallelism) { }
 
+    /// <summary>
+    /// The shared work for this observer and request, created when no live session exists. The
+    /// producer belongs to the session and to cache invalidation, never to
+    /// <paramref name="cancellationToken"/>: a caller that loses interest stops waiting, it does not
+    /// cancel work other callers are still waiting for. The caller is nevertheless a counted
+    /// consumer for as long as it is interested, so its work cannot be cancelled underneath it while
+    /// it still wants the result, and abandoning it can still stop a build nobody else wants.
+    /// <see cref="TerrainHorizonWork.CompleteProfile"/> is this caller's own view of the shared
+    /// build: cancelling <paramref name="cancellationToken"/> completes that view as cancelled and
+    /// releases this caller's claim, leaving other consumers untouched.
+    /// </summary>
     public TerrainHorizonWork StartProfile(GeoCoordinate observer, TerrainProfileRequest request,
         CancellationToken cancellationToken)
     {
@@ -159,39 +182,93 @@ public sealed class HorizonService : IHorizonService
         var normalised = observer.Normalised();
         var key = CacheKey(normalised, request);
         if (_completed.TryGetValue(key, out var complete))
-            return new TerrainHorizonWork(Task.FromResult(complete), (_, token) =>
-                Task.FromResult(complete), _degreeOfParallelism);
-
-        ProgressiveSession session;
-        long generation;
-        lock (_generationGate)
+            return new TerrainHorizonWork(Task.FromResult(complete), (_, _) => Task.FromResult(complete),
+                _degreeOfParallelism);
+        var session = AttachLiveSession(key, normalised, request);
+        var scoped = session.Work.CompleteProfile.WaitAsync(cancellationToken);
+        // The claim lasts until this caller stops waiting or the build ends. WaitAsync completes on
+        // exactly one of those, so the detach happens exactly once, on cancellation or completion.
+        _ = scoped.ContinueWith(static (completed, state) =>
         {
-            generation = _generation;
-            session = _active.GetOrAdd(key, cacheKey =>
-            {
-                var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cacheLifetime.Token);
-                var created = new ProgressiveSession(normalised, request, _surface,
-                    _logger, lifetime.Token, _degreeOfParallelism, result =>
-                    {
-                        lock (_generationGate)
-                            if (_generation == generation) _completed.TryAdd(key, result);
-                    });
-                _ = created.Work.CompleteProfile.ContinueWith(completed => lifetime.Dispose(),
-                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-                return created;
-            });
-        }
-        _ = RemoveCompletedSessionAsync(key, session);
-        return session.Work;
+            // This view may never be awaited; a shared failure must not be orphaned on it.
+            _ = completed.Exception;
+            ((ProgressiveSession)state!).DetachConsumer();
+        }, session, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        return new TerrainHorizonWork(scoped, session.Work.PrioritiseBearingsAsync, _degreeOfParallelism);
     }
 
     public Task<TerrainHorizonProfile> GetProfileAsync(GeoCoordinate observer, TerrainProfileRequest request,
-        CancellationToken cancellationToken) => StartProfile(observer, request, cancellationToken)
-        .CompleteProfile.WaitAsync(cancellationToken);
+        CancellationToken cancellationToken) => ConsumeAsync(observer, request,
+        static (session, token) => session.Work.CompleteProfile.WaitAsync(token), cancellationToken);
 
     public Task<TerrainHorizonProfile> GetPriorityProfileAsync(GeoCoordinate observer,
         TerrainProfileRequest request, IReadOnlyList<double> bearings, CancellationToken cancellationToken) =>
-        StartProfile(observer, request, cancellationToken).PrioritiseBearingsAsync(bearings, cancellationToken);
+        ConsumeAsync(observer, request,
+            (session, token) => session.Work.PrioritiseBearingsAsync(bearings, token), cancellationToken);
+
+    /// <summary>
+    /// Waits for a shared build as a counted consumer. The caller keeps its own cancellation
+    /// semantics, and cancelling it detaches only that consumer. When the last consumer leaves before
+    /// the build completes, the session cancels its producer so abandoned horizon work stops.
+    /// </summary>
+    private async Task<TerrainHorizonProfile> ConsumeAsync(GeoCoordinate observer,
+        TerrainProfileRequest request,
+        Func<ProgressiveSession, CancellationToken, Task<TerrainHorizonProfile>> wait,
+        CancellationToken cancellationToken)
+    {
+        Validate(request);
+        cancellationToken.ThrowIfCancellationRequested();
+        var normalised = observer.Normalised();
+        var key = CacheKey(normalised, request);
+        if (_completed.TryGetValue(key, out var complete)) return complete;
+        var session = AttachLiveSession(key, normalised, request);
+        // No await between the attach and the try: every attached consumer reaches its finally.
+        try { return await wait(session, cancellationToken).ConfigureAwait(false); }
+        finally { session.DetachConsumer(); }
+    }
+
+    /// <summary>Returns a live session with one consumer attached on the caller's behalf.</summary>
+    private ProgressiveSession AttachLiveSession(string key, GeoCoordinate observer,
+        TerrainProfileRequest request)
+    {
+        while (true)
+        {
+            var session = GetOrCreateLiveSession(key, observer, request);
+            // A session can start cancelling between that liveness check and this attach. A new
+            // consumer must never inherit another caller's cancellation, so drop it and build again.
+            if (session.TryAttachConsumer()) return session;
+            Evict(key, session);
+        }
+    }
+
+    private ProgressiveSession GetOrCreateLiveSession(string key, GeoCoordinate observer,
+        TerrainProfileRequest request)
+    {
+        while (true)
+        {
+            ProgressiveSession session;
+            lock (_generationGate)
+            {
+                var generation = _generation;
+                session = _active.GetOrAdd(key, cacheKey => new ProgressiveSession(observer, request, _surface,
+                    _logger, _cacheLifetime.Token, _degreeOfParallelism, result =>
+                    {
+                        lock (_generationGate)
+                            if (_generation == generation) _completed.TryAdd(cacheKey, result);
+                    }));
+            }
+            if (session.IsLive)
+            {
+                _ = RemoveCompletedSessionAsync(key, session);
+                return session;
+            }
+            // Cancelling or invalidated: it is no longer a session anyone may join.
+            Evict(key, session);
+        }
+    }
+
+    private void Evict(string key, ProgressiveSession session) =>
+        _active.TryRemove(new KeyValuePair<string, ProgressiveSession>(key, session));
 
     private async Task RemoveCompletedSessionAsync(string key, ProgressiveSession session)
     {
@@ -204,9 +281,15 @@ public sealed class HorizonService : IHorizonService
         finally { _active.TryRemove(new KeyValuePair<string, ProgressiveSession>(key, session)); }
     }
 
-    private static string CacheKey(GeoCoordinate observer, TerrainProfileRequest request) =>
-        string.Create(System.Globalization.CultureInfo.InvariantCulture,
-            $"{observer.Latitude:R}:{observer.Longitude:R}:{observer.ElevationMetres:R}:{request}");
+    // The observer's own elevation is deliberately absent: after a build resolves the ground it is
+    // written back into the session, and an identical request would otherwise miss. Only the datum
+    // the build could actually fall back on takes part in identity.
+    private static string CacheKey(GeoCoordinate observer, TerrainProfileRequest request)
+    {
+        var fallback = request.EffectiveObserverGroundFallbackMetres(observer.ElevationMetres);
+        return string.Create(System.Globalization.CultureInfo.InvariantCulture,
+            $"{observer.Latitude:R}:{observer.Longitude:R}:{fallback:R}:{request}");
+    }
 
     public static double CurvatureDrop(double distanceMetres, bool accountForEarthCurvature = true) =>
         accountForEarthCurvature ? distanceMetres * distanceMetres / (2 * EffectiveEarthRadiusMetres) : 0;
@@ -254,9 +337,12 @@ public sealed class HorizonService : IHorizonService
         private int _completedBearings;
         private int _groundState;
 
+        // cacheLifetimeToken is the service's cache generation lifetime, and the only external
+        // influence on this producer. Consumer tokens are deliberately excluded: the session owns
+        // the build, and each consumer owns its own wait.
         public ProgressiveSession(GeoCoordinate observer, TerrainProfileRequest request,
             ITerrainSurfaceResolver surface, ILogger logger,
-            CancellationToken cancellationToken, int degreeOfParallelism, Action<TerrainHorizonProfile> completed)
+            CancellationToken cacheLifetimeToken, int degreeOfParallelism, Action<TerrainHorizonProfile> completed)
         {
             _observer = observer;
             _request = request;
@@ -274,7 +360,7 @@ public sealed class HorizonService : IHorizonService
                     null, null);
             }
             _computeSlots = new SemaphoreSlim(degreeOfParallelism, degreeOfParallelism);
-            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cacheLifetimeToken);
             _producerToken = _cancellation.Token;
             var completion = Task.Run(BuildCompleteAsync, CancellationToken.None);
             Work = new TerrainHorizonWork(completion, PrioritiseAsync, degreeOfParallelism);
@@ -282,6 +368,44 @@ public sealed class HorizonService : IHorizonService
 
         public TerrainHorizonWork Work { get; }
         private readonly Action<TerrainHorizonProfile> _completed;
+        private readonly object _stateGate = new();
+        private int _consumers;
+        private bool _cancelling;
+        private bool _settled;
+
+        /// <summary>False once this session is cancelling or its generation was invalidated, after
+        /// which it must not be handed to, or joined by, any further caller.</summary>
+        public bool IsLive
+        {
+            get { lock (_stateGate) return !_cancelling && !_producerToken.IsCancellationRequested; }
+        }
+
+        /// <summary>
+        /// Registers one consumer. Attach and detach are atomic against each other, so a detach can
+        /// never reach zero while another consumer is attaching.
+        /// </summary>
+        public bool TryAttachConsumer()
+        {
+            lock (_stateGate)
+            {
+                if (_cancelling || _producerToken.IsCancellationRequested) return false;
+                _consumers++;
+                return true;
+            }
+        }
+
+        public void DetachConsumer()
+        {
+            lock (_stateGate)
+            {
+                if (--_consumers > 0 || _settled || _cancelling) return;
+                _cancelling = true;
+            }
+            // Nobody is waiting for this build any more, so stop it rather than finish it for no one.
+            // The build may settle and dispose the source in the same instant; that race is benign.
+            try { _cancellation.Cancel(); }
+            catch (ObjectDisposedException) { }
+        }
 
         private async Task<TerrainHorizonProfile> BuildCompleteAsync()
         {
@@ -317,12 +441,17 @@ public sealed class HorizonService : IHorizonService
             }
             catch (Exception ex)
             {
-                _prepared.TrySetException(ex);
-                for (var index = 0; index < _bearingReady.Length; index++)
-                    _bearingReady[index].TrySetException(ex);
+                Fail(_prepared, ex);
+                for (var index = 0; index < _bearingReady.Length; index++) Fail(_bearingReady[index], ex);
                 throw;
             }
-            finally { _cancellation.Dispose(); }
+            finally
+            {
+                // Settled under the same lock DetachConsumer uses, so a late detach cannot decide to
+                // cancel a build that has already published its profile.
+                lock (_stateGate) _settled = true;
+                _cancellation.Dispose();
+            }
         }
 
         private async Task PrepareAsync(CancellationToken cancellationToken)
@@ -451,10 +580,21 @@ public sealed class HorizonService : IHorizonService
             }
             catch (Exception ex)
             {
-                foreach (var index in bearingIndices) _bearingReady[index].TrySetException(ex);
+                foreach (var index in bearingIndices) Fail(_bearingReady[index], ex);
                 throw;
             }
             finally { _computeSlots.Release(); }
+        }
+
+        /// <summary>
+        /// Completes a pending bearing after a failure. Cancellation completes it as cancelled rather
+        /// than faulted: most bearing tasks are never awaited, and an unawaited faulted task would
+        /// raise a process-wide unobserved-exception event every time a session is abandoned.
+        /// </summary>
+        private static void Fail(TaskCompletionSource<bool> pending, Exception exception)
+        {
+            if (exception is OperationCanceledException cancelled) pending.TrySetCanceled(cancelled.CancellationToken);
+            else pending.TrySetException(exception);
         }
 
         private TerrainHorizonSample BuildBearing(int bearingIndex, int batchOffset,
@@ -532,7 +672,8 @@ public sealed class HorizonService : IHorizonService
         {
             var manualOverride = _request.ManualGroundElevationOverrideMetres;
             _observerGroundMetres = manualOverride ?? (_observerTerrain.HasValue
-                ? _observerTerrain.Value : _observer.ElevationMetres);
+                ? _observerTerrain.Value
+                : _request.EffectiveObserverGroundFallbackMetres(_observer.ElevationMetres));
             _observerResolvedStatus = manualOverride.HasValue ? TerrainSampleStatus.Fallback :
                 _observerTerrain.HasValue ? _observerTerrainDiagnostics.Status : TerrainSampleStatus.Fallback;
             _observerResolutionPolicy = manualOverride.HasValue
@@ -751,6 +892,10 @@ public sealed class HorizonService : IHorizonService
         if (request.ManualGroundElevationOverrideMetres is double manualGroundElevation &&
             (!double.IsFinite(manualGroundElevation) || manualGroundElevation is < -500 or > 9_000))
             throw new ArgumentOutOfRangeException(nameof(request.ManualGroundElevationOverrideMetres));
+        // The fallback datum takes part in cache identity, so a non-finite value must not reach it.
+        if (request.FallbackObserverGroundElevationMetres is double fallbackGroundElevation &&
+            !double.IsFinite(fallbackGroundElevation))
+            throw new ArgumentOutOfRangeException(nameof(request.FallbackObserverGroundElevationMetres));
         var policy = request.EffectiveAdaptiveSampling;
         if (request.DistanceStepMetres is null &&
             (!double.IsFinite(policy.MinimumDistanceMetres) || policy.MinimumDistanceMetres <= 0 ||

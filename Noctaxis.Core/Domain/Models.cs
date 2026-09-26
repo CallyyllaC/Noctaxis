@@ -31,6 +31,15 @@ public sealed record ObserverElevationState(
 {
     [JsonIgnore]
     public bool TerrainCalculationsEnabled { get; init; } = true;
+
+    /// <summary>
+    /// The observer datum as supplied, kept so that a later terrain-resolved or manually overridden
+    /// elevation cannot change the identity of an otherwise identical terrain request. It is the
+    /// fallback input, never an output, and is therefore not persisted.
+    /// </summary>
+    [JsonIgnore]
+    public double? SuppliedGroundElevationAslMetres { get; init; }
+
     [JsonIgnore]
     public bool IsManualOverride => ManualGroundElevationOverrideAslMetres.HasValue;
 
@@ -56,6 +65,14 @@ public sealed record ObserverElevationState(
 
     public ObserverElevationState WithTerrainGroundElevation(double elevationAslMetres) =>
         this with { TerrainGroundElevationAslMetres = NormaliseElevation(elevationAslMetres) };
+
+    /// <summary>
+    /// Records the supplied datum the first time a derived elevation is about to replace it. Later
+    /// calls keep the original, so the recorded value stays the input the user actually gave.
+    /// </summary>
+    public ObserverElevationState WithSuppliedGroundElevation(double elevationAslMetres) =>
+        SuppliedGroundElevationAslMetres.HasValue ? this
+            : this with { SuppliedGroundElevationAslMetres = NormaliseElevation(elevationAslMetres) };
 
     public ObserverElevationState WithManualOverride(double elevationAslMetres) =>
         this with { ManualGroundElevationOverrideAslMetres = NormaliseElevation(elevationAslMetres) };

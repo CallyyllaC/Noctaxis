@@ -17,11 +17,11 @@ public partial class CelestialObjectItemViewModel : ObservableObject
     private bool _suppressVisibility;
 
     public CelestialObjectItemViewModel(AstralTarget target, bool isVisible, int order, bool isPrimary,
-        string colour, Action<CelestialObjectItemViewModel> changed,
+        Action<CelestialObjectItemViewModel> changed,
         Action<CelestialObjectItemViewModel> makePrimary, Action<CelestialObjectItemViewModel> remove,
         Action<CelestialObjectItemViewModel, int>? move = null)
     {
-        Target = target; _isVisible = isVisible; Order = order; _isPrimary = isPrimary; Colour = colour;
+        Target = target; _isVisible = isVisible; _order = order; _isPrimary = isPrimary;
         _changed = changed; _makePrimary = makePrimary; _remove = remove; _move = move ?? ((_, _) => { });
     }
 
@@ -29,8 +29,15 @@ public partial class CelestialObjectItemViewModel : ObservableObject
     public string TargetId => Target.Id;
     public string DisplayName => Target.DisplayName;
     public string Detail => string.Join(" · ", new[] { Target.PrimaryIdentifier, Target.Constellation }.Where(value => !string.IsNullOrWhiteSpace(value)));
-    public int Order { get; set; }
-    public string Colour { get; }
+    /// <summary>Selection order; it decides the identity slot shared with the chart and map.</summary>
+    public int Order
+    {
+        get => _order;
+        set { if (_order == value) return; _order = value; OnPropertyChanged(); OnPropertyChanged(nameof(Role)); }
+    }
+    private int _order;
+    /// <summary>Identity slot: theme colour, dash pattern and marker, as drawn on the chart and map.</summary>
+    public Noctaxis.Desktop.Controls.CelestialRole Role => Noctaxis.Desktop.Controls.CelestialPalette.Role(Target, Order);
     public bool CanRemove => !Target.IsSun && !Target.IsMoon;
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private bool _isPrimary;

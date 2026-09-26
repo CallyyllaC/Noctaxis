@@ -43,7 +43,9 @@ public sealed record TerrariumProviderMetrics(
     long DecodedCacheHits,
     long Samples,
     long UnavailableTiles,
-    double DecodeMilliseconds);
+    double DecodeMilliseconds,
+    // PNG decodes performed, including the decode that validates a cached file.
+    long TileDecodes = 0);
 
 /// <summary>
 /// Canonical terrain source backed by Mapzen/Tilezen Terrarium PNG tiles. Terrarium is a
@@ -70,6 +72,7 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
     private long _samples;
     private long _unavailableTiles;
     private long _decodeTicks;
+    private long _tileDecodes;
 
     public TerrariumTerrainProvider(HttpClient http, IEnvironmentalTileCache cache,
         ILogger<TerrariumTerrainProvider> logger, TerrariumTerrainOptions? options = null)
@@ -88,7 +91,8 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
     public TerrariumProviderMetrics Metrics => new(
         Interlocked.Read(ref _tileLoads), Interlocked.Read(ref _decodedCacheHits),
         Interlocked.Read(ref _samples), Interlocked.Read(ref _unavailableTiles),
-        Interlocked.Read(ref _decodeTicks) * 1_000d / Stopwatch.Frequency);
+        Interlocked.Read(ref _decodeTicks) * 1_000d / Stopwatch.Frequency,
+        Interlocked.Read(ref _tileDecodes));
 
     public async Task<EnvironmentalValue<double>> GetElevationAsync(GeoCoordinate coordinate,
         CancellationToken cancellationToken) =>
@@ -365,10 +369,13 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
         _logger.LogInformation("Terrarium tile requested: {Tile}", key.Id);
         var descriptor = Descriptor(key);
         using var lease = await _cache.LeaseTerrainAsync(descriptor, generation, cancellationToken).ConfigureAwait(false);
+        // Validation has to decode the PNG in full to prove it is intact, so the decoded tile is kept
+        // and used instead of reading and decoding the same file a second time.
+        var validated = new DecodedTileCapture();
         var result = await _cache.GetOrCreateDetailedAsync(descriptor,
             token => EnvironmentalHttpDownloader.DownloadDetailedAsync(_http,
                 new Uri(new Uri(_options.BaseUrl), $"{key.Zoom}/{key.X}/{key.Y}.png"),
-                MaximumTileBytes, token), TerrariumTile.IsValid, cancellationToken).ConfigureAwait(false);
+                MaximumTileBytes, token), path => TryDecode(path, validated), cancellationToken).ConfigureAwait(false);
         if (!result.IsAvailable)
         {
             Interlocked.Increment(ref _unavailableTiles);
@@ -381,21 +388,16 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
                 (_options.FailureRetryDelay ?? TimeSpan.FromSeconds(30)));
             return null;
         }
-        var timer = Stopwatch.StartNew();
         try
         {
-            var tile = TerrariumTile.Load(result.Path!);
-            timer.Stop();
-            Interlocked.Add(ref _decodeTicks, timer.ElapsedTicks);
-            _logger.LogDebug("Terrarium tile decoded: {Tile}, cacheHit={CacheHit}, elapsed={Elapsed:F1}ms",
-                key.Id, result.CacheHit, timer.Elapsed.TotalMilliseconds);
+            // A cache implementation that does not validate leaves nothing captured, so decode now.
+            var tile = validated.Tile ?? Decode(result.Path!);
+            _logger.LogDebug("Terrarium tile decoded: {Tile}, cacheHit={CacheHit}", key.Id, result.CacheHit);
             _recentFailures.TryRemove(key, out _);
             return new TerrariumTileLoad(tile, TerrainSampleStatus.Valid, result.Message);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or PngjException)
         {
-            timer.Stop();
-            Interlocked.Add(ref _decodeTicks, timer.ElapsedTicks);
             _logger.LogWarning(ex, "Terrarium PNG decode failed for {Tile}", key.Id);
             var failure = new TerrariumTileLoad(null, TerrainSampleStatus.Error,
                 "Terrarium PNG could not be decoded.");
@@ -404,6 +406,41 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
             return null;
         }
     }
+
+    /// <summary>
+    /// Cache validation for Terrarium tiles: a file is valid exactly when it decodes, which is the
+    /// same test <see cref="TerrariumTile.IsValid"/> applies, and the decoded tile is retained for use.
+    /// Validation may run twice for one load (a corrupt cached file, then the replacement download),
+    /// so the most recent successful decode wins.
+    /// </summary>
+    private bool TryDecode(string path, DecodedTileCapture capture)
+    {
+        capture.Tile = null;
+        try
+        {
+            capture.Tile = Decode(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or PngjException)
+        {
+            _logger.LogDebug(ex, "Rejected a Terrarium PNG that could not be decoded: {Path}", path);
+            return false;
+        }
+    }
+
+    private TerrariumTile Decode(string path)
+    {
+        Interlocked.Increment(ref _tileDecodes);
+        var timer = Stopwatch.StartNew();
+        try { return TerrariumTile.Load(path); }
+        finally
+        {
+            timer.Stop();
+            Interlocked.Add(ref _decodeTicks, timer.ElapsedTicks);
+        }
+    }
+
+    private sealed class DecodedTileCapture { public TerrariumTile? Tile; }
 
     private static TerrariumPixelAddress GlobalPixel(long x, long y, int zoom)
     {

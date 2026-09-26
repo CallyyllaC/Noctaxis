@@ -211,6 +211,7 @@ internal sealed class SkiaEnvironmentalOverlayResources : IDisposable
         _uniforms.Add("weatherOpacityScale", parameters.WeatherOpacityScale);
         _uniforms.Add("terrainColour", ToColor(Color.FromUInt32(parameters.TerrainColourArgb)));
         _uniforms.Add("terrainTintOpacity", parameters.TerrainTintOpacity);
+        _uniforms.Add("weatherMarkColour", ToColor(Color.FromUInt32(parameters.WeatherMarkArgb)));
 
         _children.Reset();
         _children.Add("terrainProfile", profile.Shader);
@@ -379,12 +380,18 @@ public static class EnvironmentalOverlayShader
         uniform float weatherOpacityScale;
         uniform half4 terrainColour;
         uniform float terrainTintOpacity;
+        uniform half4 weatherMarkColour;
         uniform shader terrainProfile;
 
         const float TWO_PI = 6.28318530717958647692;
         const float MERCATOR_RADIUS = 6378137.0;
         const float EARTH_RADIUS = 6371008.8;
         const half TERRAIN_FRONTIER_OPACITY = 0.60;
+        // The weather visibility distance is marked by a dashed frontier arc, so the limit does not rest on
+        // desaturation alone (the grey is invisible to some colour-vision deficiencies). It is dashed to
+        // differ in pattern from the solid terrain frontier; fills stay continuous.
+        const float WEATHER_FRONTIER_DASH = 9.0;
+        const half WEATHER_FRONTIER_OPACITY = 0.85;
 
         half4 premul(half3 rgb, half alpha) {
             return half4(rgb * alpha, alpha);
@@ -466,6 +473,10 @@ public static class EnvironmentalOverlayShader
             half4 cone = weatherReached
                 ? premul(half3(luminance * 0.55), half(min(0.7, coneOpacity * 1.6 * weatherOpacityScale)))
                 : premul(coneColour.rgb, half(min(0.7, coneOpacity * 1.8)));
+            float groundPixelSize = max(0.001, length(float2(worldStepXX, worldStepXY)) * cosObserverLatitude);
+            if (visibilityDistance > 0.0 && abs(distance - visibilityDistance) <= groundPixelSize * 1.2 &&
+                fract(signedOffset * visibilityDistance / groundPixelSize / WEATHER_FRONTIER_DASH) < 0.6)
+                cone = over(premul(weatherMarkColour.rgb, WEATHER_FRONTIER_OPACITY), cone);
             // Presentation only: preserve the Pass C physical coverage and sqrt curve.
             half displayStrength = sqrt(clamp(terrain.b, half(0.0), half(1.0)));
             half4 result = terrainReached

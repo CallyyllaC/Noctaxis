@@ -81,7 +81,9 @@ public sealed partial class EnvironmentalOverlayTests
     public void TintUsesConfiguredHueAndBoundedOpacityWithoutPatternAndColoursFrontier()
     {
         Assert.DoesNotContain("hatch", EnvironmentalOverlayShader.Source, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("fract(", EnvironmentalOverlayShader.Source);
+        // The only periodic term is the dashed weather-visibility frontier; tint and cone fills stay continuous.
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(EnvironmentalOverlayShader.Source, @"fract\("));
+        Assert.Contains("WEATHER_FRONTIER_DASH", EnvironmentalOverlayShader.Source);
         var sector = new GeoSector(Observer, 90, 70, 500000);
         var coordinator = new EnvironmentalOverlayStateCoordinator();
         var state = coordinator.Update(Observer, sector, Visibility(sector, null, (0, 1000), (70, 1000)), ProfileKey());

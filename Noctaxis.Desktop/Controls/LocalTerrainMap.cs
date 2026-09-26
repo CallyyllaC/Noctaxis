@@ -90,7 +90,35 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
             _contrastSource = null;
             _globalSource = null;
         };
+        // Planning symbols drawn over the relief follow the theme's map roles; relief, water and
+        // missing-terrain pixels are data and never do.
+        Bind(ObserverFillProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            Themes.MapThemeTokens.ColourKey(Themes.MapThemeTokens.PinFill)));
+        Bind(ObserverOutlineProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            Themes.MapThemeTokens.ColourKey(Themes.MapThemeTokens.PinOutline)));
+        Bind(ViewFillProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            Themes.MapThemeTokens.ColourKey(Themes.MapThemeTokens.ViewFill)));
+        Bind(ViewStrokeProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            Themes.MapThemeTokens.ColourKey(Themes.MapThemeTokens.ViewStroke)));
+        Bind(BearingColourProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            Themes.MapThemeTokens.ColourKey(Themes.MapThemeTokens.Bearing)));
     }
+    // Defaults are the Noctaxis map roles, used when no theme resources are loaded.
+    public static readonly StyledProperty<Color> ObserverFillProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, Color>(nameof(ObserverFill), Color.Parse("#0B0F17"));
+    public static readonly StyledProperty<Color> ObserverOutlineProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, Color>(nameof(ObserverOutline), Colors.White);
+    public static readonly StyledProperty<Color> ViewFillProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, Color>(nameof(ViewFill), Color.Parse("#245FCBEA"));
+    public static readonly StyledProperty<Color> ViewStrokeProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, Color>(nameof(ViewStroke), Color.Parse("#88DCF4"));
+    public static readonly StyledProperty<Color> BearingColourProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, Color>(nameof(BearingColour), Color.Parse("#F5D070"));
+    public Color ObserverFill { get => GetValue(ObserverFillProperty); set => SetValue(ObserverFillProperty, value); }
+    public Color ObserverOutline { get => GetValue(ObserverOutlineProperty); set => SetValue(ObserverOutlineProperty, value); }
+    public Color ViewFill { get => GetValue(ViewFillProperty); set => SetValue(ViewFillProperty, value); }
+    public Color ViewStroke { get => GetValue(ViewStrokeProperty); set => SetValue(ViewStrokeProperty, value); }
+    public Color BearingColour { get => GetValue(BearingColourProperty); set => SetValue(BearingColourProperty, value); }
     public static readonly StyledProperty<TerrainDebugMapSnapshot?> MapProperty =
         AvaloniaProperty.Register<LocalTerrainMap, TerrainDebugMapSnapshot?>(nameof(Map));
     public static readonly StyledProperty<TerrainHorizonProfile?> ProfileProperty =
@@ -112,7 +140,8 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         AffectsMeasure<LocalTerrainMap>(ExternalChromeProperty, LoadStateProperty, MapProperty);
         AffectsRender<LocalTerrainMap>(ExternalChromeProperty, MapProperty, ProfileProperty,
         ObserverProperty, GenerationProperty, LoadStateProperty, CentreBearingDegreesProperty,
-        HorizontalFieldOfViewDegreesProperty, MetresPerPixelProperty, MainViewportHeightPixelsProperty, ContextMultiplierProperty);
+        HorizontalFieldOfViewDegreesProperty, MetresPerPixelProperty, MainViewportHeightPixelsProperty, ContextMultiplierProperty,
+        ObserverFillProperty, ObserverOutlineProperty, ViewFillProperty, ViewStrokeProperty, BearingColourProperty);
     }
 
     public TerrainDebugMapSnapshot? Map
@@ -175,7 +204,8 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         DrawSelectedBearing(context, bounds);
 
         var centre = bounds.Center;
-        context.DrawEllipse(new SolidColorBrush(Color.Parse("#FFF2A8")), new Pen(Brushes.Black, 1),
+        // The same observer symbol as the Planner map pin.
+        context.DrawEllipse(new SolidColorBrush(ObserverFill), new Pen(new SolidColorBrush(ObserverOutline), 1),
             centre, 3.5, 3.5);
         var north = ChromeText("N ↑");
         DrawLabel(context, "N ↑", new Point(bounds.Width - north.Width - 3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
@@ -329,15 +359,14 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
             figure.LineTo(right);
             figure.EndFigure(true);
         }
-        context.DrawGeometry(new SolidColorBrush(Color.Parse("#245FCBEA")),
-            new Pen(new SolidColorBrush(Color.Parse("#88DCF4")), 1), geometry);
+        context.DrawGeometry(new SolidColorBrush(ViewFill), new Pen(new SolidColorBrush(ViewStroke), 1), geometry);
     }
 
     private void DrawSelectedBearing(DrawingContext context, Rect bounds)
     {
         var centre = bounds.Center;
         var radius = Math.Min(bounds.Width, bounds.Height) / 2;
-        context.DrawLine(new Pen(new SolidColorBrush(Color.Parse("#F5D070")), 1.2), centre,
+        context.DrawLine(new Pen(new SolidColorBrush(BearingColour), 1.2), centre,
             BearingPoint(centre, radius, CentreBearingDegrees));
     }
 

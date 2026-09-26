@@ -14,7 +14,21 @@ public partial class MainViewModel
     [ObservableProperty] private Mapping.ILightPollutionColorMap _settingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Grayscale;
     public IReadOnlyList<Mapping.ILightPollutionColorMap> LightPollutionColorMapOptions => LightPollutionPaletteHelp.Options;
     public string LightPollutionColorMapDescription => LightPollutionPaletteHelp.Description(SettingsLightPollutionColorMap?.Id);
-    partial void OnSettingsLightPollutionColorMapChanged(Mapping.ILightPollutionColorMap value) => OnPropertyChanged(nameof(LightPollutionColorMapDescription));
+    partial void OnSettingsLightPollutionColorMapChanged(Mapping.ILightPollutionColorMap value)
+    {
+        OnPropertyChanged(nameof(LightPollutionColorMapDescription));
+        OnPropertyChanged(nameof(LightPollutionColourVisionAdvice));
+        OnPropertyChanged(nameof(HasLightPollutionColourVisionAdvice));
+    }
+    /// <summary>
+    /// Turbo is the one colour map whose levels collapse under colour-vision deficiencies. With a
+    /// colour-vision mode active the user is offered Cividis; their choice is never changed for them.
+    /// </summary>
+    public string LightPollutionColourVisionAdvice => SelectedColourVisionValue != ColourVisionMode.None && SettingsLightPollutionColorMap?.Id == "turbo"
+        ? "Turbo is not colour-vision safe with the selected colour vision mode. Cividis or Grayscale keep every level distinguishable." : string.Empty;
+    public bool HasLightPollutionColourVisionAdvice => LightPollutionColourVisionAdvice.Length > 0;
+    [RelayCommand]
+    private void UseColourVisionSafeLightPollutionPalette() => SettingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Resolve("cividis");
     [ObservableProperty] private string _lightPollutionStatus = "Not installed";
     [ObservableProperty] private string _lightPollutionProgress = "";
     [ObservableProperty] private bool _isManagingLightPollution;

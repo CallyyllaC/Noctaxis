@@ -40,24 +40,35 @@ public sealed class TerrainPriorityLifecycleTests
         Assert.Equal(360, moved.EffectiveCompletedBearingCount);
     }
 
+    /// <summary>
+    /// Replaces an earlier test that asserted the opposite: the creating caller's token used to own
+    /// the shared producer, so cancelling it cancelled work other callers were still waiting for.
+    /// The producer now belongs to the session. Generation invalidation, which does still reject a
+    /// whole build, is covered by TerrainResultCacheTests and HorizonSessionOwnershipTests.
+    /// </summary>
     [Fact]
-    public async Task ProducerCancellationStillRejectsWholeGenerationAndDoesNotCacheIt()
+    public async Task CreatingCallerCancellationLeavesTheSharedProducerRunningForOtherConsumers()
     {
         var terrain = new GatedTerrain();
         var service = new HorizonService(terrain, NullLogger<HorizonService>.Instance, 2);
         var observer = new GeoCoordinate(53.55, -.48);
         var request = new TerrainProfileRequest(360, 1000, 1000);
-        using var producer = new CancellationTokenSource();
-        var work = service.StartProfile(observer, request, producer.Token);
+        using var creator = new CancellationTokenSource();
+        var creating = service.GetProfileAsync(observer, request, creator.Token);
         await terrain.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var priority = work.PrioritiseBearingsAsync([90d, 91d], default);
-        producer.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => work.CompleteProfile);
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => priority);
+        var joined = service.GetPriorityProfileAsync(observer, request, [90d, 91d], default);
+
+        creator.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => creating);
+        // Nothing incomplete may be published, and the surviving consumer still owns the build.
         Assert.Equal(0, service.CompletedCacheDiagnostics.Count);
         terrain.Release.TrySetResult(true);
+        var priorityProfile = await joined.WaitAsync(TimeSpan.FromSeconds(5));
+        Assert.NotEmpty(priorityProfile.Samples);
         var recovered = await service.GetProfileAsync(observer, request, default).WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(360, recovered.EffectiveCompletedBearingCount);
+        Assert.Equal(1, service.CompletedCacheDiagnostics.Count);
     }
 
     private sealed class GatedTerrain : ITerrainElevationProvider

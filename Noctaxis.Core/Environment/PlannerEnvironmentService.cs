@@ -57,7 +57,7 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
         TerrainProfileRequest terrainRequest, CancellationToken cancellationToken)
     {
         var normalised = observer.Normalised();
-        var key = new EnvironmentCacheKey(normalised, terrainRequest);
+        var key = EnvironmentCacheKey.For(normalised, terrainRequest);
         BuildEntry entry;
         lock (_gate)
         {
@@ -169,7 +169,20 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
         return new GeoRasterRequest(new GeoBounds(south, west, north, east), 1, 1);
     }
 
+    /// <summary>
+    /// Snapshot identity. The observer's own elevation is deliberately absent: a resolved ground
+    /// elevation is written back into the session observer after a build, and an otherwise identical
+    /// request must still reuse this snapshot. Only the fallback datum, which is the one part of that
+    /// elevation able to change a result, takes part.
+    /// </summary>
     private readonly record struct EnvironmentCacheKey(
-        GeoCoordinate Observer,
-        TerrainProfileRequest TerrainRequest);
+        double Latitude,
+        double Longitude,
+        double ObserverGroundFallbackMetres,
+        TerrainProfileRequest TerrainRequest)
+    {
+        public static EnvironmentCacheKey For(GeoCoordinate observer, TerrainProfileRequest request) =>
+            new(observer.Latitude, observer.Longitude,
+                request.EffectiveObserverGroundFallbackMetres(observer.ElevationMetres), request);
+    }
 }

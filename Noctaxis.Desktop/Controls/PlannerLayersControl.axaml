@@ -3,7 +3,7 @@
              xmlns:vm="using:Noctaxis.Desktop.ViewModels"
              x:Class="Noctaxis.Desktop.Controls.PlannerLayersControl"
              x:DataType="vm:PlannerLayersViewModel">
-  <Button Name="LayersButton" Content="Layers ▾"
+  <Button Name="LayersButton" Classes="mapChrome" Content="Layers ▾"
           AutomationProperties.Name="Map layers"
           AutomationProperties.HelpText="Choose the map layers shown in the Planner."
           ToolTip.Tip="Choose the map layers shown in the Planner.">

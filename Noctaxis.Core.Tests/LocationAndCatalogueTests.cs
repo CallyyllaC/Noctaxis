@@ -288,6 +288,37 @@ public sealed class LocationAndCatalogueTests
         Assert.Equal(250, environment.LastRequest.ManualGroundElevationOverrideMetres);
     }
 
+    [Fact]
+    public async Task PlanningEnvironmentRequest_KeepsItsFallbackDatumAfterTerrainResolvesTheGround()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var environment = new FakePlannerEnvironment(new UnavailableHorizon());
+        var service = new PlanningService(catalogue, new CountingAstronomy(), new LensCalculator(),
+            environment, new FakeWeather(), new TimeZoneResolver());
+        var session = PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 12, 0), "UTC") with
+        {
+            Observer = new GeoCoordinate(51.5, -.1, 0)
+        };
+
+        await service.LoadEnvironmentAsync(session, 1.7, CancellationToken.None);
+        var supplied = environment.LastRequest!;
+
+        // What the view model does once a build resolves the ground: the resolved elevation replaces
+        // the observer's, and the supplied datum is recorded first so the request cannot move with it.
+        var resolved = session with
+        {
+            Observer = session.Observer with { ElevationMetres = 142.3 },
+            ObserverElevation = session.EffectiveObserverElevation
+                .WithSuppliedGroundElevation(session.Observer.ElevationMetres)
+                .WithTerrainGroundElevation(142.3)
+        };
+        await service.LoadEnvironmentAsync(resolved, 1.7, CancellationToken.None);
+
+        Assert.Equal(0, supplied.FallbackObserverGroundElevationMetres);
+        // Identical request, so the same horizon and environment cache entries answer it.
+        Assert.Equal(supplied, environment.LastRequest);
+    }
+
     private sealed record FakeDevice(LocationResolution? Result) : IDeviceLocationProvider
     {
         public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => Task.FromResult(Result);

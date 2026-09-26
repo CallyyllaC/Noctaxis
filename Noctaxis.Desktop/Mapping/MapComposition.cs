@@ -1,7 +1,8 @@
 namespace Noctaxis.Desktop.Mapping;
 
 public enum MapLayerGroup { Basemap, Environmental, Planning, Interaction }
-public enum BasemapKind { Street }
+/// <summary>Street is vector data styled by the theme; Satellite is photographic imagery shown as-is.</summary>
+public enum BasemapKind { Street, Satellite }
 
 [Flags]
 public enum MapLayerCapabilities { None = 0, Visibility = 1, Opacity = 2 }

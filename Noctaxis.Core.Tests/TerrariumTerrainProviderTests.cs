@@ -255,6 +255,63 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
         Assert.Equal(2, provider.Metrics.TileLoads);
     }
 
+    [Fact]
+    public async Task ValidTileIsDecodedOnceOnDownloadAndOnceOnEveryDiskHit()
+    {
+        // Cache validation decodes the PNG to prove it is intact; that decode is the one that is used.
+        Seed(new TerrariumTileKey(1, 1, 1), 42);
+        var bytes = File.ReadAllBytes(Path.Combine(_directory, "1-1-1.png"));
+        var handler = new PngHandler(bytes);
+        using var http = new HttpClient(handler);
+        var paths = new TerrainPaths(_directory);
+        var cache = new EnvironmentalTileCache(paths, NullLogger<EnvironmentalTileCache>.Instance);
+        var coordinate = CoordinateAtGlobalPixelCentre(1, 256, 256);
+        var options = new TerrariumTerrainOptions(1, 4);
+
+        var downloader = new TerrariumTerrainProvider(http, cache,
+            NullLogger<TerrariumTerrainProvider>.Instance, options);
+        Assert.Equal(42, (await downloader.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(42, (await downloader.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(1, downloader.Metrics.TileDecodes);
+
+        // A second provider shares the cache directory but not the decoded-tile cache, so it loads
+        // the committed file from disk.
+        var reader = new TerrariumTerrainProvider(http, cache,
+            NullLogger<TerrariumTerrainProvider>.Instance, options);
+        Assert.Equal(42, (await reader.GetElevationAsync(coordinate, default)).Value);
+
+        Assert.Equal(1, handler.Calls);
+        Assert.Equal(1, reader.Metrics.TileLoads);
+        Assert.Equal(1, reader.Metrics.TileDecodes);
+    }
+
+    [Fact]
+    public async Task CorruptCachedTileIsStillRejectedAndReplaced()
+    {
+        Seed(new TerrariumTileKey(1, 1, 1), 42);
+        var bytes = File.ReadAllBytes(Path.Combine(_directory, "1-1-1.png"));
+        var handler = new PngHandler(bytes);
+        using var http = new HttpClient(handler);
+        var paths = new TerrainPaths(_directory);
+        var cache = new EnvironmentalTileCache(paths, NullLogger<EnvironmentalTileCache>.Instance);
+        var coordinate = CoordinateAtGlobalPixelCentre(1, 256, 256);
+        var options = new TerrariumTerrainOptions(1, 4);
+        var first = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance, options);
+        Assert.Equal(42, (await first.GetElevationAsync(coordinate, default)).Value);
+        var cached = Assert.Single(Directory.GetFiles(cache.RootDirectory, "1-1.png", SearchOption.AllDirectories));
+
+        await File.WriteAllBytesAsync(cached, [1, 2, 3, 4, 5, 6, 7, 8]);
+        var second = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance, options);
+
+        // Validation fails, so the tile is re-fetched and the good value is restored.
+        Assert.Equal(42, (await second.GetElevationAsync(coordinate, default)).Value);
+        Assert.Equal(2, handler.Calls);
+        // The rejected file plus the validated replacement.
+        Assert.Equal(2, second.Metrics.TileDecodes);
+        Assert.True(File.Exists(cached));
+    }
+
     private sealed class TerrainPaths(string path) : Noctaxis.Core.Persistence.IUserDataPathProvider
     { public string GetApplicationDataDirectory() => path; }
     private sealed class PngHandler(byte[] bytes) : HttpMessageHandler

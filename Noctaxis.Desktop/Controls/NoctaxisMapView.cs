@@ -15,6 +15,7 @@ using Noctaxis.Core.Planning;
 using Noctaxis.Core.Terrain;
 using Noctaxis.Desktop.ViewModels;
 using Noctaxis.Desktop.Mapping;
+using Noctaxis.Desktop.Themes;
 
 namespace Noctaxis.Desktop.Controls;
 
@@ -139,6 +140,25 @@ public class NoctaxisMapView : UserControl
         attribution.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeText"));
         attribution.Bind(TextBlock.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeBackground"));
         attribution.Bind(TextBlock.FontSizeProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("TextSmall"));
+        // The map canvas shows before tiles arrive and beyond their extent. Mapsui paints its own opaque
+        // Map.BackColor (white by default) over the control background, so both follow MapSurface.
+        Bind(BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.Surface));
+        Bind(MapSurfaceColourProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(MapThemeTokens.Surface)));
+        _overlay.Bind(MapOverlay.CelestialColoursProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(CelestialThemeTokens.ColourSet));
+        _overlay.Bind(MapOverlay.LineHaloProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            MapThemeTokens.ColourKey(MapThemeTokens.LabelHalo)));
+        _overlay.Bind(MapOverlay.WeatherMarkProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            MapThemeTokens.ColourKey(MapThemeTokens.Label)));
+        _overlay.Bind(MapOverlay.PinFillProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            MapThemeTokens.ColourKey(MapThemeTokens.PinFill)));
+        _overlay.Bind(MapOverlay.PinOutlineProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            MapThemeTokens.ColourKey(MapThemeTokens.PinOutline)));
+        _overlay.Bind(MapOverlay.PinActivityColourProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
+            MapThemeTokens.ColourKey(MapThemeTokens.PinActivity)));
+        // The vector basemap is drawn from the theme's basemap roles and restyled live.
+        foreach (var (property, token) in BasemapRoleProperties.Zip(MapThemeTokens.Basemap))
+            Bind(property, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(token)));
+        ApplyBasemapStyle();
         Content = new Grid { Children = { _mapControl, _overlay, attribution } };
 
         _composition.Runtime.SetActive("camera-framing", ShowCameraOverlay);
@@ -211,6 +231,10 @@ public class NoctaxisMapView : UserControl
     protected MapLayerStateController LayerRuntime => _composition.Runtime;
     internal PlannerMapComposition CompositionForTesting => _composition;
     internal string? AttributionForTesting => _attribution.Text;
+    internal TextBlock AttributionControlForTesting => _attribution;
+    internal (Color Fill, Color Outline, Color Activity) PinColoursForTesting =>
+        (_overlay.PinFill, _overlay.PinOutline, _overlay.PinActivityColour);
+    internal CelestialColourSet CelestialColoursForTesting => _overlay.CelestialColours;
     internal bool EnvironmentalLayerVisibleForTesting => _overlay.ShowEnvironmentalShading;
     internal bool CameraLayerVisibleForTesting => _overlay.ShowCameraOverlay;
     internal bool CelestialLayerVisibleForTesting => _overlay.ShowCelestialOverlays;
@@ -235,9 +259,80 @@ public class NoctaxisMapView : UserControl
         _overlay.InvalidateVisual();
     }
 
+    private static readonly StyledProperty<Color> MapSurfaceColourProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("MapSurfaceColour", Colors.Transparent);
+
+    private void ApplyMapSurface()
+    {
+        var colour = GetValue(MapSurfaceColourProperty);
+        _composition.Map.BackColor = new Mapsui.Styles.Color(colour.R, colour.G, colour.B, colour.A);
+        _mapControl?.RefreshGraphics();
+    }
+
+    internal Mapsui.Styles.Color MapBackColorForTesting => _composition.Map.BackColor;
+
+    // One colour per MapThemeTokens.Basemap role (same order), bound to the theme's colour resources.
+    private static readonly StyledProperty<Color> BasemapLandProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapLand");
+    private static readonly StyledProperty<Color> BasemapBuiltUpProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapBuiltUp");
+    private static readonly StyledProperty<Color> BasemapBuildingProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapBuilding");
+    private static readonly StyledProperty<Color> BasemapWaterProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapWater");
+    private static readonly StyledProperty<Color> BasemapVegetationProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapVegetation");
+    private static readonly StyledProperty<Color> BasemapRoadMinorProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapRoadMinor");
+    private static readonly StyledProperty<Color> BasemapRoadMajorProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapRoadMajor");
+    private static readonly StyledProperty<Color> BasemapRoadCasingProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapRoadCasing");
+    private static readonly StyledProperty<Color> BasemapRailProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapRail");
+    private static readonly StyledProperty<Color> BasemapBoundaryProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapBoundary");
+    private static readonly StyledProperty<Color> BasemapLabelProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapLabel");
+    private static readonly StyledProperty<Color> BasemapLabelHaloProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapLabelHalo");
+    private static readonly StyledProperty<Color> BasemapWaterLabelProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapWaterLabel");
+    private static readonly StyledProperty<Color> BasemapPoiProperty = AvaloniaProperty.Register<NoctaxisMapView, Color>("BasemapPoi");
+    private static readonly StyledProperty<Color>[] BasemapRoleProperties =
+    [
+        BasemapLandProperty, BasemapBuiltUpProperty, BasemapBuildingProperty, BasemapWaterProperty,
+        BasemapVegetationProperty, BasemapRoadMinorProperty, BasemapRoadMajorProperty, BasemapRoadCasingProperty,
+        BasemapRailProperty, BasemapBoundaryProperty, BasemapLabelProperty, BasemapLabelHaloProperty,
+        BasemapWaterLabelProperty, BasemapPoiProperty
+    ];
+    private static readonly HashSet<AvaloniaProperty> BasemapRoleSet = BasemapRoleProperties.Length == MapThemeTokens.Basemap.Count &&
+        BasemapRoleProperties.Zip(MapThemeTokens.Basemap).All(pair => "Basemap" + pair.Second[3..] == pair.First.Name)
+            ? [.. BasemapRoleProperties]
+            : throw new InvalidOperationException("Basemap role properties must mirror MapThemeTokens.Basemap.");
+    private bool _basemapStylePending;
+
+    /// <summary>Resolves the bound roles into a style; unresolved roles keep the Noctaxis defaults.</summary>
+    internal Mapping.Vector.BasemapStyle ResolveBasemapStyle()
+    {
+        var roles = BasemapRoleProperties.Zip(MapThemeTokens.Basemap)
+            .ToDictionary(pair => pair.Second, pair => pair.First);
+        return Mapping.Vector.BasemapStyle.FromTokens(token => roles.TryGetValue(token, out var property) && IsSet(property)
+            ? ToSkia(GetValue(property)) : null);
+    }
+
+    private static SkiaSharp.SKColor ToSkia(Color colour) => new(colour.R, colour.G, colour.B, colour.A);
+
+    private void ApplyBasemapStyle()
+    {
+        _basemapStylePending = false;
+        _composition?.ApplyBasemapStyle(ResolveBasemapStyle());
+    }
+
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == MapSurfaceColourProperty)
+        {
+            if (_composition is not null) ApplyMapSurface();
+            return;
+        }
+        if (BasemapRoleSet.Contains(change.Property))
+        {
+            // A theme switch changes every role at once: restyle once, after the whole batch.
+            if (!_basemapStylePending && _composition is not null)
+            {
+                _basemapStylePending = true;
+                Dispatcher.UIThread.Post(ApplyBasemapStyle);
+            }
+            return;
+        }
         if (change.Property == LightPollutionPreferencesProperty && _composition is not null)
         {
             LightPollutionMapBinding.ApplyPreferences(_composition, LightPollutionPreferences);
@@ -542,8 +637,40 @@ public class NoctaxisMapView : UserControl
             Probe?.CountArrange();
             return base.ArrangeOverride(finalSize);
         }
-        private static readonly IBrush MarkerFill = new SolidColorBrush(Color.Parse("#0B0F17"));
-        private static readonly Pen MarkerOutline = new(Brushes.White, 3);
+        // Theme map symbols (MapThemeTokens). Defaults are the Noctaxis values, used when no theme is loaded.
+        public static readonly StyledProperty<Color> PinFillProperty =
+            AvaloniaProperty.Register<MapOverlay, Color>(nameof(PinFill), Color.Parse("#0B0F17"));
+        public static readonly StyledProperty<Color> PinOutlineProperty =
+            AvaloniaProperty.Register<MapOverlay, Color>(nameof(PinOutline), Colors.White);
+        public static readonly StyledProperty<Color> PinActivityColourProperty =
+            AvaloniaProperty.Register<MapOverlay, Color>(nameof(PinActivityColour), Color.FromArgb(220, 174, 218, 255));
+        // Celestial data colours (theme + colour-vision mode), a halo that separates data lines from the
+        // basemap, and the weather-limit marking colour (the basemap label colour: legible on its land).
+        public static readonly StyledProperty<CelestialColourSet> CelestialColoursProperty =
+            AvaloniaProperty.Register<MapOverlay, CelestialColourSet>(nameof(CelestialColours), CelestialColourSet.Default);
+        public static readonly StyledProperty<Color> LineHaloProperty =
+            AvaloniaProperty.Register<MapOverlay, Color>(nameof(LineHalo), Color.Parse("#0B0F17"));
+        public static readonly StyledProperty<Color> WeatherMarkProperty =
+            AvaloniaProperty.Register<MapOverlay, Color>(nameof(WeatherMark), Color.Parse("#C9CFDA"));
+        static MapOverlay() => AffectsRender<MapOverlay>(PinFillProperty, PinOutlineProperty, PinActivityColourProperty,
+            CelestialColoursProperty, LineHaloProperty, WeatherMarkProperty);
+        public CelestialColourSet CelestialColours { get => GetValue(CelestialColoursProperty); set => SetValue(CelestialColoursProperty, value); }
+        public Color LineHalo { get => GetValue(LineHaloProperty); set => SetValue(LineHaloProperty, value); }
+        public Color WeatherMark { get => GetValue(WeatherMarkProperty); set => SetValue(WeatherMarkProperty, value); }
+        public Color PinFill { get => GetValue(PinFillProperty); set => SetValue(PinFillProperty, value); }
+        public Color PinOutline { get => GetValue(PinOutlineProperty); set => SetValue(PinOutlineProperty, value); }
+        public Color PinActivityColour { get => GetValue(PinActivityColourProperty); set => SetValue(PinActivityColourProperty, value); }
+        // Rebuilt only when a theme changes a symbol colour, never per frame.
+        private IBrush? _markerFill;
+        private Pen? _markerOutline;
+        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        {
+            base.OnPropertyChanged(change);
+            if (change.Property == PinFillProperty) _markerFill = null;
+            else if (change.Property == PinOutlineProperty) _markerOutline = null;
+        }
+        private IBrush MarkerFill => _markerFill ??= new Avalonia.Media.Immutable.ImmutableSolidColorBrush(PinFill);
+        private Pen MarkerOutline => _markerOutline ??= new(new Avalonia.Media.Immutable.ImmutableSolidColorBrush(PinOutline), 3);
         private static readonly StreamGeometry MarkerGeometry = CreateMarkerGeometry();
         private static readonly GeographicOverlayGeometryBuilder GeometryBuilder = new();
         private PlanningSnapshot? _snapshot;
@@ -673,7 +800,7 @@ public class NoctaxisMapView : UserControl
                     DrawCameraFramingGuide(context, snapshot, _cameraGeometry, _cameraBaseFill,
                         FramingSettings, currentViewport.Value);
                 if (_celestialGeometry is not null)
-                    DrawCelestialRays(context, snapshot, _celestialGeometry, FramingSettings, currentViewport.Value);
+                    DrawCelestialRays(context, snapshot, _celestialGeometry, FramingSettings, currentViewport.Value, pin.Value);
                 if (ShowTerrainDebug)
                     TerrainSampleRenderer.Draw(context, snapshot,
                         FramingGuide?.CentreBearingDegrees ?? snapshot.Position.Horizontal.AzimuthDegrees,
@@ -771,8 +898,15 @@ public class NoctaxisMapView : UserControl
                     new Size(radius, radius), 0, sweep > 180, SweepDirection.Clockwise);
                 path.EndFigure(false);
             }
-            var colour = isCore ? Color.FromArgb(220, 174, 218, 255) : Color.FromArgb(135, 174, 218, 255);
-            context.DrawGeometry(null, new Pen(new SolidColorBrush(colour), isCore ? 1.7 : 1.1), geometry);
+            // Secondary activity keeps its historical 135/220 opacity relative to core loading.
+            var activity = PinActivityColour;
+            var colour = isCore ? activity
+                : Color.FromArgb((byte)Math.Round(activity.A * 135d / 220), activity.R, activity.G, activity.B);
+            var thickness = isCore ? 1.7 : 1.1;
+            // A pin-fill halo keeps the arc legible on light and dark imagery alike, whatever its hue.
+            context.DrawGeometry(null, new Pen(new SolidColorBrush(Color.FromArgb(colour.A, PinFill.R, PinFill.G, PinFill.B)),
+                thickness + 2), geometry);
+            context.DrawGeometry(null, new Pen(new SolidColorBrush(colour), thickness), geometry);
         }
 
         private static Point? Project(GeoCoordinate coordinate, Viewport? current)
@@ -792,8 +926,7 @@ public class NoctaxisMapView : UserControl
             CameraFramingSettings framingSettings,
             Viewport currentViewport)
         {
-            var colour = CelestialPalette.Colour(snapshot.Position.Target,
-                CelestialPalette.OrderFor(snapshot, snapshot.Position.Target));
+            var colour = CelestialColours[CelestialPalette.Role(snapshot, snapshot.Position.Target)];
             var settings = framingSettings.Normalised();
             // The environmental shader owns the complete base/weather/terrain composition when
             // state is available. The geographic fallback fill is used only before that state exists.
@@ -814,7 +947,8 @@ public class NoctaxisMapView : UserControl
                 {
                     ConeOpacity = (float)(settings.ShadingOpacityPercent / 100),
                     TerrainColourArgb = Color.Parse(settings.TerrainObstructionColour).ToUInt32(),
-                    TerrainTintOpacity = (float)(settings.TerrainTintStrengthPercent / 100)
+                    TerrainTintOpacity = (float)(settings.TerrainTintStrengthPercent / 100),
+                    WeatherMarkArgb = WeatherMark.ToUInt32()
                 };
                 var frame = EnvironmentalOverlayMath.CreateFrame(
                     currentViewport, Bounds.Width, Bounds.Height, parameters);
@@ -859,22 +993,44 @@ public class NoctaxisMapView : UserControl
         }
 #endif
 
-        private static void DrawCelestialRays(
+        private void DrawCelestialRays(
             DrawingContext context,
             PlanningSnapshot snapshot,
             IReadOnlyList<CelestialRayRenderGeometry> rays,
             CameraFramingSettings framingSettings,
-            Viewport currentViewport)
+            Viewport currentViewport,
+            Point observer)
         {
             var lineThickness = framingSettings.Normalised().LineThickness;
+            var colours = CelestialColours;
+            var halo = new SolidColorBrush(Color.FromArgb(170, LineHalo.R, LineHalo.G, LineHalo.B));
             foreach (var ray in rays)
             {
-                var colour = CelestialPalette.Colour(ray.Target, CelestialPalette.OrderFor(snapshot, ray.Target));
-                var pen = new Pen(new SolidColorBrush(colour), lineThickness,
-                    dashStyle: ray.IsPrimary ? null : DashStyle.Dash);
-                DrawPath(context, ray.Geometry.Coordinates, pen, currentViewport);
+                var role = CelestialPalette.Role(snapshot, ray.Target);
+                var brush = new SolidColorBrush(colours[role]);
+                // A halo in the basemap's label-halo colour keeps the ray legible over roads, water and
+                // pale land; secondary rays carry the object's own dash pattern, as on the chart.
+                DrawPath(context, ray.Geometry.Coordinates, new Pen(halo, lineThickness + 2), currentViewport);
+                DrawPath(context, ray.Geometry.Coordinates, new Pen(brush, lineThickness,
+                    dashStyle: ray.IsPrimary ? null : CelestialPalette.Dash(role)), currentViewport);
+                // The object's marker a fixed distance out from the pin, matching the target-list key.
+                if (ray.Geometry.Coordinates.Count > 1 &&
+                    Project(ray.Geometry.Coordinates[^1], currentViewport) is { } end)
+                {
+                    var direction = end - observer;
+                    var length = Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
+                    if (length > RayMarkerDistance)
+                        CelestialPalette.DrawMarker(context, role, observer + direction * (RayMarkerDistance / length),
+                            ray.IsPrimary ? 10 : 8, brush, halo);
+                }
             }
         }
+
+        /// <summary>Screen distance of a ray's identity marker from the pin: clear of the pin and its activity ring.</summary>
+        internal const double RayMarkerDistance = 44;
+
+        // Beyond the weather visibility distance the edge is dotted as well as grey, so the limit reads without colour.
+        private static readonly IDashStyle WeatherLimitedEdge = new Avalonia.Media.Immutable.ImmutableDashStyle([1.5, 2], 0);
 
         private static void DrawBoundary(
             DrawingContext context,
@@ -887,7 +1043,7 @@ public class NoctaxisMapView : UserControl
             foreach (var segment in segments)
             {
                 var pen = segment.Effect.HasFlag(CameraOverlayEffect.WeatherDesaturated)
-                    ? new Pen(new SolidColorBrush(CameraOverlayColourPolicy.Grayscale(colour, alpha)), thickness)
+                    ? new Pen(new SolidColorBrush(CameraOverlayColourPolicy.Grayscale(colour, alpha)), thickness, dashStyle: WeatherLimitedEdge)
                     : new Pen(new SolidColorBrush(Color.FromArgb(alpha, colour.R, colour.G, colour.B)), thickness);
                 DrawPath(context, segment.Coordinates, pen, currentViewport);
             }

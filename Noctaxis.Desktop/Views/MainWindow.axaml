@@ -124,9 +124,7 @@
                                        LightPollutionPreferences="{Binding LightPollutionMapPreferences}"
                                        ShowTerrainDebug="False" />
             <Border x:Name="PlannerRefreshStrip"
-                    Background="{DynamicResource SurfaceBackground}"
-                    BorderBrush="{DynamicResource SurfaceBorder}"
-                    BorderThickness="1"
+                    Classes="mapChrome"
                     CornerRadius="6"
                     Padding="10,7"
                     Margin="244,52,12,0"
@@ -137,22 +135,23 @@
               <Grid RowDefinitions="Auto,3" RowSpacing="5">
                 <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
                   <TextBlock TextWrapping="Wrap" Text="PLANNER" FontSize="{DynamicResource TextCaption}" FontWeight="SemiBold" LetterSpacing="1.1" Foreground="{DynamicResource Accent}" VerticalAlignment="Center" />
-                  <TextBlock TextWrapping="Wrap" Grid.Column="1" Text="{Binding PlannerRefreshStatusText}" FontSize="{DynamicResource TextSmall}" Foreground="{DynamicResource PrimaryText}" TextTrimming="CharacterEllipsis" />
+                  <TextBlock TextWrapping="Wrap" Grid.Column="1" Text="{Binding PlannerRefreshStatusText}" FontSize="{DynamicResource TextSmall}" Foreground="{DynamicResource MapChromeText}" TextTrimming="CharacterEllipsis" />
                 </Grid>
                 <ProgressBar x:Name="PlannerRefreshProgressBar" Grid.Row="1" Minimum="0" Maximum="1" Value="{Binding PlannerRefreshProgress}" Height="3" />
               </Grid>
             </Border>
-            <Border Background="{DynamicResource SurfaceBackground}" CornerRadius="7" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="244,0,12,12">
+            <Border x:Name="PlannerPinPreview" Classes="mapChrome" CornerRadius="7" Padding="10,6" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="244,0,12,12">
               <StackPanel>
                 <TextBlock TextWrapping="Wrap" Text="Planning pin preview" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextSmall}" />
-                <TextBlock TextWrapping="Wrap" Text="{Binding PreviewObserver}" />
+                <TextBlock TextWrapping="Wrap" Text="{Binding PreviewObserver}" Foreground="{DynamicResource MapChromeText}" />
               </StackPanel>
             </Border>
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="12" Spacing="8">
-              <Button Content="Toggle inspector" Command="{Binding ToggleInspectorCommand}" />
+              <Button x:Name="ToggleInspectorButton" Classes="mapChrome" Content="Toggle inspector" Command="{Binding ToggleInspectorCommand}" />
               <controls:PlannerLayersControl Name="PlannerLayers" DataContext="{Binding #PlannerMap.Layers}"/>
             </StackPanel>
-            <Border x:Name="PlannerTerrainMinimap" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource SurfaceBorder}"
+            <!-- Opaque surface: the terrain renderers inside draw surface-coloured chrome of their own. -->
+            <Border x:Name="PlannerTerrainMinimap" Background="{DynamicResource SurfaceBackground}" BorderBrush="{DynamicResource MapChromeBorder}"
                     BorderThickness="1" CornerRadius="6" Padding="7" Margin="12"
                     HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False">
               <controls:TerrainPreviewPanel>
@@ -171,11 +170,13 @@
               <StackPanel Spacing="5">
                 <TextBlock TextWrapping="Wrap" Text="Terrain frame" FontSize="{DynamicResource TextSmall}" FontWeight="SemiBold" Margin="0,5,0,0"/>
                 <controls:TerrainFrameView Width="208" Depth="{Binding TerrainFrameDepth}" Threshold="{Binding TerrainFrameThreshold}" Status="{Binding TerrainFrameStatus}" IsHitTestVisible="False"/>
-                <TextBlock Text="{Binding TerrainFrameDirection}" MaxWidth="208" TextWrapping="Wrap" FontSize="{DynamicResource TextCaption}" Foreground="{DynamicResource Warning}"/>
+                <controls:StatusText Kind="Warning" Text="{Binding TerrainFrameDirection}" MaxWidth="208" FontSize="{DynamicResource TextCaption}"/>
                 <WrapPanel Orientation="Horizontal">
                   <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,4"><TextBlock Text="Near" FontSize="{DynamicResource TextCaption}"/><Border Width="22" Height="10" VerticalAlignment="Center" Background="{x:Static controls:TerrainFrameView.NearBrush}"/></StackPanel>
                   <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,4"><TextBlock Text="Far" FontSize="{DynamicResource TextCaption}"/><Border Width="22" Height="10" VerticalAlignment="Center" Background="{x:Static controls:TerrainFrameView.FarBrush}"/></StackPanel>
                   <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4"><TextBlock Text="Sky" FontSize="{DynamicResource TextCaption}"/><Border Width="22" Height="10" VerticalAlignment="Center" BorderBrush="{DynamicResource StrongBorder}" BorderThickness="1" Background="{x:Static controls:TerrainFrameView.SkyBrush}"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,10,4"><TextBlock Text="Centre" FontSize="{DynamicResource TextCaption}"/><Line StartPoint="0,5" EndPoint="22,5" VerticalAlignment="Center" Stroke="{DynamicResource SecondaryText}" StrokeThickness="1" StrokeDashArray="4,3"/></StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4"><TextBlock Text="Threshold" FontSize="{DynamicResource TextCaption}"/><Line StartPoint="0,5" EndPoint="22,5" VerticalAlignment="Center" Stroke="{DynamicResource SecondaryText}" StrokeThickness="2"/></StackPanel>
                 </WrapPanel>
               </StackPanel>
               </controls:TerrainPreviewPanel>
@@ -211,7 +212,7 @@
                         <Border BorderBrush="{DynamicResource SurfaceBorder}" BorderThickness="0,0,0,1" Padding="0,7">
                           <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" ColumnSpacing="7">
                             <CheckBox IsChecked="{Binding IsVisible}" VerticalAlignment="Center" />
-                            <Border Grid.Column="1" Width="7" Height="24" CornerRadius="3" Background="{Binding Colour}" VerticalAlignment="Center" />
+                            <controls:CelestialLegendGlyph Grid.Column="1" Role="{Binding Role}" IsPrimary="{Binding IsPrimary}" VerticalAlignment="Center" ToolTip.Tip="Line and marker used for this object on the timeline and map" />
                             <StackPanel Grid.Column="2"><TextBlock TextWrapping="Wrap" Text="{Binding DisplayName}" FontWeight="SemiBold" /><TextBlock TextWrapping="Wrap" Text="{Binding Detail}" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextCaption}" /></StackPanel>
                             <Button Grid.Column="3" Classes="secondaryAction" Content="{Binding PrimaryLabel}" Command="{Binding MakePrimaryCommand}" />
                             <Button Grid.Column="4" Classes="compactDelete" Content="×" Command="{Binding RemoveCommand}" IsVisible="{Binding CanRemove}" ToolTip.Tip="Remove object" AutomationProperties.Name="Remove object" />
@@ -220,8 +221,8 @@
                       </DataTemplate></ItemsControl.ItemTemplate>
                     </ItemsControl>
                     <TextBlock TextWrapping="Wrap" Text="{Binding VisibleCelestialCountText}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding CelestialLimitMessage}" Foreground="{DynamicResource Error}" TextWrapping="Wrap" />
-                    <TextBlock Text="Solid line: primary target · dashed lines: visible secondary objects" FontSize="{DynamicResource TextCaption}" Foreground="{DynamicResource MutedText}" TextWrapping="Wrap" />
+                    <controls:StatusText Kind="Error" Text="{Binding CelestialLimitMessage}"/>
+                    <TextBlock Text="Primary target: thick solid line. Each other object has its own dash pattern and marker, labelled at its highest point on the timeline." FontSize="{DynamicResource TextCaption}" Foreground="{DynamicResource MutedText}" TextWrapping="Wrap" />
                   </StackPanel>
                 </Expander>
 
@@ -243,7 +244,7 @@
                       <TextBlock TextWrapping="Wrap" Text="Rise"/><TextBlock TextWrapping="Wrap" Grid.Column="1" Text="{Binding RiseText}"/><TextBlock TextWrapping="Wrap" Grid.Row="1" Text="Transit"/><TextBlock TextWrapping="Wrap" Grid.Row="1" Grid.Column="1" Text="{Binding TransitText}"/><TextBlock TextWrapping="Wrap" Grid.Row="2" Text="Set"/><TextBlock TextWrapping="Wrap" Grid.Row="2" Grid.Column="1" Text="{Binding SetText}"/>
                     </Grid>
                     <TextBlock Text="{Binding MoonDetails}" IsVisible="{Binding HasMoonDetails}" Foreground="{DynamicResource PrimaryText}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding SunDetails}" IsVisible="{Binding HasSunDetails}" Foreground="{DynamicResource Error}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding SunDetails}" IsVisible="{Binding HasSunDetails}" Foreground="{DynamicResource PrimaryText}" TextWrapping="Wrap" />
                   </StackPanel>
                 </Expander>
 
@@ -413,7 +414,7 @@
                     <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock TextWrapping="Wrap" Text="Sensor height (mm)" Classes="fieldLabel"/><NumericUpDown Value="{Binding SensorHeightMillimetres}" Minimum="0.1" Maximum="100" Increment="0.1" FormatString="0.0"/></StackPanel>
                     <StackPanel Grid.Row="2"><TextBlock TextWrapping="Wrap" Text="Manufacturer (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Manufacturer}"/></StackPanel>
                     <StackPanel Grid.Row="2" Grid.Column="1"><TextBlock TextWrapping="Wrap" Text="Model (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Model}"/></StackPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="{Binding ValidationMessage}" Foreground="{DynamicResource Error}" TextWrapping="Wrap"/>
+                    <controls:StatusText Grid.Row="3" Grid.ColumnSpan="2" Kind="Error" Text="{Binding ValidationMessage}"/>
                   </Grid>
                 </Border>
               </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
@@ -430,7 +431,7 @@
                     <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock TextWrapping="Wrap" Text="Maximum focal length (mm)" Classes="fieldLabel"/><NumericUpDown Value="{Binding MaximumFocalLengthMillimetres}" Minimum="0.1" Maximum="2000" Increment="1" FormatString="0.0"/></StackPanel>
                     <StackPanel Grid.Row="2"><TextBlock TextWrapping="Wrap" Text="Manufacturer (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Manufacturer}"/></StackPanel>
                     <StackPanel Grid.Row="2" Grid.Column="1"><TextBlock TextWrapping="Wrap" Text="Model (optional)" Classes="fieldLabel"/><TextBox Text="{Binding Model}"/></StackPanel>
-                    <TextBlock Grid.Row="3" Grid.ColumnSpan="2" Text="{Binding ValidationMessage}" Foreground="{DynamicResource Error}" TextWrapping="Wrap"/>
+                    <controls:StatusText Grid.Row="3" Grid.ColumnSpan="2" Kind="Error" Text="{Binding ValidationMessage}"/>
                   </Grid>
                 </Border>
               </DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
@@ -480,6 +481,10 @@
               <ComboBox ItemsSource="{Binding LightPollutionColorMapOptions}" SelectedItem="{Binding SettingsLightPollutionColorMap}"
                         DisplayMemberBinding="{Binding DisplayName}" AutomationProperties.Name="Light Pollution colour map"/>
               <TextBlock Name="LightPollutionPaletteDescription" Text="{Binding LightPollutionColorMapDescription}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10" IsVisible="{Binding HasLightPollutionColourVisionAdvice}">
+                <controls:StatusText Name="LightPollutionColourVisionAdvice" Kind="Information" Text="{Binding LightPollutionColourVisionAdvice}" FontSize="{DynamicResource TextSmall}"/>
+                <Button Grid.Column="1" Classes="secondaryAction" Content="Use Cividis" Command="{Binding UseColourVisionSafeLightPollutionPaletteCommand}" VerticalAlignment="Center"/>
+              </Grid>
               <TextBlock Text="Save settings to apply the colour map. Use Planner → Layers to show the overlay and adjust its opacity." TextWrapping="Wrap" FontSize="{DynamicResource TextSmall}" Foreground="{DynamicResource SecondaryText}"/>
               <TextBlock Text="Mapzen/Tilezen Terrarium terrain, ESA WorldCover and WSF settlement tiles are downloaded on demand and shared between nearby locations. Noctaxis remains usable when a layer is unavailable." Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextSmall}" TextWrapping="Wrap"/>
               <TextBlock TextWrapping="Wrap" Text="Saved location map images" Classes="section" Margin="0,16,0,0"/>
@@ -564,7 +569,7 @@
               <ItemsControl ItemsSource="{Binding SettingsCelestialSearch.Results}"><ItemsControl.ItemTemplate><DataTemplate><Button Command="{Binding DataContext.AddSettingsCelestialObjectCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" HorizontalContentAlignment="Stretch" Margin="0,0,0,4"><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock TextWrapping="Wrap" Text="{Binding DisplayName}" FontWeight="SemiBold"/><TextBlock TextWrapping="Wrap" Text="{Binding PrimaryIdentifier}" Foreground="{DynamicResource SecondaryText}"/></StackPanel><TextBlock TextWrapping="Wrap" Grid.Column="1" Text="Add" VerticalAlignment="Center"/></Grid></Button></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
               <TextBlock TextWrapping="Wrap" Text="{Binding SettingsCelestialSearch.Attribution}" FontSize="{DynamicResource TextCaption}" Foreground="{DynamicResource MutedText}"/>
               <TextBlock TextWrapping="Wrap" Text="{Binding VisibleCelestialCountText}" FontWeight="SemiBold"/>
-              <TextBlock Text="{Binding CelestialLimitMessage}" Foreground="{DynamicResource Error}" TextWrapping="Wrap"/>
+              <controls:StatusText Kind="Error" Text="{Binding CelestialLimitMessage}"/>
               <ItemsControl ItemsSource="{Binding CelestialObjects}"><ItemsControl.ItemTemplate><DataTemplate>
                 <Border BorderBrush="{DynamicResource SurfaceBorder}" BorderThickness="0,0,0,1" Padding="0,8"><Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="7">
                   <CheckBox IsChecked="{Binding IsVisible}" ToolTip.Tip="Show in Planner"/>
@@ -625,15 +630,14 @@
       <Border x:Name="StartupErrorBanner" IsVisible="{Binding HasStartupError}"
               Background="{DynamicResource ErrorBackground}" BorderBrush="{DynamicResource SurfaceBorder}"
               BorderThickness="0,0,0,1" Padding="14,10">
-        <TextBlock Text="{Binding StartupError}" Foreground="{DynamicResource Error}" TextWrapping="Wrap"/>
+        <controls:StatusText Kind="Error" Text="{Binding StartupError}"/>
       </Border>
       <!-- Recoverable, non-fatal problems (e.g. state could not be saved): a dismissible warning. -->
       <Border x:Name="OperationalNoticeBar" IsVisible="{Binding HasOperationalNotice}"
               Background="{DynamicResource WarningBackground}" BorderBrush="{DynamicResource SurfaceBorder}"
               BorderThickness="0,0,0,1" Padding="14,6">
         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-          <TextBlock Text="{Binding OperationalNotice}" Foreground="{DynamicResource Warning}"
-                     TextWrapping="Wrap" VerticalAlignment="Center"/>
+          <controls:StatusText Kind="Warning" Text="{Binding OperationalNotice}" VerticalAlignment="Center"/>
           <Button Grid.Column="1" Classes="secondaryAction" Content="Dismiss"
                   Command="{Binding DismissOperationalNoticeCommand}" VerticalAlignment="Center"/>
         </Grid>

@@ -1,3 +1,4 @@
+using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Catalogues;
 using Noctaxis.Core.Domain;
@@ -70,7 +71,10 @@ public sealed partial class MainViewModelTests
         var png = await viewModel.CreateExportPngAsync(CancellationToken.None);
         Assert.Equal(2, planning.ForcedRefreshes);
         Assert.Equal([137, 80, 78, 71], png);
-        Assert.Same(viewModel.Snapshot, exporter.LastSnapshot);
+        // The card and the live plan stay consistent. They need not be one instance: the export
+        // renders the plan it captured, so an enrichment commit landing while the forced fetch is
+        // in flight leaves the live plan a separate, equal instance.
+        Assert.Equal(viewModel.Snapshot, exporter.LastSnapshot);
     }
 
     [Fact]
@@ -299,7 +303,10 @@ public sealed partial class MainViewModelTests
         Assert.Equal("0.7°", viewModel.TargetTerrainMarginText);
     }
 
-    [Theory]
+    // Runs on the Avalonia UI thread, as the view model does in the application: refresh commits
+    // resume on the dispatcher, so the test thread's time change cannot interleave between a
+    // commit's currency check and its snapshot write, which thread-pool continuations allowed.
+    [AvaloniaTheory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task WeatherVisibility_TimeChange_CommitsCurrentBoundaryAndRejectsStaleWeather(bool outOfOrder)
@@ -1825,15 +1832,21 @@ public sealed partial class MainViewModelTests
         }
         public Task<WeatherResult> LoadWeatherAsync(PlanningSession session, WeatherSettings weatherSettings,
             CancellationToken cancellationToken) { WeatherRequests++; return Task.FromResult(ReadyWeather(session.Instant)); }
-        public Task<WeatherResult> RefreshWeatherAsync(PlanningSession session, WeatherSettings weatherSettings, CancellationToken cancellationToken)
+        /// <summary>Held open to keep a forced weather request in flight while a test moves the observer.</summary>
+        public TaskCompletionSource<bool>? WeatherGate { get; set; }
+        public GeoCoordinate? LastForcedWeatherObserver { get; private set; }
+        public async Task<WeatherResult> RefreshWeatherAsync(PlanningSession session, WeatherSettings weatherSettings, CancellationToken cancellationToken)
         {
             ForcedRefreshes++;
-            return Task.FromResult(FailRefresh
+            LastForcedWeatherObserver = session.Observer;
+            if (WeatherGate is { } gate) await gate.Task.WaitAsync(cancellationToken);
+            // The temperature carries the requested latitude, so a test can tell whose weather landed.
+            return FailRefresh
                 ? new WeatherResult(DataState.Error, null, "Synthetic failure")
-                : ReadyWeather(session.Instant));
+                : ReadyWeather(session.Instant, session.Observer.Latitude);
         }
-        private static WeatherResult ReadyWeather(Instant instant) => new(DataState.Ready,
-            new WeatherConditions(instant, 10, 2, 3, 5, 0, 0, "None", 2, 180, 4, 12, 70, 7, 20, "Clear", instant), "Ready");
+        private static WeatherResult ReadyWeather(Instant instant, double? temperatureCelsius = null) => new(DataState.Ready,
+            new WeatherConditions(instant, 10, 2, 3, 5, 0, 0, "None", 2, 180, 4, temperatureCelsius ?? 12, 70, 7, 20, "Clear", instant), "Ready");
         private TargetPosition Position(PlanningSession session) => new(catalogue.Get(session.TargetId), session.Instant, new HorizontalCoordinate(180, 30), new TargetEvents(null, null, null));
         private PlannerEnvironmentSnapshot EnvironmentFor(PlanningSession session)
         {

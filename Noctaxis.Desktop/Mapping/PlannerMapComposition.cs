@@ -12,6 +12,10 @@ public interface IMapsuiBasemap
     IReadOnlyList<ILayer> CreateLayers();
 }
 
+/// <summary>
+/// The former fixed-style raster street basemap. It is no longer the Planner default because its
+/// imagery cannot follow the theme; see <see cref="Vector.OpenFreeMapBasemap"/>.
+/// </summary>
 public sealed class OpenStreetMapBasemap : IMapsuiBasemap
 {
     public BasemapDefinition Definition { get; } = new(BasemapKind.Street,
@@ -38,7 +42,7 @@ public sealed class PlannerMapComposition
 
     public PlannerMapComposition(IMapsuiBasemap? basemap = null, IEnumerable<MapLayerDefinition>? additionalLayers = null)
     {
-        _basemap = basemap ?? new OpenStreetMapBasemap();
+        _basemap = basemap ?? new Vector.OpenFreeMapBasemap();
         var planner = new MapProviderMetadata("Noctaxis Planner");
         MapLayerDefinition[] overlays =
         [
@@ -70,6 +74,25 @@ public sealed class PlannerMapComposition
         _basemap = basemap;
         Runtime.ActivateBasemap(definition, adapter);
         foreach (var layer in previous) layer.Dispose();
+        // A themeable replacement takes the current theme at once; imagery is never restyled.
+        if (_basemapStyle is not null && basemap is Vector.IThemeableBasemap themeable) themeable.ApplyStyle(_basemapStyle);
+    }
+
+    private Vector.BasemapStyle? _basemapStyle;
+
+    /// <summary>The adapter currently providing the basemap.</summary>
+    public IMapsuiBasemap ActiveBasemap => _basemap;
+
+    /// <summary>
+    /// Applies the theme's basemap style. Only a themeable (vector) basemap is restyled, in place:
+    /// the native layers, their order, the overlays and all environmental data are untouched.
+    /// Photographic imagery ignores the style. Returns true when the visible basemap was restyled.
+    /// </summary>
+    public bool ApplyBasemapStyle(Vector.BasemapStyle style)
+    {
+        ArgumentNullException.ThrowIfNull(style);
+        _basemapStyle = style;
+        return _basemap is Vector.IThemeableBasemap themeable && themeable.ApplyStyle(style);
     }
 
     /// <summary>Install a registered native overlay once, in semantic order. Subsequent state

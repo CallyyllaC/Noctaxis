@@ -255,6 +255,195 @@ public sealed partial class MainViewModelTests
         Assert.Equal([20, 30], store.WrittenPitches);
     }
 
+    [Fact]
+    public async Task ManualWeatherRefreshForASupersededObserverIsDiscardedSilently()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant);
+        var committed = viewModel.Snapshot!.Weather;
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var refresh = viewModel.RefreshWeatherCommand.ExecuteAsync(null);
+        viewModel.MoveObserver(new GeoCoordinate(48, 7));
+        await viewModel.WaitForPlannerRefreshAsync();
+        planning.WeatherGate.SetResult(true);
+        await refresh;
+
+        // The answer described the place the planner had left, so nothing on screen took it.
+        Assert.Equal(51, planning.LastForcedWeatherObserver!.Value.Latitude);
+        Assert.NotEqual(51, viewModel.Snapshot!.Weather.Conditions!.TemperatureCelsius);
+        Assert.NotSame(committed, viewModel.Snapshot.Weather);
+        Assert.DoesNotContain("failed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(viewModel.IsWeatherRefreshing);
+    }
+
+    [Fact]
+    public async Task ManualWeatherRefreshForTheCurrentObserverStillCommits()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant);
+
+        await viewModel.RefreshWeatherCommand.ExecuteAsync(null);
+
+        Assert.Equal(51, viewModel.Snapshot!.Weather.Conditions!.TemperatureCelsius);
+        Assert.Equal("Weather refreshed", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FailedWeatherRefreshForASupersededObserverReportsNothing()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant);
+        planning.FailRefresh = true;
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var refresh = viewModel.RefreshWeatherCommand.ExecuteAsync(null);
+        viewModel.MoveObserver(new GeoCoordinate(48, 7));
+        await viewModel.WaitForPlannerRefreshAsync();
+        planning.WeatherGate.SetResult(true);
+        await refresh;
+
+        // A failure the user has already walked away from is not news.
+        Assert.DoesNotContain("failed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExportRendersTheObserverItsWeatherWasFetchedFor()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var exporter = new FakeExporter();
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant, exporter);
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var export = viewModel.CreateExportPngAsync(CancellationToken.None);
+        viewModel.MoveObserver(new GeoCoordinate(48, 7));
+        await viewModel.WaitForPlannerRefreshAsync();
+        planning.WeatherGate.SetResult(true);
+        await export;
+
+        var rendered = exporter.LastSnapshot!;
+        Assert.Equal(51, rendered.Session.Observer.Latitude);
+        Assert.Equal(51, rendered.Weather.Conditions!.TemperatureCelsius);
+        // The plan on screen belongs to the new observer and never received the old one's weather.
+        Assert.Equal(48, viewModel.Snapshot!.Session.Observer.Latitude);
+        Assert.NotEqual(51, viewModel.Snapshot.Weather.Conditions!.TemperatureCelsius);
+    }
+
+    [Fact]
+    public async Task ExportStillCommitsAndRendersTheLivePlanWhenTheObserverHasNotMoved()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var exporter = new FakeExporter();
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant, exporter);
+
+        await viewModel.CreateExportPngAsync(CancellationToken.None);
+
+        Assert.Same(viewModel.Snapshot, exporter.LastSnapshot);
+        Assert.Equal(51, viewModel.Snapshot!.Weather.Conditions!.TemperatureCelsius);
+        Assert.Equal("Scouting card ready", viewModel.StatusMessage);
+    }
+
+    [Fact]
+    public async Task ExportCancellationStillPropagatesAndLeavesThePlanAlone()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var exporter = new FakeExporter();
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant, exporter);
+        var committed = viewModel.Snapshot!.Weather;
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var cancellation = new CancellationTokenSource();
+
+        var export = viewModel.CreateExportPngAsync(cancellation.Token);
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => export);
+        Assert.Equal(0, exporter.RenderCount);
+        Assert.Same(committed, viewModel.Snapshot!.Weather);
+    }
+
+    [Fact]
+    public async Task ManualWeatherRefreshForASupersededPlannerTimeIsDiscardedSilently()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant);
+        var requestedInstant = viewModel.Session.Instant;
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var refresh = viewModel.RefreshWeatherCommand.ExecuteAsync(null);
+        // Same observer, different planner time: weather is time-dependent, so this is a new request.
+        viewModel.MinutesOfDay = 300;
+        await viewModel.WaitForPlannerRefreshAsync();
+        var currentInstant = viewModel.Session.Instant;
+        Assert.NotEqual(requestedInstant, currentInstant);
+        planning.WeatherGate.SetResult(true);
+        await refresh;
+
+        Assert.Equal(currentInstant, viewModel.Snapshot!.Weather.Conditions!.ForecastInstant);
+        Assert.DoesNotContain("failed", viewModel.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(viewModel.IsWeatherRefreshing);
+    }
+
+    [Fact]
+    public async Task ExportRendersThePlannerTimeItsWeatherWasFetchedFor()
+    {
+        var instant = Instant.FromUtc(2024, 1, 15, 20, 0);
+        var catalogue = new OpenNgcTargetCatalogue();
+        var planning = new FakePlanning(catalogue);
+        var exporter = new FakeExporter();
+        var viewModel = await PlannerAtObserverAsync(planning, catalogue,
+            new GeoCoordinate(51, -1), instant, exporter);
+        var exportedInstant = viewModel.Session.Instant;
+        planning.WeatherGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var export = viewModel.CreateExportPngAsync(CancellationToken.None);
+        viewModel.MinutesOfDay = 300;
+        await viewModel.WaitForPlannerRefreshAsync();
+        var currentInstant = viewModel.Session.Instant;
+        planning.WeatherGate.SetResult(true);
+        await export;
+
+        var rendered = exporter.LastSnapshot!;
+        Assert.Equal(exportedInstant, rendered.Session.Instant);
+        Assert.Equal(exportedInstant, rendered.Weather.Conditions!.ForecastInstant);
+        // The plan on screen moved on in time and kept the weather of its own moment.
+        Assert.Equal(currentInstant, viewModel.Snapshot!.Session.Instant);
+        Assert.Equal(currentInstant, viewModel.Snapshot.Weather.Conditions!.ForecastInstant);
+    }
+
+    private async Task<MainViewModel> PlannerAtObserverAsync(FakePlanning planning, ITargetCatalogue catalogue,
+        GeoCoordinate observer, Instant instant, FakeExporter? exporter = null)
+    {
+        var session = PlanningSession.Default(instant, "Europe/London") with { Observer = observer };
+        var viewModel = CreateViewModel(planning, catalogue,
+            new FakeStore(new PersistedState(4, new AppSettings(), [], session, null)),
+            exporter ?? new FakeExporter());
+        await viewModel.InitializeAsync();
+        viewModel.ShowPlannerCommand.Execute(null);
+        await viewModel.WaitForPlannerRefreshAsync();
+        return viewModel;
+    }
+
     private sealed class SnapshotProbeStore(PersistedState state) : IUserDataStore
     {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);

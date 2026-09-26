@@ -115,6 +115,8 @@ public partial class App : Application
         services.AddSingleton<ILocationEnvironmentService, LocationEnvironmentService>();
         services.AddSingleton<ILocationTransferService, LocationTransferService>();
         services.AddSingleton<IGeographicWeatherCache, GeographicWeatherCache>();
+        // Shared so one downloaded forecast serves later planner times, whichever provider instance asks.
+        services.AddSingleton<OpenMeteoForecastCache>();
         services.AddHttpClient<IWeatherProvider, OpenMeteoWeatherProvider>(client =>
         {
             client.BaseAddress = new Uri("https://api.open-meteo.com/v1/");

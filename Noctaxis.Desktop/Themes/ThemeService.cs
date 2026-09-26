@@ -61,6 +61,8 @@ public sealed class ThemeService : IDisposable
             next[key] = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(colour);
             next[key + "Color"] = colour;
         }
+        // Celestial and chart data colours as one object for custom-drawn controls (see CelestialThemeTokens).
+        next[CelestialThemeTokens.ColourSet] = CelestialColourSet.FromPalette(EffectiveTheme.Palette);
         var card = Color.Parse(EffectiveTheme.Palette["CardBackground"]);
         foreach (var (name, alpha) in new (string, byte)[] { ("CardOpaque", 255), ("CardScrim", 242), ("CardFade", 168), ("CardTransparent", 0) })
             next[name] = Color.FromArgb(Preferences.TextScale > 1.2 ? (byte)255 : alpha, card.R, card.G, card.B);
@@ -71,8 +73,9 @@ public sealed class ThemeService : IDisposable
         next["DatePickerMinimumWidth"] = 150 + 170 * (Preferences.TextScale - 1);
         next["TabItemHeaderFontSize"] = 20 * Preferences.TextScale;
         var highContrast = EffectiveTheme.Definition.Id == "builtin.highcontrast";
-        next["StateHoverThickness"] = new Thickness(highContrast ? 2 : 1);
-        next["StatePressedThickness"] = new Thickness(highContrast ? 3 : 1);
+        // Hover and press thicken the border in every theme, so state never rests on a subtle fill change alone.
+        next["StateHoverThickness"] = new Thickness(2);
+        next["StatePressedThickness"] = new Thickness(highContrast ? 3 : 2);
         next["StateSelectedThickness"] = new Thickness(highContrast ? 4 : 2);
         next["StateFocusThickness"] = new Thickness(3);
         FluentResourceBridge.Apply(next);

@@ -32,6 +32,31 @@ public sealed partial class MainViewModelTests
         await reload.SaveSettingsCommand.ExecuteAsync(null); Assert.Equal("grayscale",reload.LightPollutionMapPreferences.PaletteId);
     }
 
+    [Fact]
+    [CoversSettingsInput("UseColourVisionSafeLightPollutionPaletteCommand")]
+    public async Task TurboWithAColourVisionModeOffersCividisWithoutChangingTheChoice()
+    {
+        var catalogue=new OpenNgcTargetCatalogue(); var store=CreateSupporterStore(new AppSettings(LightPollution:new(true,.5,"turbo")));
+        var vm=CreateViewModel(new FakePlanning(catalogue),catalogue,store,new FakeExporter());
+        await vm.InitializeAsync(); Assert.Equal("turbo",vm.SettingsLightPollutionColorMap.Id);
+        // No colour-vision mode: Turbo is the user's informed choice and no notice is shown.
+        Assert.False(vm.HasLightPollutionColourVisionAdvice); Assert.Empty(vm.LightPollutionColourVisionAdvice);
+        Assert.Contains("Not colour-vision safe",vm.LightPollutionColorMapDescription);
+        var notified=new List<string?>(); vm.PropertyChanged+=(_,e)=>notified.Add(e.PropertyName);
+        vm.SelectedColourVisionValue=ColourVisionMode.Deuteranopia;
+        Assert.Contains(nameof(vm.HasLightPollutionColourVisionAdvice),notified);
+        Assert.True(vm.HasLightPollutionColourVisionAdvice); Assert.Contains("Cividis",vm.LightPollutionColourVisionAdvice);
+        // Selecting the mode never overrides the palette by itself.
+        Assert.Equal("turbo",vm.SettingsLightPollutionColorMap.Id); Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId);
+        vm.UseColourVisionSafeLightPollutionPaletteCommand.Execute(null);
+        Assert.Equal("cividis",vm.SettingsLightPollutionColorMap.Id); Assert.False(vm.HasLightPollutionColourVisionAdvice);
+        Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId); // Still an editor change until saved.
+        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        Assert.Equal("cividis",store.State.Settings.LightPollution!.PaletteId);
+        vm.SettingsLightPollutionColorMap=LightPollutionColorMaps.Resolve("viridis");
+        Assert.False(vm.HasLightPollutionColourVisionAdvice);
+    }
+
     [Theory]
     [InlineData("null")] [InlineData("\"\"")] [InlineData("\"future\"")] [InlineData("42")]
     public async Task LightPollutionPaletteMalformedDiskValuePreservesOtherSettings(string value)

@@ -19,8 +19,8 @@ public partial class MainViewModel
         AppearanceCatalogue.Themes.Select(t => new AppearanceOption(t.Id, t.DisplayName, t.IsSupporter, AppearanceCatalogue.IsAvailable(t))).ToArray();
     private ThemeCatalogue AppearanceCatalogue => _themeService?.Catalogue ?? new ThemeCatalogue();
     public IReadOnlyList<ColourVisionOption> ColourVisionOptions { get; } =
-    [new(ColourVisionMode.None, "None"), new(ColourVisionMode.Protanopia, "Protanopia-friendly"),
-     new(ColourVisionMode.Deuteranopia, "Deuteranopia-friendly"), new(ColourVisionMode.Tritanopia, "Tritanopia-friendly")];
+    [new(ColourVisionMode.None, "None"), new(ColourVisionMode.Protanopia, "Protanopia"),
+     new(ColourVisionMode.Deuteranopia, "Deuteranopia"), new(ColourVisionMode.Tritanopia, "Tritanopia")];
     public IReadOnlyList<AppearanceMode> AppearanceModeOptions { get; } = Enum.GetValues<AppearanceMode>();
     [ObservableProperty] private AppearanceMode _selectedAppearanceMode;
     [ObservableProperty] private AppearanceOption? _selectedTheme;
@@ -55,6 +55,8 @@ public partial class MainViewModel
     partial void OnSelectedColourVisionChanged(ColourVisionOption? value)
     {
         OnPropertyChanged(nameof(SelectedColourVisionValue));
+        OnPropertyChanged(nameof(LightPollutionColourVisionAdvice));
+        OnPropertyChanged(nameof(HasLightPollutionColourVisionAdvice));
         ChangeAppearance();
     }
     partial void OnTextSizePercentChanged(double value) => ChangeAppearance();

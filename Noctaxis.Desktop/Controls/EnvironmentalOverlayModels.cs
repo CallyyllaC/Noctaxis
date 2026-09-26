@@ -51,7 +51,8 @@ public readonly record struct EnvironmentalRenderParameters(
     float ConeOpacity,
     float WeatherOpacityScale,
     uint TerrainColourArgb,
-    float TerrainTintOpacity = .40f)
+    float TerrainTintOpacity = .40f,
+    uint WeatherMarkArgb = 0xffc9cfda)
 {
     public static EnvironmentalRenderParameters Default { get; } = new(.10f, 1f, 0xff9a6f9e);
 
@@ -59,7 +60,8 @@ public readonly record struct EnvironmentalRenderParameters(
         Math.Clamp(float.IsFinite(ConeOpacity) ? ConeOpacity : .10f, 0, .5f),
         Math.Clamp(float.IsFinite(WeatherOpacityScale) ? WeatherOpacityScale : 1f, 0, 1),
         TerrainColourArgb | 0xff000000,
-        Math.Clamp(float.IsFinite(TerrainTintOpacity) ? TerrainTintOpacity : .40f, .15f, .55f));
+        Math.Clamp(float.IsFinite(TerrainTintOpacity) ? TerrainTintOpacity : .40f, .15f, .55f),
+        WeatherMarkArgb | 0xff000000);
 }
 
 public readonly record struct EnvironmentalRenderKey(

@@ -182,6 +182,11 @@ public sealed class PlanningService(
         ObserverHeightAboveGroundMetres = AppSettings.NormaliseCameraHeight(cameraHeightAboveGroundMetres),
         ManualGroundElevationOverrideMetres =
             session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres,
-        EnableTerrainCalculations = session.EnableTerrainCalculations
+        EnableTerrainCalculations = session.EnableTerrainCalculations,
+        // The datum as supplied, not the one a previous build resolved: the resolved value flows
+        // back into the session observer, and using it here would make every identical request miss.
+        FallbackObserverGroundElevationMetres =
+            session.EffectiveObserverElevation.SuppliedGroundElevationAslMetres ??
+            session.Observer.ElevationMetres
     };
 }

@@ -76,14 +76,15 @@ public sealed class MapCompositionTests
     }
 
     [AvaloniaFact]
-    public void ProductionUsesStreetOsmAndReattachmentDoesNotRegisterAgain()
+    public void ProductionUsesThemedStreetVectorAndReattachmentDoesNotRegisterAgain()
     {
         var view = new NoctaxisMapView();
         var controller = view.CompositionForTesting;
         var composition = controller.Composition;
         Assert.Equal(BasemapKind.Street, composition.Basemap.Kind);
-        Assert.Equal("OpenStreetMap", composition.Basemap.Provider.DisplayName);
-        Assert.Equal(MapProvider.Attribution, composition.AttributionText);
+        Assert.Equal("OpenFreeMap", composition.Basemap.Provider.DisplayName);
+        Assert.Equal(Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap.AttributionText, composition.AttributionText);
+        Assert.IsType<Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap>(controller.ActiveBasemap);
         Assert.Single(controller.Map.Layers);
         var native = controller.Map.Layers.First();
         native.Enabled = false; // Offline lifecycle test, retaining the actual registration.

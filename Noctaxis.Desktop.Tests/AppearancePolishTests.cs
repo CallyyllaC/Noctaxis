@@ -31,8 +31,14 @@ public sealed class AppearancePolishTests
         foreach (var key in new[] { "SurfaceBackground", "MapChromeBackground", "CardHoverOverlay", "CardPressedOverlay" })
             Assert.Equal((appearance == AppearanceMode.Light ? resolved.Definition.Light! : resolved.Definition.Dark).Palette[key], resolved.Palette[key]);
         Assert.Equal(resolved.Palette.OrderBy(p => p.Key), catalogue.Resolve(new(id, mode, AppearanceMode: appearance)).Palette.OrderBy(p => p.Key));
+        // A variant re-authors its semantic roles; roles that already separate under the deficiency may keep
+        // their family value, so the set as a whole (not one fixed role) must differ from normal vision.
         if (mode != ColourVisionMode.None)
-            Assert.NotEqual(catalogue.Resolve(new(id, AppearanceMode: appearance)).Palette["Error"], resolved.Palette["Error"]);
+        {
+            var none = catalogue.Resolve(new(id, AppearanceMode: appearance)).Palette;
+            Assert.Contains(new[] { "Success", "Warning", "Error", "Information" }.Concat(CelestialThemeTokens.Objects),
+                key => !string.Equals(none[key], resolved.Palette[key], StringComparison.OrdinalIgnoreCase));
+        }
         Assert.Equal(4, new[] { "Success", "Warning", "Error", "Information" }.Select(key => resolved.Palette[key]).Distinct().Count());
     }
     [Fact]

@@ -294,6 +294,90 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     }
 
     [Fact]
+    public async Task DownloadedForecast_ServesOtherPlannerTimesWithoutRefetching()
+    {
+        // One Open-Meteo request covers 17 days of hourly data; moving planner time must reuse it.
+        var start = Instant.FromUtc(2024, 6, 21, 0, 0);
+        var clock = new TestClock(start);
+        var provider = CreateForecastProvider(clock, HourlyForecastJson(start, 48), out var handler, out _);
+        var location = new GeoCoordinate(51.5, -0.1);
+        var fields = WeatherSettings.DefaultFields;
+
+        var first = await provider.GetWeatherAsync(new WeatherRequest(location, start, fields, 5), CancellationToken.None);
+        var later = await provider.GetWeatherAsync(
+            new WeatherRequest(location, start + Duration.FromHours(6), fields, 5), CancellationToken.None);
+        var nextDay = await provider.GetWeatherAsync(
+            new WeatherRequest(location, start + Duration.FromHours(30), fields, 5), CancellationToken.None);
+
+        Assert.Equal(1, handler.Count);
+        Assert.All(new[] { first, later, nextDay }, result => Assert.Equal(DataState.Ready, result.State));
+        Assert.Equal(start, first.Conditions!.ForecastInstant);
+        Assert.Equal(start + Duration.FromHours(6), later.Conditions!.ForecastInstant);
+        Assert.Equal(start + Duration.FromHours(30), nextDay.Conditions!.ForecastInstant);
+        // Each hour carries its own values, and the retrieval time stays that of the single download.
+        Assert.Equal(6, later.Conditions.TemperatureCelsius);
+        Assert.Equal(30, nextDay.Conditions.TemperatureCelsius);
+        Assert.Equal(start, nextDay.Conditions.RetrievedAt);
+        Assert.False(nextDay.Conditions.IsStale);
+        Assert.Equal("Cached Open-Meteo forecast", nextDay.Message);
+    }
+
+    [Fact]
+    public async Task DownloadedForecast_IsNotReusedWhenStaleOutOfRangeOrElsewhere()
+    {
+        var start = Instant.FromUtc(2024, 6, 21, 0, 0);
+        var clock = new TestClock(start);
+        var provider = CreateForecastProvider(clock, HourlyForecastJson(start, 48), out var handler, out var cache);
+        var location = new GeoCoordinate(51.5, -0.1);
+        IReadOnlyList<WeatherField> fields = [WeatherField.TotalCloudCover, WeatherField.Temperature];
+        await provider.GetWeatherAsync(new WeatherRequest(location, start, fields, 5), CancellationToken.None);
+        Assert.Equal(1, handler.Count);
+
+        // A location beyond the configured cache distance is a different forecast.
+        await provider.GetWeatherAsync(new WeatherRequest(new GeoCoordinate(52.5, -0.1), start + Duration.FromHours(6),
+            fields, 5), CancellationToken.None);
+        Assert.Equal(2, handler.Count);
+
+        // A time the download does not cover is not answered from it.
+        var outside = await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromDays(20),
+            fields, 5), CancellationToken.None);
+        Assert.Equal(3, handler.Count);
+        Assert.Equal(DataState.Error, outside.State);
+
+        // A newly enabled field is not present in the retained forecast.
+        await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(6),
+            [.. fields, WeatherField.DewPoint], 5), CancellationToken.None);
+        Assert.Equal(4, handler.Count);
+
+        // Past the shared freshness window the forecast expires with the conditions cache.
+        clock.Now = start + cache.MaximumAge;
+        await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(6), fields, 5),
+            CancellationToken.None);
+        Assert.Equal(5, handler.Count);
+    }
+
+    private static OpenMeteoWeatherProvider CreateForecastProvider(TestClock clock, string json,
+        out CountingHandler handler, out GeographicWeatherCache cache)
+    {
+        handler = new CountingHandler(json);
+        cache = new GeographicWeatherCache(clock);
+        var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.open-meteo.com/v1/") };
+        return new OpenMeteoWeatherProvider(client, cache, clock,
+            NullLogger<OpenMeteoWeatherProvider>.Instance, new OpenMeteoForecastCache(clock));
+    }
+
+    // Hourly rows whose temperature and cloud cover are the hour offset, so tests can tell them apart.
+    private static string HourlyForecastJson(Instant start, int hours)
+    {
+        var times = string.Join(',', Enumerable.Range(0, hours)
+            .Select(hour => (start + Duration.FromHours(hour)).ToUnixTimeSeconds()));
+        var values = string.Join(',', Enumerable.Range(0, hours));
+        var codes = string.Join(',', Enumerable.Repeat(0, hours));
+        return "{\"hourly\":{\"time\":[" + times + "],\"temperature_2m\":[" + values +
+               "],\"cloud_cover\":[" + values + "],\"weather_code\":[" + codes + "]}}";
+    }
+
+    [Fact]
     public async Task ForcedRefresh_BypassesCacheAndReplacesIt()
     {
         var now = Instant.FromUnixTimeSeconds(1719003600);

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -34,7 +35,7 @@ public sealed class LightPollutionPaletteTests
     }
 
     [Fact]
-    public void RegistryUsesStableSingletonsAndLutInterpolationHasNoPixelAllocations()
+    public void RegistryUsesStableSingletonsAndInterpolatesBetweenLutRows()
     {
         Assert.Equal(new[] {"grayscale","turbo","viridis","inferno","magma","cividis"}, LightPollutionColorMaps.All.Select(p=>p.Id));
         Assert.Equal(new[] {"Grayscale","Turbo","Viridis","Inferno","Magma","Cividis"}, LightPollutionColorMaps.All.Select(p=>p.DisplayName));
@@ -50,11 +51,52 @@ public sealed class LightPollutionPaletteTests
             Assert.InRange(Math.Abs(between.Red-(a.Red+b.Red)/2d),0,1);
             Assert.InRange(Math.Abs(between.Green-(a.Green+b.Green)/2d),0,1);
             Assert.InRange(Math.Abs(between.Blue-(a.Blue+b.Blue)/2d),0,1);
-            for(var i=0;i<1000;i++) p.Map(i/1000d);
-            var before=GC.GetAllocatedBytesForCurrentThread();
-            for(var i=0;i<10000;i++) p.Map(i/10000d);
-            Assert.Equal(before,GC.GetAllocatedBytesForCurrentThread());
         }
+    }
+
+    // Mapping a pixel must stay on the stack: the LUT is a shared double[], SKColor is a struct, and
+    // Channel is a local function that is invoked rather than turned into a delegate, so a managed
+    // allocation here would mean a regression costing at least 24 bytes on every pixel of every tile.
+    //
+    // Only the delta is asserted, and only around a tight loop that runs no assertions. Absolute
+    // counters are meaningless across runs: the same loop sits at ~220 KB in an isolated run and at
+    // ~33 MB inside the full suite. The delta is taken as the smallest of repeated identical passes
+    // after a warm-up, which drops one-time runtime cost — tiered promotion of the measured loop,
+    // first-touch initialisation, dispatch-stub resolution — that lands in whichever pass meets it
+    // first and never repeats. A genuine per-pixel allocation, by contrast, is present in every pass
+    // and costs at least 2.4 MB here, which the allowance below cannot absorb.
+    private const int WarmupPixels = 10_000;
+    private const int MeasuredPixels = 100_000;
+    private const int MeasuredPasses = 3;
+    private const long AllocationAllowanceBytes = 4 * 1024;
+
+    [Fact]
+    public void LutInterpolationAllocatesNothingPerPixel()
+    {
+        foreach(var palette in LightPollutionColorMaps.All)
+        {
+            MapPixels(palette, WarmupPixels);
+            var smallest = long.MaxValue;
+            for(var pass=0;pass<MeasuredPasses;pass++)
+            {
+                var before=GC.GetAllocatedBytesForCurrentThread();
+                MapPixels(palette, MeasuredPixels);
+                smallest=Math.Min(smallest,GC.GetAllocatedBytesForCurrentThread()-before);
+            }
+            Assert.True(smallest<=AllocationAllowanceBytes,
+                $"{palette.Id} allocated {smallest} bytes over {MeasuredPixels} pixels " +
+                $"({(double)smallest/MeasuredPixels:F4} bytes per pixel); the allowance is {AllocationAllowanceBytes} bytes.");
+        }
+    }
+
+    // Kept out of the test method so the measured interval holds nothing but the mapping loop. The
+    // channel is accumulated and returned so neither the calls nor the loop can be optimised away.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static int MapPixels(ILightPollutionColorMap palette, int pixels)
+    {
+        var sink=0;
+        for(var i=0;i<pixels;i++) sink+=palette.Map((double)i/pixels).Red;
+        return sink;
     }
 
     [Theory]

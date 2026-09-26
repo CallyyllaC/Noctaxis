@@ -73,13 +73,68 @@ public sealed class GeographicWeatherCache(IClock clock) : IGeographicWeatherCac
     }
 }
 
+/// <summary>
+/// Retains whole downloaded Open-Meteo forecasts. One request covers 17 days of hourly data, so a
+/// planner-time change within that range reuses the download instead of fetching it again. Entries
+/// are matched on location and on the requested variables, and expire with the same freshness
+/// policy as <see cref="IGeographicWeatherCache.MaximumAge"/>.
+/// </summary>
+public sealed class OpenMeteoForecastCache(IClock clock)
+{
+    private const int MaximumEntries = 8;
+    private sealed record Entry(GeoCoordinate Location, string Variables, OpenMeteoHourly Hourly, Instant RetrievedAt);
+    private readonly object _gate = new();
+    private readonly List<Entry> _entries = [];
+
+    public bool TryGet(GeoCoordinate location, string variables, double maximumDistanceKilometres,
+        Duration maximumAge, out OpenMeteoHourly hourly, out Instant retrievedAt)
+    {
+        lock (_gate)
+        {
+            var now = clock.GetCurrentInstant();
+            _entries.RemoveAll(entry => now - entry.RetrievedAt >= maximumAge);
+            var match = _entries
+                .Where(entry => string.Equals(entry.Variables, variables, StringComparison.Ordinal))
+                .Select(entry => (Entry: entry, Distance: Angles.GreatCircleDistanceMetres(location, entry.Location)))
+                .Where(candidate => candidate.Distance <= Math.Max(0, maximumDistanceKilometres) * 1_000)
+                .OrderBy(candidate => candidate.Distance)
+                .FirstOrDefault();
+            if (match.Entry is not null)
+            {
+                hourly = match.Entry.Hourly;
+                retrievedAt = match.Entry.RetrievedAt;
+                return true;
+            }
+        }
+
+        hourly = null!;
+        retrievedAt = default;
+        return false;
+    }
+
+    public void Store(GeoCoordinate location, string variables, OpenMeteoHourly hourly, Instant retrievedAt)
+    {
+        lock (_gate)
+        {
+            // A newer download for the same place and variables replaces the previous forecast.
+            _entries.RemoveAll(entry => string.Equals(entry.Variables, variables, StringComparison.Ordinal) &&
+                                        Angles.GreatCircleDistanceMetres(location, entry.Location) < 10);
+            _entries.Add(new Entry(location, variables, hourly, retrievedAt));
+            if (_entries.Count > MaximumEntries)
+                _entries.RemoveRange(0, _entries.Count - MaximumEntries);
+        }
+    }
+}
+
 public sealed class OpenMeteoWeatherProvider(
     HttpClient httpClient,
     IGeographicWeatherCache cache,
     IClock clock,
-    ILogger<OpenMeteoWeatherProvider> logger) : IWeatherProvider
+    ILogger<OpenMeteoWeatherProvider> logger,
+    OpenMeteoForecastCache? forecasts = null) : IWeatherProvider
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly OpenMeteoForecastCache _forecasts = forecasts ?? new OpenMeteoForecastCache(clock);
 
     public async Task<WeatherResult> GetWeatherAsync(WeatherRequest request, CancellationToken cancellationToken)
     {
@@ -91,13 +146,27 @@ public sealed class OpenMeteoWeatherProvider(
             return new WeatherResult(DataState.Ready, cached, "Cached Open-Meteo forecast");
         }
 
+        var variables = OpenMeteoVariables.For(request.EnabledFields);
+        var variablesKey = VariablesKey(variables);
+        // The previous download covers many hours: a different planner time usually needs no request.
+        if (!request.ForceRefresh &&
+            _forecasts.TryGet(request.Location, variablesKey, request.CacheDistanceKilometres,
+                cache.MaximumAge, out var forecast, out var forecastRetrievedAt) &&
+            OpenMeteoMapper.TryMap(forecast, request.ApproximateTime, forecastRetrievedAt, out var reused))
+        {
+            logger.LogInformation("Reusing the downloaded Open-Meteo forecast within {DistanceKm} km",
+                request.CacheDistanceKilometres);
+            cache.Store(request.Location, reused);
+            return new WeatherResult(DataState.Ready, reused, "Cached Open-Meteo forecast");
+        }
+
         logger.LogInformation(request.ForceRefresh
             ? "Forced Open-Meteo weather refresh"
             : "Weather cache miss; requesting Open-Meteo forecast");
 
         try
         {
-            var uri = BuildUri(request);
+            var uri = BuildUri(request, variables);
             using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
@@ -108,9 +177,12 @@ public sealed class OpenMeteoWeatherProvider(
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<OpenMeteoResponse>(stream, JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
+            var retrievedAt = clock.GetCurrentInstant();
             var conditions = OpenMeteoMapper.Map(dto ?? throw new JsonException("Open-Meteo returned an empty response."),
-                request.ApproximateTime, clock.GetCurrentInstant());
+                request.ApproximateTime, retrievedAt);
             cache.Store(request.Location, conditions);
+            // Retained only once the response mapped successfully, so nothing unusable is reused.
+            _forecasts.Store(request.Location, variablesKey, dto.Hourly!, retrievedAt);
             return new WeatherResult(DataState.Ready, conditions, "Open-Meteo forecast");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
@@ -121,9 +193,15 @@ public sealed class OpenMeteoWeatherProvider(
         }
     }
 
-    internal static string BuildUri(WeatherRequest request)
+    internal static string BuildUri(WeatherRequest request) =>
+        BuildUri(request, OpenMeteoVariables.For(request.EnabledFields));
+
+    /// <summary>Identifies the variable set a forecast was downloaded with, so enabling a new field refetches.</summary>
+    internal static string VariablesKey(IReadOnlyList<string> variables) =>
+        string.Join(',', variables.OrderBy(variable => variable, StringComparer.Ordinal));
+
+    private static string BuildUri(WeatherRequest request, IReadOnlyList<string> variables)
     {
-        var variables = OpenMeteoVariables.For(request.EnabledFields);
         return FormattableString.Invariant($"forecast?latitude={request.Location.Latitude:F6}&longitude={request.Location.Longitude:F6}&hourly={Uri.EscapeDataString(string.Join(',', variables))}&timezone=UTC&timeformat=unixtime&wind_speed_unit=ms&past_days=1&forecast_days=16");
     }
 }
@@ -165,16 +243,28 @@ public static class OpenMeteoMapper
         var hourly = response.Hourly ?? throw new JsonException("Open-Meteo response has no hourly data.");
         if (hourly.Time is null || hourly.Time.Length == 0)
             throw new JsonException("Open-Meteo response has no forecast times.");
+        return TryMap(hourly, selectedTime, retrievedAt, out var conditions)
+            ? conditions
+            : throw new JsonException("The selected time is outside the available Open-Meteo forecast range.");
+    }
 
+    /// <summary>
+    /// Selects the hour nearest <paramref name="selectedTime"/>, or reports false when that time lies
+    /// outside the hours this forecast covers. Selection is identical to <see cref="Map"/>.
+    /// </summary>
+    public static bool TryMap(OpenMeteoHourly hourly, Instant selectedTime, Instant retrievedAt,
+        out WeatherConditions conditions)
+    {
+        conditions = null!;
+        if (hourly.Time is null || hourly.Time.Length == 0) return false;
         var selectedUnix = selectedTime.ToUnixTimeSeconds();
         var index = Enumerable.Range(0, hourly.Time.Length)
             .MinBy(i => Math.Abs(hourly.Time[i] - selectedUnix));
         var forecastInstant = Instant.FromUnixTimeSeconds(hourly.Time[index]);
-        if (Math.Abs((forecastInstant - selectedTime).TotalMinutes) > 90)
-            throw new JsonException("The selected time is outside the available Open-Meteo forecast range.");
+        if (Math.Abs((forecastInstant - selectedTime).TotalMinutes) > 90) return false;
         var code = Value(hourly.WeatherCode, index);
 
-        return new WeatherConditions(
+        conditions = new WeatherConditions(
             forecastInstant,
             Value(hourly.CloudCover, index), Value(hourly.CloudCoverLow, index),
             Value(hourly.CloudCoverMid, index), Value(hourly.CloudCoverHigh, index),
@@ -184,6 +274,7 @@ public static class OpenMeteoMapper
             Value(hourly.WindGusts10m, index), Value(hourly.Temperature2m, index),
             Value(hourly.RelativeHumidity2m, index), Value(hourly.DewPoint2m, index),
             Divide(Value(hourly.Visibility, index), 1_000), Summary(code), retrievedAt);
+        return true;
     }
 
     private static double? Value(double?[]? values, int index) =>

@@ -104,6 +104,18 @@
       <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
       <Setter Property="Background" Value="{DynamicResource ErrorBackground}" />
     </Style>
+    <!-- Panels and buttons floating over the Planner map: the theme's translucent map chrome. -->
+    <Style Selector="Border.mapChrome">
+      <Setter Property="Background" Value="{DynamicResource MapChromeBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource MapChromeBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="Button.mapChrome">
+      <Setter Property="Background" Value="{DynamicResource MapChromeBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource MapChromeBorder}" />
+      <Setter Property="Foreground" Value="{DynamicResource MapChromeText}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
     <Style Selector="TextBox">
       <Setter Property="MinHeight" Value="34" />
     </Style>
@@ -290,6 +302,14 @@
     <Style Selector="Button:not(.locationCardBody):pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderThickness" Value="{DynamicResource StatePressedThickness}"/>
     </Style>
+    <!-- Map chrome states: the accent marks hover, the pressed accent marks press, over the map. -->
+    <Style Selector="Button.mapChrome:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource MapChromeText}"/>
+    </Style>
+    <Style Selector="Button.mapChrome:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BorderBrush" Value="{DynamicResource AccentPressed}"/>
+    </Style>
     <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderThickness" Value="0"/>
     </Style>
@@ -322,6 +342,10 @@
     <Style Selector="ListBoxItem:not(:selected):pointerover /template/ ContentPresenter, ComboBoxItem:not(:selected):pointerover /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource ButtonHover}"/>
       <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+    </Style>
+    <!-- The Fluent progress track reads a fixed platform resource: use the theme role. -->
+    <Style Selector="ProgressBar">
+      <Setter Property="Background" Value="{DynamicResource SubtleBorder}"/>
     </Style>
     <!-- Shared Fluent Expander header colours; keep its original template and geometry. -->
     <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">

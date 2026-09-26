@@ -280,11 +280,13 @@ public sealed class WorldCoverLandCoverProvider : ILandCoverProvider
     private async Task<WorldCoverTileResult> LoadTileAsync(string tile, CancellationToken cancellationToken)
     {
         var name = $"ESA_WorldCover_10m_2021_v200_{tile}_Map";
-        var result = await cache.GetOrCreateDetailedAsync(
+        // A WorldCover tile is tens of megabytes, so it is written straight to the staging file
+        // rather than buffered; validation and the atomic install are unchanged.
+        var result = await cache.GetOrCreateStreamedAsync(
             new EnvironmentalTileDescriptor(SourceId, SourceVersion, "land-cover", tile, "tif"),
-            token => EnvironmentalHttpDownloader.DownloadDetailedAsync(http,
+            (destination, token) => EnvironmentalHttpDownloader.DownloadToStreamAsync(http,
                 new Uri($"https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/{name}.tif"),
-                160 * 1024 * 1024, token), GeoTiffRaster.IsValid, cancellationToken).ConfigureAwait(false);
+                160 * 1024 * 1024, destination, token), GeoTiffRaster.IsValid, cancellationToken).ConfigureAwait(false);
         return new WorldCoverTileResult(result.State, result.IsAvailable ? result.Path : null);
     }
 

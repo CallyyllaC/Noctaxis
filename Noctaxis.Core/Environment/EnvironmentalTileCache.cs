@@ -50,6 +50,26 @@ public interface IEnvironmentalTileCache
         Func<CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire,
         Func<string, bool> validate,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// As <see cref="GetOrCreateDetailedAsync"/>, but the source writes its payload straight into the
+    /// staging file instead of returning it as an array. Large sources (a WorldCover tile is tens of
+    /// megabytes) are therefore never held in memory. Validation and the atomic install are identical.
+    /// The default implementation buffers, so an implementation that does not stream still works.
+    /// </summary>
+    Task<EnvironmentalCacheResult> GetOrCreateStreamedAsync(
+        EnvironmentalTileDescriptor descriptor,
+        Func<Stream, CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire,
+        Func<string, bool> validate,
+        CancellationToken cancellationToken) =>
+        GetOrCreateDetailedAsync(descriptor, async token =>
+        {
+            using var buffer = new MemoryStream();
+            var acquisition = await acquire(buffer, token).ConfigureAwait(false);
+            return acquisition.State == EnvironmentalDataState.Available && buffer.Length > 0
+                ? EnvironmentalAcquisitionResult.Available(buffer.ToArray(), acquisition.Message)
+                : acquisition;
+        }, validate, cancellationToken);
 }
 
 public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
@@ -89,9 +109,39 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
                 : EnvironmentalAcquisitionResult.Available(bytes);
         }, validate, cancellationToken).ConfigureAwait(false);
 
-    public async Task<EnvironmentalCacheResult> GetOrCreateDetailedAsync(
+    public Task<EnvironmentalCacheResult> GetOrCreateDetailedAsync(
         EnvironmentalTileDescriptor descriptor,
         Func<CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire,
+        Func<string, bool> validate,
+        CancellationToken cancellationToken) =>
+        GetOrCreateCoreAsync(descriptor, async (destination, token) =>
+        {
+            var acquisition = await EnvironmentalPerformanceDiagnostics.MeasureAsync("network-acquisition",
+                () => acquire(token)).ConfigureAwait(false);
+            if (acquisition.Bytes is null || acquisition.Bytes.Length == 0) return acquisition;
+            var writeTimer = System.Diagnostics.Stopwatch.StartNew();
+            await destination.WriteAsync(acquisition.Bytes, token).ConfigureAwait(false);
+            writeTimer.Stop();
+            EnvironmentalPerformanceDiagnostics.Add("disk-write", writeTimer.Elapsed.TotalMilliseconds);
+            return acquisition;
+        }, validate, cancellationToken);
+
+    public Task<EnvironmentalCacheResult> GetOrCreateStreamedAsync(
+        EnvironmentalTileDescriptor descriptor,
+        Func<Stream, CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire,
+        Func<string, bool> validate,
+        CancellationToken cancellationToken) =>
+        GetOrCreateCoreAsync(descriptor, (destination, token) =>
+            EnvironmentalPerformanceDiagnostics.MeasureAsync("network-acquisition",
+                () => acquire(destination, token)), validate, cancellationToken);
+
+    /// <summary>
+    /// Shared install path: serve a valid cached file, otherwise let the source fill a staging file,
+    /// validate that file and move it into place. The staging file is always removed.
+    /// </summary>
+    private async Task<EnvironmentalCacheResult> GetOrCreateCoreAsync(
+        EnvironmentalTileDescriptor descriptor,
+        Func<Stream, CancellationToken, Task<EnvironmentalAcquisitionResult>> acquire,
         Func<string, bool> validate,
         CancellationToken cancellationToken)
     {
@@ -115,39 +165,36 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
 
             _logger.LogInformation("Environmental cache miss for {Source}/{Layer}/{Tile}",
                 descriptor.SourceId, descriptor.Layer, descriptor.TileId);
-            EnvironmentalAcquisitionResult acquisition;
-            try
-            {
-                acquisition = await EnvironmentalPerformanceDiagnostics.MeasureAsync("network-acquisition",
-                    () => acquire(cancellationToken)).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
-            {
-                _logger.LogWarning(ex, "Environmental tile acquisition failed for {Source}/{Layer}/{Tile}",
-                    descriptor.SourceId, descriptor.Layer, descriptor.TileId);
-                return new EnvironmentalCacheResult(EnvironmentalDataState.Unavailable, null, false,
-                    "Environmental source tile is unavailable.");
-            }
-            if (acquisition.Bytes is null || acquisition.Bytes.Length == 0)
-                return new EnvironmentalCacheResult(acquisition.State, null, false,
-                    acquisition.Message, acquisition.HttpStatusCode);
-            var bytes = acquisition.Bytes;
 
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             try
             {
+                EnvironmentalAcquisitionResult acquisition;
+                long acquiredBytes;
                 await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
                                  FileShare.None, 64 * 1024,
                                  FileOptions.Asynchronous | FileOptions.WriteThrough))
                 {
-                    var writeTimer = System.Diagnostics.Stopwatch.StartNew();
-                    await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                    try
+                    {
+                        acquisition = await acquire(stream, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
+                    {
+                        _logger.LogWarning(ex, "Environmental tile acquisition failed for {Source}/{Layer}/{Tile}",
+                            descriptor.SourceId, descriptor.Layer, descriptor.TileId);
+                        return new EnvironmentalCacheResult(EnvironmentalDataState.Unavailable, null, false,
+                            "Environmental source tile is unavailable.");
+                    }
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                    writeTimer.Stop();
-                    EnvironmentalPerformanceDiagnostics.Add("disk-write", writeTimer.Elapsed.TotalMilliseconds);
+                    acquiredBytes = stream.Length;
                 }
+                // No payload: the tile is absent, or the source reported a failure instead of data.
+                if (acquisition.State != EnvironmentalDataState.Available || acquiredBytes == 0)
+                    return new EnvironmentalCacheResult(acquisition.State, null, false,
+                        acquisition.Message, acquisition.HttpStatusCode);
                 if (!SafeValidate(temporary, validate))
                 {
                     _logger.LogWarning("Rejected invalid environmental download for {Source}/{Layer}/{Tile}",
@@ -214,8 +261,30 @@ public static class EnvironmentalHttpDownloader
     public static async Task<EnvironmentalAcquisitionResult> DownloadDetailedAsync(HttpClient client, Uri uri,
         int maximumBytes, CancellationToken cancellationToken, int maximumAttempts = 3)
     {
+        using var buffer = new MemoryStream();
+        var result = await DownloadToStreamAsync(client, uri, maximumBytes, buffer, cancellationToken, maximumAttempts)
+            .ConfigureAwait(false);
+        return result.State == EnvironmentalDataState.Available
+            ? EnvironmentalAcquisitionResult.Available(buffer.ToArray())
+            : result;
+    }
+
+    /// <summary>
+    /// Downloads straight into <paramref name="destination"/>, so a large source is never held in
+    /// memory. Retries, absent-tile reporting, the size limit and cancellation behave exactly as they
+    /// do for the buffered overload; the returned result never carries bytes.
+    /// </summary>
+    public static async Task<EnvironmentalAcquisitionResult> DownloadToStreamAsync(HttpClient client, Uri uri,
+        int maximumBytes, Stream destination, CancellationToken cancellationToken, int maximumAttempts = 3)
+    {
         for (var attempt = 1; attempt <= maximumAttempts; attempt++)
         {
+            // Discard anything a previous attempt may have written before starting again.
+            if (destination.CanSeek && destination.Length > 0)
+            {
+                destination.SetLength(0);
+                destination.Seek(0, SeekOrigin.Begin);
+            }
             using var response = await client.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
@@ -234,17 +303,18 @@ public static class EnvironmentalHttpDownloader
             if (response.Content.Headers.ContentLength > maximumBytes)
                 throw new InvalidDataException("Environmental tile exceeds its configured size limit.");
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
-            using var output = new MemoryStream();
             var buffer = new byte[64 * 1024];
+            long total = 0;
             while (true)
             {
                 var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
                 if (read == 0) break;
-                if (output.Length + read > maximumBytes)
+                if (total + read > maximumBytes)
                     throw new InvalidDataException("Environmental tile exceeds its configured size limit.");
-                output.Write(buffer, 0, read);
+                await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
+                total += read;
             }
-            return EnvironmentalAcquisitionResult.Available(output.ToArray());
+            return new EnvironmentalAcquisitionResult(EnvironmentalDataState.Available, null, "Source acquired.");
         }
         return new EnvironmentalAcquisitionResult(EnvironmentalDataState.SourceUnavailable, null,
             "Environmental source acquisition attempts were exhausted.");

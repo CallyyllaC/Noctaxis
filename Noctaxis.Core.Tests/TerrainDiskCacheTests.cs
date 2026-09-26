@@ -294,6 +294,13 @@ public sealed class TerrainDiskCacheTests(ITestOutputHelper output) : IDisposabl
     {
         if (OperatingSystem.IsWindows())
             return new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        return HoldReadOnlyParent(path);
+    }
+
+    // Separate so the platform analyzer sees that the restore lambda never runs on Windows.
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    private static IDisposable? HoldReadOnlyParent(string path)
+    {
         var directory = Path.GetDirectoryName(path)!;
         var original = File.GetUnixFileMode(directory);
         File.SetUnixFileMode(directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);

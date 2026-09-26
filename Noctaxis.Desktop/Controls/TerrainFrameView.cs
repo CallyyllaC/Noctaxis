@@ -15,6 +15,11 @@ public sealed class TerrainFrameView : ChromeDrawingControl
     public static ISolidColorBrush NearBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(DepthColour(100));
     public static ISolidColorBrush FarBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(DepthColour(500000));
     public static ISolidColorBrush SkyBrush { get; } = new Avalonia.Media.Immutable.ImmutableSolidColorBrush(DepthColour(0));
+    /// <summary>Frame centre line: dashed.</summary>
+    public static Avalonia.Media.Immutable.ImmutableDashStyle CentreLineDash { get; } = new Avalonia.Media.Immutable.ImmutableDashStyle([4, 3], 0);
+    private static readonly IPen CentreLinePen = new Avalonia.Media.Immutable.ImmutablePen(new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#709DB2C8")), 1, CentreLineDash);
+    /// <summary>Visibility threshold line: solid and thicker.</summary>
+    private static readonly IPen ThresholdLinePen = new Avalonia.Media.Immutable.ImmutablePen(new Avalonia.Media.Immutable.ImmutableSolidColorBrush(Color.Parse("#B0D5B77B")), 2);
     public static readonly StyledProperty<CameraTerrainDepth?> DepthProperty = AvaloniaProperty.Register<TerrainFrameView, CameraTerrainDepth?>(nameof(Depth));
     public static readonly StyledProperty<double> ThresholdProperty = AvaloniaProperty.Register<TerrainFrameView, double>(nameof(Threshold), .05);
     public static readonly StyledProperty<string> StatusProperty = AvaloniaProperty.Register<TerrainFrameView, string>(nameof(Status), "Resolving terrain…");
@@ -84,8 +89,10 @@ public sealed class TerrainFrameView : ChromeDrawingControl
         context.DrawImage(_bitmap, new Rect(_bitmap.Size), frame);
         var centre = frame.Y + frame.Height / 2;
         var threshold = frame.Bottom - frame.Height * Math.Clamp(Threshold, 0, .5);
-        context.DrawLine(new Pen(new SolidColorBrush(Color.Parse("#709DB2C8")), 1), new Point(frame.Left, centre), new Point(frame.Right, centre));
-        context.DrawLine(new Pen(new SolidColorBrush(Color.Parse("#B0D5B77B")), 1), new Point(frame.Left, threshold), new Point(frame.Right, threshold));
+        // Drawn over the grayscale depth raster, so the colours stay fixed; the dashed centre line and the
+        // thicker solid threshold line differ by pattern and weight as well (legend beside the view).
+        context.DrawLine(CentreLinePen, new Point(frame.Left, centre), new Point(frame.Right, centre));
+        context.DrawLine(ThresholdLinePen, new Point(frame.Left, threshold), new Point(frame.Right, threshold));
     }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     { _bitmap?.Dispose(); _bitmap = null; _source = null; base.OnDetachedFromVisualTree(e); }

@@ -53,7 +53,7 @@ public sealed class RollingFileLoggerProviderTests : IDisposable
         using var provider = new RollingFileLoggerProvider(_directory,
             now: new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero), retainedFiles: 3);
 
-        var remaining = Directory.GetFiles(_directory, "noctaxis-*.log").Select(Path.GetFileName).Order().ToArray();
+        var remaining = Directory.GetFiles(_directory, "noctaxis-*.log").Select(file => Path.GetFileName(file)).Order().ToArray();
         Assert.Equal(3, remaining.Length);
         Assert.Equal(["noctaxis-20200104-000000-1.log", "noctaxis-20200105-000000-1.log"], remaining[..2]);
         Assert.Equal(Path.GetFileName(provider.FilePath), remaining[2]);
