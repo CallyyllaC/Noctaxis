@@ -3,6 +3,8 @@
     <OutputType>WinExe</OutputType>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Generated from Branding/NoctaxisLogo.cs by NoctaxisIcon.WriteAssets; see docs/branding.md. -->
+    <ApplicationIcon>Assets\noctaxis.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>

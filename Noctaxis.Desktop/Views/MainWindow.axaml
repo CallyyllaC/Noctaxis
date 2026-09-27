@@ -6,6 +6,7 @@
         x:Class="Noctaxis.Desktop.Views.MainWindow"
         x:CompileBindings="False"
         Title="Noctaxis — Astral photography planner"
+        Icon="/Assets/noctaxis.ico"
         Width="1440" Height="900" MinWidth="720" MinHeight="560"
         WindowDecorations="BorderOnly"
         ExtendClientAreaToDecorationsHint="True"
@@ -59,7 +60,7 @@
             WindowDecorationProperties.ElementRole="TitleBar">
       <Grid ColumnDefinitions="*,46,46,46">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,10,0" Spacing="10">
-          <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource Accent}" />
+          <controls:NoctaxisLogoMark Width="18" Height="18" VerticalAlignment="Center" AutomationProperties.Name="Noctaxis logo" />
           <TextBlock TextWrapping="Wrap" Text="NOCTAXIS" FontSize="{DynamicResource TextLabel}" FontWeight="SemiBold" LetterSpacing="1.6" VerticalAlignment="Center" />
           <Border Width="1" Height="16" Background="{DynamicResource ButtonBackground}" Margin="2,0" />
           <TextBlock TextWrapping="Wrap" Text="Astral photography planner" FontSize="{DynamicResource TextSmall}" Foreground="{DynamicResource SecondaryText}" VerticalAlignment="Center" />
