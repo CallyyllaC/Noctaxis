@@ -1109,14 +1109,12 @@ public sealed partial class MainViewModelTests
         foreach (var option in viewModel.WeatherFieldOptions)
             option.IsEnabled = changed.Contains(option.Field);
 
-        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+        // A burst of ticks is applied and saved once, after editing pauses.
+        Assert.Equal(enabled, viewModel.Settings.EffectiveWeather.EffectiveFields);
+        await viewModel.SettleSettingsAsync();
+        Assert.Equal(changed, viewModel.Settings.EffectiveWeather.EffectiveFields);
         Assert.Equal(changed, store.State.Settings.EffectiveWeather.EffectiveFields);
         Assert.Equal(7.5, store.State.Settings.EffectiveWeather.CacheDistanceKilometres);
-
-        foreach (var option in viewModel.WeatherFieldOptions)
-            option.IsEnabled = !option.IsEnabled;
-        viewModel.ResetSettingsEditorCommand.Execute(null);
-        Assert.Equal(changed, viewModel.WeatherFieldOptions.Where(item => item.IsEnabled).Select(item => item.Field));
     }
 
     [Fact]
@@ -1129,9 +1127,7 @@ public sealed partial class MainViewModelTests
     [CoversSettingsInput("SettingsFramingLineThickness")]
     [CoversSettingsInput("SettingsTerrainDebugOverlay")]
     [CoversSettingsInput("SettingsWeatherCacheDistance")]
-    [CoversSettingsInput("ResetSettingsEditorCommand")]
-    [CoversSettingsInput("SaveSettingsCommand")]
-    public async Task ScalarSettings_LoadResetSaveAndPreviewEveryValue()
+    public async Task ScalarSettings_LoadApplyAtOnceAndSaveEveryValue()
     {
         var catalogue = new OpenNgcTargetCatalogue();
         var initialFraming = new CameraFramingSettings(
@@ -1156,16 +1152,13 @@ public sealed partial class MainViewModelTests
 
         SetScalarSettingsEditors(viewModel, "Imperial", "Europe/London", 27, 12.5, true, true, 37, 5);
         viewModel.SettingsTerrainDebugOverlay = true;
+        // Applied at once, without a save step; the deferred reuse distance shows its requested value.
         Assert.Equal(5, viewModel.CameraFramingMapSettings.LineThickness);
-
-        viewModel.ResetSettingsEditorCommand.Execute(null);
-        AssertScalarSettingsEditors(viewModel, "UK", "UTC", 15, 7.5, false, false, 22, .5);
-        Assert.False(viewModel.SettingsTerrainDebugOverlay);
-        Assert.Equal(.5, viewModel.CameraFramingMapSettings.LineThickness);
-
-        SetScalarSettingsEditors(viewModel, "Imperial", "Europe/London", 27, 12.5, true, true, 37, 5);
-        viewModel.SettingsTerrainDebugOverlay = true;
-        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+        Assert.Equal("Imperial", viewModel.Settings.Units);
+        Assert.True(viewModel.ShowTerrainDebugOverlay);
+        Assert.True(viewModel.IsCameraFramingOverlayVisible);
+        AssertScalarSettingsEditors(viewModel, "Imperial", "Europe/London", 27, 12.5, true, true, 37, 5);
+        await viewModel.SettleSettingsAsync();
 
         Assert.Equal(5, viewModel.CameraFramingMapSettings.LineThickness);
         Assert.Equal("Imperial", store.State.Settings.Units);
@@ -1252,7 +1245,7 @@ public sealed partial class MainViewModelTests
         lens.MaximumFocalLengthMillimetres = 200;
         viewModel.SettingsCameraHeightAboveGroundMetres = 1.6;
 
-        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+        await viewModel.SettleSettingsAsync();
 
         Assert.Equal(1.6, store.State.Settings.EffectiveCameraHeightAboveGroundMetres);
         Assert.Contains(store.State.Settings.Equipment!.Cameras!, item => item.DisplayName == "Astro camera");
@@ -1348,44 +1341,43 @@ public sealed partial class MainViewModelTests
     }
 
     [Fact]
-    public void GeneralSettings_ContainsSupporterLicenceAndEnabledKofiLink()
+    public void SettingsCategories_GroupSettingsByWhatTheUserIsConfiguring()
     {
         var document = XDocument.Load(TestPaths.MainWindowMarkup);
         var settings = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
-        var general = settings.Descendants().Single(element =>
-            element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "General");
+        XElement Category(string header) => settings.Descendants().Single(element =>
+            element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == header);
+        // No Save, Revert or Reset-unsaved workflow remains.
+        Assert.DoesNotContain(settings.Descendants(), element => element.Attribute("Command")?.Value is
+            "{Binding SaveSettingsCommand}" or "{Binding ResetSettingsEditorCommand}");
 
-        var supportButton = Assert.Single(general.Descendants(), element =>
-            element.Name.LocalName == "Button" &&
-            element.Attribute("Content")?.Value == "Support on Ko-fi");
+        var supporter = Category("Supporter");
+        var supportButton = Assert.Single(supporter.Descendants(), element =>
+            element.Name.LocalName == "Button" && element.Attribute("Content")?.Value == "Support on Ko-fi");
         Assert.Null(supportButton.Attribute("IsEnabled"));
         Assert.Equal("{Binding OpenKoFiCommand}", supportButton.Attribute("Command")?.Value);
         Assert.Null(supportButton.Attribute("CommandParameter"));
         Assert.Null(supportButton.Attribute("Click"));
-        Assert.Equal("Support on Ko-fi", supportButton.Attribute("{http://schemas.microsoft.com/winfx/2006/xaml}Name")?.Value ?? supportButton.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Equal("Support on Ko-fi", supportButton.Attribute("AutomationProperties.Name")?.Value);
+        Assert.Contains(supporter.Descendants(), element =>
+            element.Name.LocalName == "TextBox" && element.Attribute("Text")?.Value == "{Binding SupporterLicenceInput, Mode=TwoWay}");
+        var title = Assert.Single(supporter.Descendants(), element =>
+            element.Name.LocalName == "TextBlock" && element.Attribute("Text")?.Value == "Supporter");
+        Assert.Equal("settingsTitle", title.Attribute("Classes")?.Value);
 
-        Assert.Contains(general.Descendants(), element =>
-            element.Name.LocalName == "TextBlock" && element.Attribute("Text")?.Value == "Support");
-        Assert.Contains(general.Descendants(), element =>
-            element.Name.LocalName == "TextBlock" &&
-            element.Attribute("Text")?.Value == "Supporter licence");
-        Assert.Contains(general.Descendants(), element =>
-            element.Name.LocalName == "TextBlock" &&
-            element.Attribute("Text")?.Value == "Unlock supporter cosmetic themes with an Awoo supporter licence.");
-
-        var supportHeading = Assert.Single(general.Descendants(), element =>
-            element.Name.LocalName == "TextBlock" && element.Attribute("Text")?.Value == "Support");
-        Assert.Equal("{DynamicResource TextTitle}", supportHeading.Attribute("FontSize")?.Value);
-        Assert.Equal("SemiBold", supportHeading.Attribute("FontWeight")?.Value);
-
-        var generalInputs = general.Descendants().ToArray();
-        var theme = Assert.Single(generalInputs, e => e.Name.LocalName == "ComboBox" && e.Attribute("ItemsSource")?.Value == "{Binding ThemeOptions}");
+        var appearance = Category("Appearance").Descendants().ToArray();
+        var theme = Assert.Single(appearance, e => e.Name.LocalName == "ComboBox" && e.Attribute("ItemsSource")?.Value == "{Binding ThemeOptions}");
         Assert.Equal("{Binding SelectedTheme}", theme.Attribute("SelectedItem")?.Value);
-        Assert.Equal(10, generalInputs.Count(e => e.Name.LocalName == "RadioButton"));
-        var slider = Assert.Single(generalInputs, e => e.Name.LocalName == "Slider");
-        Assert.Contains("TextSizePercent", slider.Attribute("Value")?.Value);
-        Assert.DoesNotContain(generalInputs, e => e.Name.LocalName == "NumericUpDown");
+        Assert.Equal(7, appearance.Count(e => e.Name.LocalName == "RadioButton"));
+        var slider = Assert.Single(appearance, e => e.Name.LocalName == "CommitSlider");
+        Assert.Contains("TextSizePercent", slider.Attribute("CommittedValue")?.Value);
+
+        var general = Category("General").Descendants().ToArray();
+        Assert.Equal(3, general.Count(e => e.Name.LocalName == "RadioButton"));
+        Assert.Contains(general, e => e.Attribute("SelectedItem")?.Value == "{Binding SettingsTimeZoneId}");
+        Assert.Contains(general, e => e.Attribute("SelectedItem")?.Value == "{Binding SettingsExternalMapProvider, Mode=TwoWay}");
+        Assert.Contains(general, e => e.Attribute("Value")?.Value == "{Binding SettingsTimeSnapMinutes}");
     }
 
     [Fact]
@@ -1408,7 +1400,7 @@ public sealed partial class MainViewModelTests
             await viewModel.InitializeAsync();
             Assert.Equal(2, viewModel.SettingsTerrainCacheLimitGiB);
             viewModel.SettingsTerrainCacheLimitGiB = .5;
-            await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+            await viewModel.SettleSettingsAsync();
             Assert.Equal(536870912, manager.Usage.LimitBytes);
             Assert.Equal(536870912, store.State.Settings.TerrainCacheLimitBytes);
             viewModel.ShowPlannerCommand.Execute(null);
@@ -1450,6 +1442,7 @@ public sealed partial class MainViewModelTests
             ["ComboBox"] = "SelectedItem",
             ["ColorPicker"] = "Color",
             ["Slider"] = "Value",
+            ["CommitSlider"] = "CommittedValue",
             ["NumericUpDown"] = "Value",
             ["CheckBox"] = "IsChecked",
             ["RadioButton"] = "IsChecked",
@@ -1715,7 +1708,8 @@ public sealed partial class MainViewModelTests
         IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
         IExternalUriLauncher? externalUriLauncher = null,
         Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null,
-        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null,
+        IApplicationRestartService? restartService = null)
     {
         var locationSearch = new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance);
         var resolver = new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance);
@@ -1730,7 +1724,8 @@ public sealed partial class MainViewModelTests
             supporterLicenceVerifier: supporterLicenceVerifier, externalUriLauncher: externalUriLauncher,
             lightPollutionInstallation: lightPollutionInstallation,
             // No debounce by default, so tests observe saves as soon as the triggering change completes.
-            persistenceDelay: persistenceDelay ?? ((_, _) => Task.CompletedTask));
+            persistenceDelay: persistenceDelay ?? ((_, _) => Task.CompletedTask),
+            restartService: restartService);
     }
 
     private sealed class FakeLocationSearchProvider : ILocationSearchProvider
@@ -2164,6 +2159,13 @@ public sealed partial class MainViewModelTests
         public LocationSearchResult? SearchResult { get; set; }
         public SavedLocationEdit? EditResult { get; set; }
         public bool ConfirmDeleteResult { get; set; } = true;
+        public bool ConfirmDestructiveResult { get; set; } = true;
+        public List<DestructiveConfirmation> DestructiveRequests { get; } = [];
+        public Task<bool> ConfirmDestructiveAsync(DestructiveConfirmation request, CancellationToken cancellationToken = default)
+        {
+            DestructiveRequests.Add(request);
+            return Task.FromResult(ConfirmDestructiveResult);
+        }
         public bool LastEditorWasCreateMode { get; private set; }
         public int RefreshThumbnailConfirmations { get; private set; }
         public int RefreshSettlementConfirmations { get; private set; }

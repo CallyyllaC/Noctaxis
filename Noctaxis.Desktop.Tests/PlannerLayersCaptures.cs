@@ -48,8 +48,8 @@ public sealed partial class MainViewModelTests
                 Capture(TopLevel.GetTopLevel(slider)!, $"{id}-{scale * 100:0}-flyout");
                 button.Flyout.Hide();
                 tabs.SelectedIndex = 2; Dispatcher.UIThread.RunJobs();
-                var settings = (TabControl)((Grid)((TabItem)tabs.Items[2]!).Content!).Children[0];
-                settings.SelectedItem = settings.Items.Cast<TabItem>().Single(x => (string?)x.Header == "Data");
+                var settings = (TabControl)((Grid)((TabItem)tabs.Items[2]!).Content!).Children[1];
+                settings.SelectedItem = settings.Items.Cast<TabItem>().Single(x => (string?)x.Header == "Planner map");
                 vm.SettingsLightPollutionColorMap = LightPollutionColorMaps.Resolve("cividis");
                 Dispatcher.UIThread.RunJobs();
                 var description = window.FindControl<TextBlock>("LightPollutionPaletteDescription")!;
@@ -59,7 +59,7 @@ public sealed partial class MainViewModelTests
             }
             map.Layers.LightPollutionOpacityPercent = 64;
             Assert.Equal(.64, vm.LightPollutionMapPreferences.Opacity);
-            Assert.Equal("turbo", vm.LightPollutionMapPreferences.PaletteId);
+            Assert.Equal("cividis", vm.LightPollutionMapPreferences.PaletteId); // Chosen in Settings, applied at once.
             var saveGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             map.Layers.PersistAsync = async () => { await saveGate.Task; await vm.CommitPlannerLayersAsync(); };
             var pending = map.Layers.CommitAsync();

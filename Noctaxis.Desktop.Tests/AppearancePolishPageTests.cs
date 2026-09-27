@@ -58,7 +58,7 @@ public sealed partial class MainViewModelTests
             }
             window.MouseMove(new Point(2, 2));
             var pages = (TabControl)((Grid)window.Content!).Children[1]; pages.SelectedIndex = 2;
-            var settings = (TabControl)((Grid)((TabItem)pages.Items[2]!).Content!).Children[0];
+            var settings = (TabControl)((Grid)((TabItem)pages.Items[2]!).Content!).Children[1];
             var calls = (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes);
             var session = vm.Session;
             foreach (var section in new[] { 0, 1, 4, 6 })

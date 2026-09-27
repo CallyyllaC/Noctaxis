@@ -12,6 +12,12 @@ public partial class ConfirmationDialog : NoctaxisDialogWindow
         ConfirmButton.Content = confirmLabel;
     }
 
+    protected override void OnOpened(EventArgs e)
+    {
+        base.OnOpened(e);
+        CancelButton.Focus(Avalonia.Input.NavigationMethod.Tab);
+    }
+
     private void CancelClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Close(false);
     private void ConfirmClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) => Close(true);
     protected override void CancelDialog() => Close(false);

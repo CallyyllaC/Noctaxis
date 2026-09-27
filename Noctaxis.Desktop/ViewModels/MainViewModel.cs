@@ -83,8 +83,10 @@ public partial class MainViewModel : ObservableObject
         IExternalUriLauncher? externalUriLauncher = null,
         ExternalMapService? externalMaps = null,
         Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null,
-        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null)
+        Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null,
+        IApplicationRestartService? restartService = null)
     {
+        _restartService = restartService ?? new UnavailableApplicationRestartService();
         _planning = planning;
         _catalogue = catalogue;
         _timeZones = timeZones;
@@ -158,7 +160,6 @@ public partial class MainViewModel : ObservableObject
     public LocationSearchViewModel LocationSearch { get; }
     public LocationsViewModel Locations { get; }
     public CelestialSearchViewModel SettingsCelestialSearch { get; }
-    public AppSettings Settings { get; private set; } = new();
     public PlanningSession Session => _session;
     public GeoCoordinate Observer => _session.Observer;
 
@@ -190,19 +191,6 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _showFramingVisibilityLimits = true;
     [ObservableProperty] private bool _isLocationInteracting;
     [ObservableProperty] private string? _celestialLimitMessage;
-    [ObservableProperty] private string _settingsUnits = "Metric";
-    [ObservableProperty] private string _settingsTimeZoneId = AppSettings.UseSystemTimeZoneId;
-    [ObservableProperty] private double _settingsCameraHeightAboveGroundMetres =
-        AppSettings.DefaultCameraHeightAboveGroundMetres;
-    [ObservableProperty] private double _settingsWeatherCacheDistance = 5;
-    [ObservableProperty] private int _settingsTimeSnapMinutes = 5;
-    [ObservableProperty] private double _settingsFramingShadingOpacityPercent = 10;
-    [ObservableProperty] private double _settingsFramingLineThickness = 1.25;
-    [ObservableProperty] private bool _settingsCameraFramingOverlayVisible = true;
-    [ObservableProperty] private bool _settingsShowFramingVisibilityLimits = true;
-    [ObservableProperty] private bool _settingsTerrainDebugOverlay;
-    [ObservableProperty] private bool _settingsEnableTerrainCalculations = true;
-    [ObservableProperty] private double _settingsTerrainMinimapContext = AppSettings.DefaultTerrainMinimapContext;
     [ObservableProperty] private TerrainDebugMapSnapshot? _terrainDebugMap;
     [ObservableProperty] private TerrainDebugMapLoadState _terrainDebugMapLoadState =
         TerrainDebugMapLoadState.Disabled;
@@ -449,10 +437,7 @@ public partial class MainViewModel : ObservableObject
         : !ShowFramingVisibilityLimits
             ? "Visibility limits hidden"
             : CameraFramingVisibility?.Status ?? "Visibility data unavailable";
-    public CameraFramingSettings CameraFramingMapSettings =>
-        (Settings.EffectiveCameraFraming with { LineThickness = SettingsFramingLineThickness,
-            TerrainObstructionColour = SettingsTerrainObstructionColourHex,
-            TerrainTintStrengthPercent = SettingsTerrainTintStrengthPercent }).Normalised();
+    public CameraFramingSettings CameraFramingMapSettings => Settings.EffectiveCameraFraming;
 
     private PlanningSnapshot? CurrentSnapshot =>
         Snapshot is { } snapshot && IsCurrentObserver(snapshot.Session.Observer) ? snapshot : null;
@@ -520,6 +505,10 @@ public partial class MainViewModel : ObservableObject
             CameraHeightAboveGroundMetres = persisted.Settings.EffectiveCameraHeightAboveGroundMetres,
             Equipment = persisted.Settings.EffectiveEquipment(persisted.Session.Lens)
         };
+        // What this process runs with; restart-required settings keep these values until restart.
+        _activeSettings = Settings;
+        _settingsLoaded = true;
+        NotifyPendingRestart();
         LoadSupporterLicenceState();
         _suppressChanges = true;
         IsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
@@ -697,10 +686,21 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsLocationInteractingChanged(bool value) => OnPropertyChanged(nameof(CanExport));
 
     /// <summary>
-    /// Applies and persists settings. Returns false only when the settings were applied but could not
-    /// be saved; that failure has already been logged and shown.
+    /// Applies settings and saves them now. Returns false only when the settings were applied but could
+    /// not be saved; that failure has already been logged and shown.
     /// </summary>
-    public async Task<bool> ApplySettingsAsync(AppSettings settings)
+    public Task<bool> ApplySettingsAsync(AppSettings settings)
+    {
+        CommitDeferredSettings();
+        return ApplySettingsCoreAsync(settings, persistNow: true);
+    }
+
+    /// <summary>
+    /// Applies a complete settings record to the running application, doing only the work its changed
+    /// fields need. With <paramref name="persistNow"/> false the save is requested (debounced) rather
+    /// than written before returning; the returned task still completes when application has finished.
+    /// </summary>
+    private async Task<bool> ApplySettingsCoreAsync(AppSettings settings, bool persistNow)
     {
         var previous = Settings;
         var physicalChanged = settings.EnableTerrainCalculations != previous.EnableTerrainCalculations ||
@@ -709,6 +709,8 @@ public partial class MainViewModel : ObservableObject
             _timeZones.GetEffectiveId(settings.SelectedTimeZoneId) !=
             _timeZones.GetEffectiveId(previous.SelectedTimeZoneId);
         var weatherPolicyChanged = settings.EffectiveWeather.CacheDistanceKilometres != previous.EffectiveWeather.CacheDistanceKilometres;
+        // Requested fields are part of the forecast request: newly enabled ones need fetching.
+        var weatherFieldsChanged = !settings.EffectiveWeather.EffectiveFields.SequenceEqual(previous.EffectiveWeather.EffectiveFields);
         var oldEquipment = previous.EffectiveEquipment(_session.Lens);
         var newEquipment = settings.EffectiveEquipment(_session.Lens);
         var equipmentChanged = !oldEquipment.Cameras!.SequenceEqual(newEquipment.Cameras!) ||
@@ -729,7 +731,11 @@ public partial class MainViewModel : ObservableObject
             CameraHeightAboveGroundMetres = settings.EffectiveCameraHeightAboveGroundMetres,
             Equipment = settings.EffectiveEquipment(_session.Lens)
         };
-        _session = _session.WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
+        // Captured now, so closing Noctaxis while the change is still being applied cannot lose it.
+        if (!persistNow) RequestSave();
+        // Only a terrain-mode change alters the planning session; other settings leave it untouched.
+        if (_session.EnableTerrainCalculations != Settings.EnableTerrainCalculations)
+            _session = _session.WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
         if (terrainModeChanged)
         {
             _suppressChanges = true;
@@ -791,44 +797,48 @@ public partial class MainViewModel : ObservableObject
         else if (timeZoneChanged) ScheduleAstronomyRefresh(0);
         NotifyTerrainProperties();
         if (physicalChanged || timeZoneChanged) await _activePlannerRefresh;
-        else if (weatherPolicyChanged) await RefreshWeather();
-        return await FlushAsync();
+        else if (weatherPolicyChanged || weatherFieldsChanged && Snapshot is not null) await RefreshWeather();
+        return !persistNow || await FlushAsync();
     }
 
+    /// <summary>
+    /// Builds the Settings page's list editors (weather fields and equipment profiles) from the loaded
+    /// settings. Scalar settings need no loading: they are views of <see cref="Settings"/>.
+    /// </summary>
     private void LoadSettingsEditor()
     {
-        LoadLightPollutionEditor();
         LoadAppearance();
-        SettingsUnits = MeasurementUnits.NormaliseId(Settings.Units);
-        SettingsExternalMapProvider = ExternalMapProviders.FirstOrDefault(option => option.Provider == Settings.ExternalMapProvider) ?? ExternalMapProviders[0];
-        SettingsMinimumTerrainFrameCoveragePercent = Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent;
-        SettingsTimeZoneId = Settings.SelectedTimeZoneId;
-        SettingsCameraHeightAboveGroundMetres = Settings.EffectiveCameraHeightAboveGroundMetres;
-        SettingsWeatherCacheDistance = Settings.EffectiveWeather.CacheDistanceKilometres;
-        SettingsTerrainCacheLimitGiB = Settings.EffectiveTerrainCacheLimitBytes / (1024d * 1024 * 1024);
-        SettingsTimeSnapMinutes = Settings.TimeSnapMinutes;
-        SettingsFramingShadingOpacityPercent = Settings.EffectiveCameraFraming.ShadingOpacityPercent;
-        SettingsFramingLineThickness = Settings.EffectiveCameraFraming.LineThickness;
-        SettingsTerrainObstructionColour = Avalonia.Media.Color.Parse(Settings.EffectiveCameraFraming.TerrainObstructionColour);
-        SettingsTerrainTintStrengthPercent = Settings.EffectiveCameraFraming.TerrainTintStrengthPercent;
-        SettingsCameraFramingOverlayVisible = Settings.EffectiveCameraFraming.IsOverlayVisible;
-        SettingsShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
-        SettingsTerrainDebugOverlay = Settings.TerrainDebugOverlay;
-        SettingsEnableTerrainCalculations = Settings.EnableTerrainCalculations;
-        SettingsTerrainMinimapContext = Settings.EffectiveTerrainMinimapContext;
         WeatherFieldOptions.Clear();
         foreach (var field in Enum.GetValues<WeatherField>())
-            WeatherFieldOptions.Add(new WeatherFieldOptionViewModel(field, WeatherFieldLabel(field), Settings.EffectiveWeather.IsEnabled(field)));
+        {
+            var option = new WeatherFieldOptionViewModel(field, WeatherFieldLabel(field), Settings.EffectiveWeather.IsEnabled(field));
+            AttachWeatherFieldOption(option);
+            WeatherFieldOptions.Add(option);
+        }
         WeatherFieldGroups.Clear();
         foreach (var (label, fields) in WeatherFieldGroupDefinitions)
             WeatherFieldGroups.Add(new WeatherFieldGroupViewModel(label,
                 fields.Select(field => WeatherFieldOptions.Single(option => option.Field == field)).ToArray()));
         EquipmentCameraEditors.Clear();
         foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Cameras!)
-            EquipmentCameraEditors.Add(new CameraProfileEditorViewModel(profile, RemoveCameraProfileEditor));
+            EquipmentCameraEditors.Add(NewCameraEditor(profile));
         EquipmentLensEditors.Clear();
         foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Lenses!)
-            EquipmentLensEditors.Add(new LensProfileEditorViewModel(profile, RemoveLensProfileEditor));
+            EquipmentLensEditors.Add(NewLensEditor(profile));
+    }
+
+    private CameraProfileEditorViewModel NewCameraEditor(CameraProfile profile)
+    {
+        var editor = new CameraProfileEditorViewModel(profile, RemoveCameraProfileEditor);
+        AttachEquipmentEditor(editor);
+        return editor;
+    }
+
+    private LensProfileEditorViewModel NewLensEditor(LensProfile profile)
+    {
+        var editor = new LensProfileEditorViewModel(profile, RemoveLensProfileEditor);
+        AttachEquipmentEditor(editor);
+        return editor;
     }
 
     private void LoadEquipmentOptions()
@@ -853,78 +863,54 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SaveSettings()
+    private void AddCameraProfile()
     {
-        if (EquipmentCameraEditors.Count == 0 || EquipmentLensEditors.Count == 0)
-        {
-            StatusMessage = "At least one valid camera and lens are required.";
-            return;
-        }
-        var invalidEquipment = EquipmentCameraEditors.Select(item => item.ValidationMessage)
-            .Concat(EquipmentLensEditors.Select(item => item.ValidationMessage))
-            .FirstOrDefault(message => message is not null);
-        if (invalidEquipment is not null)
-        {
-            StatusMessage = invalidEquipment;
-            return;
-        }
-        var updated = Settings with
-        {
-            LightPollution = LightPollutionMapPreferences with { PaletteId = SettingsLightPollutionColorMap?.Id ?? "grayscale" },
-            Units = MeasurementUnits.NormaliseId(SettingsUnits),
-            ExternalMapProvider = SettingsExternalMapProvider?.Provider ?? ExternalMapProvider.OpenStreetMap,
-            SelectedTimeZoneId = SettingsTimeZoneId,
-            Weather = new WeatherSettings(
-                WeatherFieldOptions.Where(item => item.IsEnabled).Select(item => item.Field).ToArray(),
-                Math.Clamp(SettingsWeatherCacheDistance, 0, 100)),
-            TimeSnapMinutes = Math.Clamp(SettingsTimeSnapMinutes, 1, 30),
-            CameraHeightAboveGroundMetres =
-                AppSettings.NormaliseCameraHeight(SettingsCameraHeightAboveGroundMetres),
-            TerrainDebugOverlay = SettingsTerrainDebugOverlay,
-            EnableTerrainCalculations = SettingsEnableTerrainCalculations,
-            TerrainMinimapContext = Math.Clamp(double.IsFinite(SettingsTerrainMinimapContext) ? SettingsTerrainMinimapContext : AppSettings.DefaultTerrainMinimapContext, 1.0, 2.5),
-            TerrainCacheLimitBytes = (long)(Math.Clamp(double.IsFinite(SettingsTerrainCacheLimitGiB)
-                ? SettingsTerrainCacheLimitGiB : 2, 0, 1024) * 1024 * 1024 * 1024),
-            Equipment = new EquipmentSettings(
-                EquipmentCameraEditors.Select(item => item.Profile).ToArray(),
-                EquipmentLensEditors.Select(item => item.Profile).ToArray()),
-            CameraFraming = Settings.EffectiveCameraFraming with
-            {
-                IsOverlayVisible = SettingsCameraFramingOverlayVisible,
-                ShowVisibilityLimits = SettingsShowFramingVisibilityLimits,
-                ShadingOpacityPercent = Math.Clamp(SettingsFramingShadingOpacityPercent, 0, 50),
-                LineThickness = Math.Clamp(SettingsFramingLineThickness, .5, 5),
-                TerrainObstructionColour = SettingsTerrainObstructionColourHex,
-                TerrainTintStrengthPercent = SettingsTerrainTintStrengthPercent,
-                MinimumTerrainFrameCoveragePercent = Math.Clamp(SettingsMinimumTerrainFrameCoveragePercent, 0, 50)
-            }
-        };
-        StatusMessage = await ApplySettingsAsync(updated)
-            ? "Settings saved"
-            : "Settings applied, but they could not be saved";
-    }
-
-    [RelayCommand] private void ResetSettingsEditor()
-    {
-        LoadSettingsEditor();
-        SettingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Grayscale;
+        EquipmentCameraEditors.Add(NewCameraEditor(new CameraProfile(Guid.NewGuid().ToString("N"), "New camera", 36, 24)));
+        EquipmentListChanged();
     }
 
     [RelayCommand]
-    private void AddCameraProfile() => EquipmentCameraEditors.Add(new CameraProfileEditorViewModel(
-        new CameraProfile(Guid.NewGuid().ToString("N"), "New camera", 36, 24),
-        RemoveCameraProfileEditor));
+    private void AddLensProfile()
+    {
+        EquipmentLensEditors.Add(NewLensEditor(new LensProfile(Guid.NewGuid().ToString("N"), "New lens", 24, 70)));
+        EquipmentListChanged();
+    }
 
-    [RelayCommand]
-    private void AddLensProfile() => EquipmentLensEditors.Add(new LensProfileEditorViewModel(
-        new LensProfile(Guid.NewGuid().ToString("N"), "New lens", 24, 70),
-        RemoveLensProfileEditor));
-
-    private void RemoveCameraProfileEditor(CameraProfileEditorViewModel profile) =>
+    private async Task RemoveCameraProfileEditor(CameraProfileEditorViewModel profile)
+    {
+        if (!await ConfirmRemoveEquipmentAsync("camera", profile.DisplayName)) return;
         EquipmentCameraEditors.Remove(profile);
+        EquipmentRemoved();
+    }
 
-    private void RemoveLensProfileEditor(LensProfileEditorViewModel profile) =>
+    private async Task RemoveLensProfileEditor(LensProfileEditorViewModel profile)
+    {
+        if (!await ConfirmRemoveEquipmentAsync("lens", profile.DisplayName)) return;
         EquipmentLensEditors.Remove(profile);
+        EquipmentRemoved();
+    }
+
+    private Task<bool> ConfirmRemoveEquipmentAsync(string kind, string name) =>
+        _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation($"Remove {kind}?",
+            string.IsNullOrWhiteSpace(name)
+                ? $"This {kind} will be removed from your equipment."
+                : $"“{name.Trim()}” will be removed from your equipment.",
+            $"Remove {kind}"));
+
+    /// <summary>A confirmed removal is applied and saved now, not after the usual editing pause.</summary>
+    private void EquipmentRemoved()
+    {
+        EquipmentListChanged();
+        CommitDeferredSettings();
+    }
+
+    private void EquipmentListChanged() => EquipmentEdited();
+
+    /// <summary>Why equipment edits are not being saved yet, or null when they are.</summary>
+    public string? EquipmentValidationMessage =>
+        EquipmentCameraEditors.Count == 0 ? "Add a camera. Equipment changes are saved once there is at least one camera and one lens." :
+        EquipmentLensEditors.Count == 0 ? "Add a lens. Equipment changes are saved once there is at least one camera and one lens." :
+        EquipmentIsValid() ? null : "Equipment changes are saved once every profile is complete.";
 
     private bool CanRefreshSavedLocationThumbnails() =>
         !IsRefreshingLocationThumbnails && Locations.Saved.Count > 0;
@@ -942,9 +928,6 @@ public partial class MainViewModel : ObservableObject
         RefreshSavedLocationSettlementCachesCommand.NotifyCanExecuteChanged();
         ReapplySavedLocationMapStylesCommand.NotifyCanExecuteChanged();
     }
-
-    partial void OnSettingsFramingLineThicknessChanged(double value) =>
-        OnPropertyChanged(nameof(CameraFramingMapSettings));
 
     [RelayCommand(CanExecute = nameof(CanRefreshSavedLocationThumbnails))]
     private async Task RefreshSavedLocationThumbnails()
@@ -1148,8 +1131,12 @@ public partial class MainViewModel : ObservableObject
     /// callers only need the result when their own feedback depends on it. Nothing is written before
     /// initialisation has completed.
     /// </summary>
-    public Task<bool> FlushAsync() =>
-        _stateSaves.IsEnabled ? _stateSaves.FlushAsync(CaptureState()) : Task.FromResult(true);
+    public Task<bool> FlushAsync()
+    {
+        // A setting still in its quiet period is the user's latest choice: it is applied and written too.
+        CommitDeferredSettings();
+        return _stateSaves.IsEnabled ? _stateSaves.FlushAsync(CaptureState()) : Task.FromResult(true);
+    }
 
     /// <summary>Schedules a debounced save for frequent, fire-and-forget state changes.</summary>
     private void RequestSave()
@@ -1501,8 +1488,15 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void RestoreCelestialDefaults()
+    private async Task RestoreCelestialDefaults()
     {
+        // Replacing a list the user has shaped loses their choices; the default list itself needs no question.
+        var current = Settings.EffectiveCelestialObjects;
+        var isDefault = current.DefaultPrimaryTargetId == "sun" &&
+                        current.EffectiveConfiguredObjects.SequenceEqual(CelestialObjectSettings.Defaults);
+        if (!isDefault && !await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation("Restore default objects?",
+                "Your configured celestial objects will be replaced by the Sun and the Moon.", "Restore defaults")))
+            return;
         _session = _session with { VisibleObjects = CelestialObjectSettings.Defaults, TargetId = "sun" };
         Settings = Settings with { CelestialObjects = new CelestialObjectSettings(CelestialObjectSettings.Defaults, "sun") };
         BuildCelestialObjectItems();
@@ -1823,7 +1817,6 @@ public partial class MainViewModel : ObservableObject
     partial void OnIsCameraFramingOverlayVisibleChanged(bool value)
     {
         if (_suppressChanges) return;
-        SettingsCameraFramingOverlayVisible = value;
         Settings = Settings with
         {
             CameraFraming = Settings.EffectiveCameraFraming with { IsOverlayVisible = value }
@@ -1837,7 +1830,6 @@ public partial class MainViewModel : ObservableObject
     partial void OnShowFramingVisibilityLimitsChanged(bool value)
     {
         if (_suppressChanges) return;
-        SettingsShowFramingVisibilityLimits = value;
         Settings = Settings with
         {
             CameraFraming = Settings.EffectiveCameraFraming with { ShowVisibilityLimits = value }

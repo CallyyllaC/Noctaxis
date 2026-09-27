@@ -14,7 +14,7 @@ internal static class FluentResourceBridge
         {
             Alias("ButtonBackground" + suffix, background);
             Alias("ButtonForeground" + suffix, suffix == "Disabled" ? "DisabledText" : "PrimaryText");
-            // Hover and press also strengthen the border (with a thicker border, see ThemeService).
+            // Hover and press also strengthen the border (plus a layout-neutral ring, see ThemeService).
             Alias("ButtonBorderBrush" + suffix, suffix is "PointerOver" or "Pressed" ? "StrongBorder" : "SurfaceBorder");
             Alias("AccentButtonBackground" + suffix, suffix == "Disabled" ? "ButtonDisabled" : "Accent");
             Alias("AccentButtonForeground" + suffix, suffix == "Disabled" ? "DisabledText" : "AccentForeground");

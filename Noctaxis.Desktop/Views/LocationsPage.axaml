@@ -164,6 +164,10 @@
                             Stretch="Uniform" Width="20" Height="20" IsVisible="{Binding IsNotFavourite}"/>
                     </Grid>
                   </Button>
+
+                  <!-- Hover, selection and focus weight, drawn over the preview. Its width never reaches the
+                       card's size, so card states cannot move the card or its neighbours. -->
+                  <Border Grid.ColumnSpan="2" Classes="cardStateRing"/>
                 </Grid>
               </Border>
             </DataTemplate>

@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:themes="clr-namespace:Noctaxis.Desktop.Themes"
+             xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
              x:Class="Noctaxis.Desktop.App"
              RequestedThemeVariant="Dark">
   <Application.Styles>
@@ -31,9 +32,19 @@
       <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}"/>
     </Style>
+    <!-- Interaction states change colour and draw layout-neutral rings (see ThemeService: StateHoverRing and
+         friends); they never change BorderThickness, Margin, Padding or size. InteractionGeometryTests. -->
     <Style Selector="Button:focus-visible, ToggleButton:focus-visible, ComboBox:focus-visible, TextBox:focus-within, NumericUpDown:focus-within, Slider:focus-visible">
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
-      <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="TextBox:focus-within /template/ Border#PART_BorderElement, ComboBox:focus-visible /template/ Border#Background">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateFocusRing}"/>
+    </Style>
+    <!-- Fluent shrinks pressed buttons with a render transform, which also shrinks their hit area: a press
+         near the edge could then release outside the button and lose the click. The pressed fill and
+         ring already show the press. -->
+    <Style Selector="Button:pressed, ToggleButton:pressed, RepeatButton:pressed">
+      <Setter Property="RenderTransform" Value="{x:Null}"/>
     </Style>
     <Style Selector="Window">
       <Setter Property="themes:AppearanceLayout.Revision" Value="{DynamicResource AppearanceLayoutRevision}"/>
@@ -130,6 +141,67 @@
       <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
       <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
       <Setter Property="Margin" Value="0,0,0,4" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Settings page structure: category > section > field label > control > description. -->
+    <Style Selector="StackPanel.settingsCategory">
+      <Setter Property="Margin" Value="16" />
+      <Setter Property="Spacing" Value="12" />
+      <Setter Property="MaxWidth" Value="860" />
+    </Style>
+    <Style Selector="TextBlock.settingsTitle">
+      <Setter Property="FontSize" Value="{DynamicResource TextTitle}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.settingDescription">
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+      <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Settings category navigation: a vertical rail beside the selected category. The rail scrolls on its
+         own, takes at most about a third of the width (names wrap within it rather than squeezing the
+         content), and each category's content scrolls independently. -->
+    <Style Selector="TabControl.settingsNavigation">
+      <Setter Property="TabStripPlacement" Value="Left"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid ColumnDefinitions="Auto,*">
+            <Border Classes="settingsNavigationRail" MaxWidth="{Binding Bounds.Width, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static controls:FractionConverter.Instance}, ConverterParameter=0.34}">
+              <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}" Margin="0,0,8,0"/>
+              </ScrollViewer>
+            </Border>
+            <ContentPresenter Name="PART_SelectedContentHost" Grid.Column="1" Margin="{TemplateBinding Padding}"
+                              Content="{TemplateBinding SelectedContent}" ContentTemplate="{TemplateBinding SelectedContentTemplate}"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Border.settingsNavigationRail">
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
+      <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    </Style>
+    <Style Selector="TabControl.settingsNavigation > TabItem">
+      <Setter Property="FontSize" Value="{DynamicResource TextBody}"/>
+      <Setter Property="MinHeight" Value="40"/>
+      <Setter Property="Padding" Value="14,8"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Left"/>
+      <Setter Property="HeaderTemplate">
+        <DataTemplate>
+          <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+        </DataTemplate>
+      </Setter>
+    </Style>
+    <!-- Selection is carried by the pipe and the weight as well as the fill, never by colour alone. -->
+    <Style Selector="TabControl.settingsNavigation > TabItem:selected">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.restartAction">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Padding" Value="16,8" />
     </Style>
     <Style Selector="Expander">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
@@ -171,17 +243,32 @@
       <Setter Property="ClipToBounds" Value="True" />
       <Setter Property="BoxShadow" Value="{DynamicResource LocationCardShadow}" />
     </Style>
+    <!-- The card keeps a 1px border in every state, so hovering never resizes it (the card grid sizes rows
+         from its cards). The heavier state border is the non-hit-testable cardStateRing overlay on top. -->
     <Style Selector="Border.editorialLocationCard:pointerover">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateHoverThickness}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
+    </Style>
+    <Style Selector="Border.editorialLocationCard:pointerover Border.cardStateRing">
+      <Setter Property="BorderThickness" Value="{DynamicResource StateHoverInset}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
     </Style>
     <Style Selector="Border.editorialLocationCard.selected">
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
-      <Setter Property="BorderThickness" Value="{DynamicResource StateSelectedThickness}" />
+    </Style>
+    <Style Selector="Border.editorialLocationCard.selected Border.cardStateRing">
+      <Setter Property="BorderThickness" Value="{DynamicResource StateSelectedInset}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     </Style>
     <Style Selector="Border.editorialLocationCard:focus-within">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}" />
+    </Style>
+    <Style Selector="Border.editorialLocationCard:focus-within Border.cardStateRing">
+      <Setter Property="BorderThickness" Value="{DynamicResource StateFocusInset}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}" />
+    </Style>
+    <Style Selector="Border.cardStateRing">
+      <Setter Property="IsHitTestVisible" Value="False" />
+      <Setter Property="CornerRadius" Value="11" />
     </Style>
     <Style Selector="Border.lastUsedChip">
       <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
@@ -292,6 +379,7 @@
       <Setter Property="FontWeight" Value="SemiBold" />
       <Setter Property="FontSize" Value="{DynamicResource TextLabel}" />
       <Setter Property="LetterSpacing" Value="1.2" />
+      <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
     <Style Selector="TextBlock.metric">
       <Setter Property="FontSize" Value="{DynamicResource TextNumeric}" />
@@ -310,39 +398,61 @@
       <Setter Property="Background" Value="{DynamicResource CardPressedOverlay}"/>
     </Style>
     <Style Selector="Button:not(.locationCardBody):pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateHoverThickness}"/>
+      <Setter Property="BoxShadow" Value="{DynamicResource StateHoverRing}"/>
     </Style>
     <Style Selector="Button:not(.locationCardBody):pressed /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderThickness" Value="{DynamicResource StatePressedThickness}"/>
+      <Setter Property="BoxShadow" Value="{DynamicResource StatePressedRing}"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource AccentHoverRing}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource AccentPressedRing}"/>
     </Style>
     <!-- Map chrome states: the accent marks hover, the pressed accent marks press, over the map. -->
     <Style Selector="Button.mapChrome:pointerover /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
       <Setter Property="Foreground" Value="{DynamicResource MapChromeText}"/>
+      <Setter Property="BoxShadow" Value="{DynamicResource AccentHoverRing}"/>
     </Style>
     <Style Selector="Button.mapChrome:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="BorderBrush" Value="{DynamicResource AccentPressed}"/>
+      <Setter Property="BoxShadow" Value="{DynamicResource AccentPressedRing}"/>
     </Style>
+    <!-- A disabled button hides its border but keeps its width, so enabling it never resizes it. -->
     <Style Selector="Button:disabled /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="BoxShadow" Value="none"/>
     </Style>
     <Style Selector="Button:not(.locationCardBody):focus-visible /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
+      <Setter Property="BoxShadow" Value="{DynamicResource StateFocusRing}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
     </Style>
     <Style Selector="TabItem:focus-visible">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
+    </Style>
+    <Style Selector="TabItem:focus-visible /template/ Border#PART_LayoutRoot">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateFocusOutline}"/>
     </Style>
     <Style Selector="ToggleButton:checked, ListBoxItem:selected, ComboBoxItem:selected">
       <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
       <Setter Property="Foreground" Value="{DynamicResource SelectionForeground}"/>
-      <Setter Property="BorderThickness" Value="{DynamicResource StateSelectedThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
     </Style>
+    <Style Selector="ToggleButton:checked:not(#ExpanderHeader) /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateSelectedRing}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter, ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateSelectedOutline}"/>
+    </Style>
     <Style Selector="ToggleButton:focus-visible, ListBoxItem:focus-visible, ComboBoxItem:focus-visible">
-      <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}"/>
+    </Style>
+    <Style Selector="ToggleButton:focus-visible:not(#ExpanderHeader) /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateFocusRing}"/>
+    </Style>
+    <Style Selector="ListBoxItem:focus-visible /template/ ContentPresenter#PART_ContentPresenter, ComboBoxItem:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="BoxShadow" Value="{DynamicResource StateFocusOutline}"/>
     </Style>
     <Style Selector="ListBox">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>

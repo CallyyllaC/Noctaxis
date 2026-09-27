@@ -11,15 +11,8 @@ public partial class MainViewModel
     private CancellationTokenSource? _lightPollutionCancellation;
     private bool _lightPollutionNotificationsAttached;
     private int _lightPollutionNotificationGeneration;
-    [ObservableProperty] private Mapping.ILightPollutionColorMap _settingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Grayscale;
     public IReadOnlyList<Mapping.ILightPollutionColorMap> LightPollutionColorMapOptions => LightPollutionPaletteHelp.Options;
     public string LightPollutionColorMapDescription => LightPollutionPaletteHelp.Description(SettingsLightPollutionColorMap?.Id);
-    partial void OnSettingsLightPollutionColorMapChanged(Mapping.ILightPollutionColorMap value)
-    {
-        OnPropertyChanged(nameof(LightPollutionColorMapDescription));
-        OnPropertyChanged(nameof(LightPollutionColourVisionAdvice));
-        OnPropertyChanged(nameof(HasLightPollutionColourVisionAdvice));
-    }
     /// <summary>
     /// Turbo is the one colour map whose levels collapse under colour-vision deficiencies. With a
     /// colour-vision mode active the user is offered Cividis; their choice is never changed for them.
@@ -37,10 +30,6 @@ public partial class MainViewModel
     { PaletteId = Mapping.LightPollutionColorMaps.Resolve(Settings.LightPollution?.PaletteId).Id };
     public string LightPollutionSourceName => LorenzAtlas.Name;
     partial void OnIsManagingLightPollutionChanged(bool value) => OnPropertyChanged(nameof(CanManageLightPollution));
-    private void LoadLightPollutionEditor()
-    {
-        SettingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Resolve(LightPollutionMapPreferences.PaletteId);
-    }
     public void PreviewPlannerLayers(bool visible, double opacityPercent)
     {
         var current = LightPollutionMapPreferences;
@@ -97,6 +86,10 @@ public partial class MainViewModel
     private async Task RemoveLightPollution()
     {
         if (!CanManageLightPollution) return;
+        if (!await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation("Remove the Light Pollution Atlas?",
+                "The installed atlas data will be deleted. The light pollution overlay will be unavailable until it is installed again, which downloads it anew.",
+                "Remove atlas")))
+            return;
         IsManagingLightPollution = true;
         try { await Task.Run(() => LightPollutionInstallation!.RemoveAsync()); LightPollutionStatus = "Not installed"; LightPollutionProgress = ""; }
         catch (Exception ex) { LightPollutionStatus = $"Removal error: {ex.Message}"; }

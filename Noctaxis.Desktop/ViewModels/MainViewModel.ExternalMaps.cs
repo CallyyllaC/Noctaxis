@@ -17,8 +17,6 @@ public partial class MainViewModel
         new(ExternalMapProvider.Mapillary, "Mapillary")
     ];
 
-    [ObservableProperty] private ExternalMapProviderOption? _settingsExternalMapProvider;
-
     private bool CanOpenInMaps() => ExternalMapService.HasValidCoordinates(Latitude, Longitude);
 
     [RelayCommand(CanExecute = nameof(CanOpenInMaps))]

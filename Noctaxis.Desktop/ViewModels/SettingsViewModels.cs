@@ -17,9 +17,9 @@ public sealed record WeatherFieldGroupViewModel(
 
 public partial class CameraProfileEditorViewModel : ObservableObject
 {
-    private readonly Action<CameraProfileEditorViewModel> _remove;
+    private readonly Func<CameraProfileEditorViewModel, Task> _remove;
 
-    public CameraProfileEditorViewModel(CameraProfile profile, Action<CameraProfileEditorViewModel> remove)
+    public CameraProfileEditorViewModel(CameraProfile profile, Func<CameraProfileEditorViewModel, Task> remove)
     {
         Id = profile.Id;
         _displayName = profile.DisplayName;
@@ -41,8 +41,9 @@ public partial class CameraProfileEditorViewModel : ObservableObject
     public bool IsValid => Profile.IsValid;
     public string? ValidationMessage => Profile.ValidationMessage;
 
+    /// <summary>Asks, then removes this profile if confirmed (see MainViewModel).</summary>
     [RelayCommand]
-    private void Remove() => _remove(this);
+    private Task Remove() => _remove(this);
 
     partial void OnDisplayNameChanged(string value) => NotifyValidation();
     partial void OnSensorWidthMillimetresChanged(double value) => NotifyValidation();
@@ -61,9 +62,9 @@ public partial class CameraProfileEditorViewModel : ObservableObject
 
 public partial class LensProfileEditorViewModel : ObservableObject
 {
-    private readonly Action<LensProfileEditorViewModel> _remove;
+    private readonly Func<LensProfileEditorViewModel, Task> _remove;
 
-    public LensProfileEditorViewModel(LensProfile profile, Action<LensProfileEditorViewModel> remove)
+    public LensProfileEditorViewModel(LensProfile profile, Func<LensProfileEditorViewModel, Task> remove)
     {
         Id = profile.Id;
         _displayName = profile.DisplayName;
@@ -86,8 +87,9 @@ public partial class LensProfileEditorViewModel : ObservableObject
     public string? ValidationMessage => Profile.ValidationMessage;
     public string TypeText => Profile.IsValid ? Profile.IsPrime ? "Prime lens" : "Zoom lens" : string.Empty;
 
+    /// <summary>Asks, then removes this profile if confirmed (see MainViewModel).</summary>
     [RelayCommand]
-    private void Remove() => _remove(this);
+    private Task Remove() => _remove(this);
 
     partial void OnDisplayNameChanged(string value) => NotifyValidation();
     partial void OnMinimumFocalLengthMillimetresChanged(double value) => NotifyValidation();

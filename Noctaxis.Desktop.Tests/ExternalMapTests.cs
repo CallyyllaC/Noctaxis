@@ -113,7 +113,7 @@ public sealed partial class MainViewModelTests
 {
     [Fact]
     [CoversSettingsInput("SettingsExternalMapProvider")]
-    public async Task ExternalMapsUsesSavedProviderAndCurrentPinWithSaveResetSemantics()
+    public async Task ExternalMapsUsesSavedProviderAndCurrentPinAndSavesAutomatically()
     {
         var launcher = new FakeUriLauncher(true, null);
         var catalogue = new OpenNgcTargetCatalogue();
@@ -124,10 +124,9 @@ public sealed partial class MainViewModelTests
         foreach (var option in vm.ExternalMapProviders)
         {
             vm.SettingsExternalMapProvider = option;
-            vm.ResetSettingsEditorCommand.Execute(null);
-            Assert.Equal(vm.Settings.ExternalMapProvider, vm.SettingsExternalMapProvider!.Provider);
-            vm.SettingsExternalMapProvider = option;
-            await vm.SaveSettingsCommand.ExecuteAsync(null);
+            Assert.Equal(option.Provider, vm.Settings.ExternalMapProvider);
+            Assert.Equal(option, vm.SettingsExternalMapProvider);
+            await vm.SettleSettingsAsync();
             Assert.Equal(option.Provider, store.State.Settings.ExternalMapProvider);
             vm.OpenInMapsCommand.Execute(null);
             Assert.Equal(ExternalMapService.CreateUri(vm.Latitude, vm.Longitude, option.Provider), launcher.LastUri);

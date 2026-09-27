@@ -91,6 +91,9 @@ public sealed partial class MainViewModelTests
             var cardVm = vm.Locations.Saved.Single();
             var card = window.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("editorialLocationCard"));
             var body = card.GetVisualDescendants().OfType<Button>().Single(b => b.Classes.Contains("locationCardBody"));
+            // State weight = the card's constant 1px border plus its non-layout state ring (docs/interaction-states.md).
+            double Weight() => card.BorderThickness.Left +
+                card.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("cardStateRing")).BorderThickness.Left;
             bool BadgeShown(string text) => card.GetVisualDescendants().OfType<TextBlock>()
                 .Any(t => t.Text == text && t.IsEffectivelyVisible);
 
@@ -104,24 +107,27 @@ public sealed partial class MainViewModelTests
                 Assert.Equal(selected, BadgeShown("Current location"));
                 Assert.Equal(C(LocationCardTokens.Surface), Brush(card.Background));
                 Assert.Equal(selected ? C("Accent") : C(LocationCardTokens.Border), Brush(card.BorderBrush));
-                Assert.True(card.BorderThickness.Left > (selected ? 1 : 0));
+                Assert.Equal(1, card.BorderThickness.Left);
+                Assert.True(Weight() > (selected ? 1 : 0));
                 // The accessible name states what the badges show.
                 Assert.Equal(favourite, cardVm.OpenAccessibleName.Contains("favourite"));
                 Assert.Equal(selected, cardVm.OpenAccessibleName.Contains("current Planner location"));
                 Assert.Equal(cardVm.OpenAccessibleName, Avalonia.Automation.AutomationProperties.GetName(body));
             }
 
-            // Hover strengthens and thickens the border (not only a fill change).
+            // Hover strengthens and thickens the border (not only a fill change), without resizing the card.
             cardVm.IsSelected = false;
             window.MouseMove(card.TranslatePoint(new Point(80, 60), window)!.Value); Dispatcher.UIThread.RunJobs();
             Assert.Equal(C("StrongBorder"), Brush(card.BorderBrush));
-            Assert.Equal(2, card.BorderThickness.Left);
+            Assert.Equal(2, Weight());
+            Assert.Equal(1, card.BorderThickness.Left);
             window.MouseMove(new Point(2, 2)); Dispatcher.UIThread.RunJobs();
 
             // Keyboard focus shows the focus ring at focus thickness.
             body.Focus(NavigationMethod.Tab); Dispatcher.UIThread.RunJobs();
             Assert.Equal(C("FocusBorder"), Brush(card.BorderBrush));
-            Assert.Equal(3, card.BorderThickness.Left);
+            Assert.Equal(3, Weight());
+            Assert.Equal(1, card.BorderThickness.Left);
 
             // Text sits in the left half, where the card-surface scrim covers the preview.
             var preview = card.GetVisualDescendants().OfType<LocationPreviewImage>().Single();

@@ -15,7 +15,7 @@ public sealed partial class MainViewModelTests
         public void Log<TState>(LogLevel level, EventId id, TState state, Exception? exception, Func<TState, Exception?, string> formatter) => Messages.Add(formatter(state, exception));
     }
     [Fact]
-    public async Task AwooRealStoreActivationRestartRemovalAndLogs()
+    public async Task AwooRealStoreActivationRestartRejectedReplacementAndLogs()
     {
         var directory = Path.Combine(Path.GetTempPath(), "noctaxis-awoo-" + Guid.NewGuid());
         try
@@ -29,8 +29,11 @@ public sealed partial class MainViewModelTests
             var reloaded = new JsonUserDataStore(new AwooPaths(directory), logger);
             var restarted = CreateViewModel(planning, catalogue, reloaded, new FakeExporter(), supporterLicenceVerifier: AwooV1Fixture.Verifier());
             await restarted.InitializeAsync(); Assert.True(restarted.HasAwooSupporterEntitlement); Assert.Empty(restarted.SupporterLicenceInput);
-            await restarted.RemoveSupporterLicenceCommand.ExecuteAsync(null);
-            Assert.Null((await reloaded.LoadAsync(CancellationToken.None)).Settings.AwooSupporterLicenceCode);
+            restarted.ReplaceSupporterLicenceCommand.Execute(null);
+            restarted.SupporterLicenceInput = AwooV1Fixture.Licence[..^2] + "AA";
+            await restarted.ActivateSupporterLicenceCommand.ExecuteAsync(null);
+            Assert.Equal(AwooV1Fixture.Licence, (await reloaded.LoadAsync(CancellationToken.None)).Settings.AwooSupporterLicenceCode);
+            Assert.True(restarted.HasAwooSupporterEntitlement);
             Assert.DoesNotContain(AwooV1Fixture.Licence, string.Join('\n', logger.Messages));
             Assert.DoesNotContain(AwooV1Fixture.Licence.Split('.')[3], string.Join('\n', logger.Messages));
             Assert.Equal(0, planning.SnapshotCalculations); Assert.Equal(0, planning.EnvironmentRequests); Assert.Equal(0, planning.WeatherRequests);

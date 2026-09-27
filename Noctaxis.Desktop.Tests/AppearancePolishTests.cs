@@ -88,9 +88,12 @@ public sealed class AppearancePolishTests
                 var presenters = buttons.Select(b => b.GetVisualDescendants().OfType<ContentPresenter>().First()).ToArray();
                 if (id == "builtin.highcontrast")
                 {
-                    Assert.NotEqual(presenters[0].BorderThickness, presenters[1].BorderThickness);
-                    Assert.NotEqual(presenters[1].BorderThickness, presenters[2].BorderThickness);
-                    Assert.Equal(new Thickness(0), presenters[4].BorderThickness);
+                    // Hover and press are heavier than rest, and press heavier than hover, as rings that never
+                    // change the button's size; disabled hides the border without changing its width.
+                    Assert.NotEqual(presenters[0].BoxShadow.ToString(), presenters[1].BoxShadow.ToString());
+                    Assert.NotEqual(presenters[1].BoxShadow.ToString(), presenters[2].BoxShadow.ToString());
+                    Assert.All(presenters, p => Assert.Equal(presenters[0].BorderThickness, p.BorderThickness));
+                    Assert.Equal(Colors.Transparent, ((ISolidColorBrush)presenters[4].BorderBrush!).Color);
                     Assert.NotEqual(((ISolidColorBrush)presenters[3].BorderBrush!).Color, Color.Parse(service.EffectiveTheme.Palette["Accent"]));
                 }
                 Assert.Equal(Color.Parse(service.EffectiveTheme.Palette["SelectionBackground"]), ((ISolidColorBrush)((TabItem)tabs.Items[1]!).Background!).Color);
@@ -154,7 +157,7 @@ public sealed class AppearancePolishTests
         window.Show();
         var pages = (TabControl)((Grid)window.Content!).Children[1];
         pages.SelectedIndex = 2;
-        var settings = (TabControl)((Grid)((TabItem)pages.Items[2]!).Content!).Children[0];
+        var settings = (TabControl)((Grid)((TabItem)pages.Items[2]!).Content!).Children[1];
         Dispatcher.UIThread.RunJobs();
         var original = window.Bounds.Size;
         var measurements = new List<string>();
@@ -174,7 +177,7 @@ public sealed class AppearancePolishTests
                 measurements.Add($"{scale}: auto={string.Join(';', automatic)} forced={string.Join(';', forced)}");
                 Assert.Equal(original, window.Bounds.Size);
                 Assert.Equal(automatic, forced);
-                Assert.Equal(8, automatic.Length);
+                Assert.Equal(9, automatic.Length);
                 Assert.All(automatic, rect => Assert.True(rect.Width > 0 && rect.Height > 0));
                 foreach (var tab in settings.GetVisualDescendants().OfType<TabItem>())
                 {

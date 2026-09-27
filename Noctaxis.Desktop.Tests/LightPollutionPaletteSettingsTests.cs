@@ -10,16 +10,15 @@ public sealed partial class MainViewModelTests
 {
     [Fact]
     [CoversSettingsInput("SettingsLightPollutionColorMap")]
-    public async Task LightPollutionPaletteSaveReloadResetAndThemeIndependence()
+    public async Task LightPollutionPaletteAppliesAtOnceSavesReloadsAndIsThemeIndependent()
     {
         var catalogue=new OpenNgcTargetCatalogue(); var store=CreateSupporterStore(new AppSettings());
         var vm=CreateViewModel(new FakePlanning(catalogue),catalogue,store,new FakeExporter());
         await vm.InitializeAsync(); Assert.Equal("grayscale",vm.SettingsLightPollutionColorMap.Id);
         vm.SettingsLightPollutionColorMap=LightPollutionColorMaps.Resolve("turbo");
-        Assert.Equal("grayscale",vm.LightPollutionMapPreferences.PaletteId);
-        vm.ResetSettingsEditorCommand.Execute(null); Assert.Equal("grayscale",vm.SettingsLightPollutionColorMap.Id);
+        Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId); // The overlay follows at once.
         vm.SettingsLightPollutionColorMap=LightPollutionColorMaps.Resolve("cividis");
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        await vm.SettleSettingsAsync();
         Assert.Equal(new LightPollutionPreferences(false,.5,"cividis"),store.State.Settings.LightPollution);
         await using var paths=new AtlasTestData(); var disk=new JsonUserDataStore(paths,NullLogger<JsonUserDataStore>.Instance);
         await disk.SaveAsync(store.State,CancellationToken.None);
@@ -27,9 +26,9 @@ public sealed partial class MainViewModelTests
         await reload.InitializeAsync(); Assert.Equal("cividis",reload.SettingsLightPollutionColorMap.Id);
         await reload.ApplyAppearanceAsync(new AppearancePreferences(AppearanceMode: AppearanceMode.Light));
         Assert.Equal("cividis",reload.SettingsLightPollutionColorMap.Id); Assert.Equal("cividis",reload.LightPollutionMapPreferences.PaletteId);
-        reload.ResetSettingsEditorCommand.Execute(null); Assert.Equal("grayscale",reload.SettingsLightPollutionColorMap.Id);
-        Assert.Equal("cividis",reload.LightPollutionMapPreferences.PaletteId); // Reset is still an unsaved edit.
-        await reload.SaveSettingsCommand.ExecuteAsync(null); Assert.Equal("grayscale",reload.LightPollutionMapPreferences.PaletteId);
+        reload.SettingsLightPollutionColorMap=LightPollutionColorMaps.Grayscale;
+        await reload.SettleSettingsAsync();
+        Assert.Equal("grayscale",(await disk.LoadAsync(CancellationToken.None)).Settings.LightPollution!.PaletteId);
     }
 
     [Fact]
@@ -50,8 +49,8 @@ public sealed partial class MainViewModelTests
         Assert.Equal("turbo",vm.SettingsLightPollutionColorMap.Id); Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId);
         vm.UseColourVisionSafeLightPollutionPaletteCommand.Execute(null);
         Assert.Equal("cividis",vm.SettingsLightPollutionColorMap.Id); Assert.False(vm.HasLightPollutionColourVisionAdvice);
-        Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId); // Still an editor change until saved.
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        Assert.Equal("cividis",vm.LightPollutionMapPreferences.PaletteId);
+        await vm.SettleSettingsAsync();
         Assert.Equal("cividis",store.State.Settings.LightPollution!.PaletteId);
         vm.SettingsLightPollutionColorMap=LightPollutionColorMaps.Resolve("viridis");
         Assert.False(vm.HasLightPollutionColourVisionAdvice);

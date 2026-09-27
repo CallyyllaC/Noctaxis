@@ -82,10 +82,32 @@ public sealed class ThemeService : IDisposable
         next["TabItemHeaderFontSize"] = 20 * Preferences.TextScale;
         var highContrast = EffectiveTheme.Definition.Id == "builtin.highcontrast";
         // Hover and press thicken the border in every theme, so state never rests on a subtle fill change alone.
-        next["StateHoverThickness"] = new Thickness(2);
-        next["StatePressedThickness"] = new Thickness(highContrast ? 3 : 2);
-        next["StateSelectedThickness"] = new Thickness(highContrast ? 4 : 2);
-        next["StateFocusThickness"] = new Thickness(3);
+        double hover = 2, pressed = highContrast ? 3 : 2, selected = highContrast ? 4 : 2, focus = 3;
+        next["StateHoverThickness"] = new Thickness(hover);
+        next["StatePressedThickness"] = new Thickness(pressed);
+        next["StateSelectedThickness"] = new Thickness(selected);
+        next["StateFocusThickness"] = new Thickness(focus);
+        // State emphasis must never change layout: a state that resized a control would move the region the
+        // pointer is tested against, so hovering near an edge could toggle the state indefinitely. Controls
+        // keep one border width in every state; the heavier state border is an inset ring (BoxShadow, which
+        // takes no layout space) or, on location cards, an overlay. "Ring" keys sit inside a 1px border and
+        // make up the rest of the state width; "Outline" keys are the full width, for borderless items.
+        void Ring(string key, string role, double width)
+        {
+            var colour = Color.Parse(EffectiveTheme.Palette[role]);
+            next[key] = new BoxShadows(new BoxShadow { IsInset = true, Spread = width, Color = colour });
+        }
+        Ring("StateHoverRing", "StrongBorder", hover - 1);
+        Ring("StatePressedRing", "StrongBorder", pressed - 1);
+        Ring("StateFocusRing", "FocusBorder", focus - 1);
+        Ring("StateSelectedRing", "Accent", selected - 1);
+        Ring("AccentHoverRing", "Accent", hover - 1);
+        Ring("AccentPressedRing", "AccentPressed", pressed - 1);
+        Ring("StateFocusOutline", "FocusBorder", focus);
+        Ring("StateSelectedOutline", "Accent", selected);
+        next["StateHoverInset"] = new Thickness(hover - 1);
+        next["StateSelectedInset"] = new Thickness(selected - 1);
+        next["StateFocusInset"] = new Thickness(focus - 1);
         FluentResourceBridge.Apply(next);
         next["LocationCardHeight"] = 240 + 240 * (Preferences.TextScale - 1);
         _application.RequestedThemeVariant = EffectiveTheme.AppearanceMode == AppearanceMode.Light ? ThemeVariant.Light : ThemeVariant.Dark;

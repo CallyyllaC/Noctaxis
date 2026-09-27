@@ -24,7 +24,16 @@ public interface IPlannerDialogService
         Task.FromResult(true);
     Task<bool> ConfirmRefreshSavedLocationSettlementCachesAsync(int locationCount,
         CancellationToken cancellationToken = default) => Task.FromResult(true);
+    /// <summary>
+    /// Asks before permanently removing something the user created or that is costly to recreate. Without a
+    /// dialog the answer is no, so nothing is ever removed unconfirmed.
+    /// </summary>
+    Task<bool> ConfirmDestructiveAsync(DestructiveConfirmation request, CancellationToken cancellationToken = default) =>
+        Task.FromResult(false);
 }
+
+/// <summary>A destructive confirmation: a question, what will be lost, and the verb on the confirming button.</summary>
+public sealed record DestructiveConfirmation(string Title, string Message, string ConfirmLabel);
 
 public partial class SavedLocationEditorViewModel : ObservableObject
 {

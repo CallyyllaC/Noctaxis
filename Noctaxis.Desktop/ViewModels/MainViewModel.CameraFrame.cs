@@ -8,7 +8,6 @@ namespace Noctaxis.Desktop.ViewModels;
 
 public partial class MainViewModel
 {
-    [ObservableProperty] private double _settingsMinimumTerrainFrameCoveragePercent = 5;
     public double CameraPitchDegrees
     {
         get => Settings.EffectiveCameraFraming.CameraPitchDegrees;

@@ -22,7 +22,7 @@ public sealed partial class MainViewModelTests
     [CoversSettingsInput("SettingsTerrainObstructionColour")]
     [CoversSettingsInput("SettingsTerrainTintStrengthPercent")]
     [CoversSettingsInput("SettingsTerrainMinimapContext")]
-    public async Task TerrainColourPickerPreviewsSavesAndResetsWithoutEnvironmentOrFrameWork()
+    public async Task TerrainColourPickerAppliesAndSavesWithoutEnvironmentOrFrameWork()
     {
         var catalogue = new OpenNgcTargetCatalogue(); var planning = new FakePlanning(catalogue);
         var store = new FakeStore(new PersistedState(4, new AppSettings(), [],
@@ -50,19 +50,14 @@ public sealed partial class MainViewModelTests
             picker.Color = Color.Parse("#22BB88");
             Assert.Equal("#22BB88", vm.CameraFramingMapSettings.TerrainObstructionColour);
             Assert.Equal("#22BB88", map.FramingSettings.TerrainObstructionColour);
-            Assert.Equal("#9A6F9E", store.State.Settings.EffectiveCameraFraming.TerrainObstructionColour);
-            vm.ResetSettingsEditorCommand.Execute(null);
-            Assert.Equal(Color.Parse("#9A6F9E"), picker.Color);
-            Assert.Equal(40, strength.Value);
+            Assert.Equal("#22BB88", vm.SettingsTerrainObstructionColourHex);
             strength.Value = 50;
             vm.SettingsTerrainMinimapContext = 1.5;
-            picker.Color = Color.Parse("#22BB88"); await vm.SaveSettingsCommand.ExecuteAsync(null);
+            await vm.SettleSettingsAsync();
             Assert.Equal("#22BB88", store.State.Settings.EffectiveCameraFraming.TerrainObstructionColour);
             Assert.Equal(50, store.State.Settings.EffectiveCameraFraming.TerrainTintStrengthPercent);
             Assert.Equal(1.5, store.State.Settings.TerrainMinimapContext);
-            vm.SettingsTerrainMinimapContext = 2;
-            strength.Value = 15;
-            picker.Color = Colors.Orange; vm.ResetSettingsEditorCommand.Execute(null);
+            // Every control shows the saved value: there is no separate editor copy.
             Assert.Equal(Color.Parse("#22BB88"), picker.Color);
             Assert.Equal(50, strength.Value);
             Assert.Equal(1.5, vm.SettingsTerrainMinimapContext);

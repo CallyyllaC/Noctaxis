@@ -67,13 +67,10 @@ public sealed partial class MainViewModelTests
             var restarted = CreateSupporterViewModel(store, AwooV1Fixture.Verifier());
             restarted.AttachThemeService(themes); await restarted.InitializeAsync();
             Assert.True(restarted.HasAwooSupporterEntitlement); Assert.Empty(restarted.SupporterLicenceInput);
-            await vm.RemoveSupporterLicenceCommand.ExecuteAsync(null); Dispatcher.UIThread.RunJobs();
-            Assert.Null(store.State.Settings.AwooSupporterLicenceCode); Assert.False(vm.HasAwooSupporterEntitlement);
-            Assert.Equal("supporter.moonlit", store.State.Settings.Appearance!.ThemeFamilyId);
-            Assert.Equal("builtin.noctaxis", themes.EffectiveTheme.Definition.Id);
-            Capture("04-removed");
-            Assert.All(picker.Items.Cast<Noctaxis.Desktop.ViewModels.AppearanceOption>().Where(o => o.IsSupporter), o => Assert.False(o.IsAvailable));
-            vm.SupporterLicenceInput = AwooV1Fixture.Licence; await vm.ActivateSupporterLicenceCommand.ExecuteAsync(null);
+            vm.ReplaceSupporterLicenceCommand.Execute(null); vm.SupporterLicenceInput = AwooV1Fixture.Licence;
+            await vm.ActivateSupporterLicenceCommand.ExecuteAsync(null); Dispatcher.UIThread.RunJobs();
+            Assert.Equal(AwooV1Fixture.Licence, store.State.Settings.AwooSupporterLicenceCode); Assert.Equal("Valid licence", vm.SupporterLicenceStateLabel);
+            Capture("04-replaced");
             Assert.Equal("supporter.moonlit", themes.EffectiveTheme.Definition.Id);
             Assert.Equal(settings.EffectiveCameraFraming, store.State.Settings.EffectiveCameraFraming);
             Assert.Equal(calls, (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.WeatherRequests, planning.ForcedRefreshes));

@@ -34,10 +34,8 @@ public sealed partial class MainViewModelTests
         vm.CameraBearingDegrees = 123;
         Assert.Equal(123, vm.CameraFramingGuide!.CentreBearingDegrees, 8);
         vm.SettingsMinimumTerrainFrameCoveragePercent = 20;
-        vm.ResetSettingsEditorCommand.Execute(null);
-        Assert.Equal(5, vm.SettingsMinimumTerrainFrameCoveragePercent);
-        vm.SettingsMinimumTerrainFrameCoveragePercent = 20;
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        Assert.Equal(.2, vm.TerrainFrameThreshold, 8);
+        await vm.SettleSettingsAsync();
         Assert.Equal(20, store.State.Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent);
         Assert.Equal(30, store.State.Settings.EffectiveCameraFraming.CameraPitchDegrees);
         Assert.Equal(generation, vm.PlannerRefresh.Generation);

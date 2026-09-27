@@ -49,7 +49,7 @@ public sealed partial class MainViewModelTests
 
     [Fact]
     [CoversSettingsInput("OpenLightPollutionSourceCommand")]
-    public async Task LightPollutionPreferencesUseSaveResetAndSourceIsAlwaysAvailable()
+    public async Task LightPollutionLayerPreferencesCommitFromLayersAndSourceIsAlwaysAvailable()
     {
         var launcher = new FakeUriLauncher(true, null);
         var catalogue = new OpenNgcTargetCatalogue();
@@ -57,8 +57,7 @@ public sealed partial class MainViewModelTests
         var vm = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter(), externalUriLauncher: launcher);
         await vm.InitializeAsync();
         Assert.False(vm.LightPollutionMapPreferences.IsVisible); Assert.Equal(.5, vm.LightPollutionMapPreferences.Opacity);
-        vm.PreviewPlannerLayers(true, 25);
-        vm.ResetSettingsEditorCommand.Execute(null); Assert.True(vm.LightPollutionMapPreferences.IsVisible);
+        vm.PreviewPlannerLayers(true, 25); Assert.True(vm.LightPollutionMapPreferences.IsVisible);
         await vm.CommitPlannerLayersAsync();
         Assert.Equal(new LightPollutionPreferences(true, .25), store.State.Settings.LightPollution);
         Assert.Equal(store.State.Settings.LightPollution, vm.LightPollutionMapPreferences);

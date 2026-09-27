@@ -54,6 +54,10 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
             "Refresh settlement"), false, cancellationToken);
     }
 
+    public Task<bool> ConfirmDestructiveAsync(DestructiveConfirmation request, CancellationToken cancellationToken = default) =>
+        ShowOwnedDialogAsync(() => new ConfirmationDialog(request.Title, request.Message, request.ConfirmLabel), false,
+            cancellationToken);
+
     private async Task<TResult> ShowOwnedDialogAsync<TResult>(Func<NoctaxisDialogWindow> create,
         TResult cancelledResult, CancellationToken cancellationToken)
     {

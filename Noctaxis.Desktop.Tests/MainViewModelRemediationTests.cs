@@ -151,13 +151,18 @@ public sealed partial class MainViewModelTests
         Assert.True(viewModel.HasOperationalNotice);
         Assert.Contains("could not be saved", viewModel.OperationalNotice);
         Assert.Empty(store.State.Locations);
-        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
-        Assert.Equal("Settings applied, but they could not be saved", viewModel.StatusMessage);
+        // A setting whose automatic save fails is applied, but never presented as saved.
+        viewModel.SettingsTimeSnapMinutes = 10;
+        await viewModel.SettleSettingsAsync();
+        Assert.Equal(10, viewModel.Settings.TimeSnapMinutes);
+        Assert.True(viewModel.HasOperationalNotice);
+        Assert.Equal(5, store.State.Settings.TimeSnapMinutes);
 
         store.Fail = false;
-        await viewModel.SaveSettingsCommand.ExecuteAsync(null);
+        viewModel.SettingsTimeSnapMinutes = 15;
+        await viewModel.SettleSettingsAsync();
 
-        Assert.Equal("Settings saved", viewModel.StatusMessage);
+        Assert.Equal(15, store.State.Settings.TimeSnapMinutes);
         Assert.False(viewModel.HasOperationalNotice);
         // The retry persisted the newest state, including the location whose own save failed.
         Assert.Single(store.State.Locations);

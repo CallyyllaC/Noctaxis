@@ -41,16 +41,26 @@ public sealed partial class MainViewModelTests
         Dispatcher.UIThread.RunJobs();
         var calls = (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes);
         var session = vm.Session;
-        var mode = window.FindControl<WrapPanel>("AppearanceModeChoices")!;
-        var vision = window.FindControl<WrapPanel>("ColourVisionChoices")!;
-        var units = window.FindControl<WrapPanel>("MeasurementChoices")!;
-        var slider = window.FindControl<Slider>("AppearanceTextSize")!;
         static RadioButton[] Radios(WrapPanel p) => p.Children.Cast<RadioButton>().ToArray();
+        void AssertUnclipped(WrapPanel group, double scale)
+        {
+            foreach (var radio in Radios(group))
+            {
+                Assert.True(radio.Bounds.Right <= group.Bounds.Width + 1);
+                Assert.True(radio.Bounds.Bottom <= group.Bounds.Height + 1);
+                var text = radio.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == radio.Content!.ToString());
+                Assert.True(text.TextLayout.Width <= text.Bounds.Width + 1, $"Clipped {text.Text}");
+            }
+            if (scale == 100) Assert.Single(Radios(group).Select(r => r.Bounds.Y).Distinct());
+        }
         try
         {
+            window.SelectSettingsCategory("Appearance");
+            var mode = window.FindControl<WrapPanel>("AppearanceModeChoices")!;
+            var vision = window.FindControl<WrapPanel>("ColourVisionChoices")!;
+            var slider = window.FindControl<Slider>("AppearanceTextSize")!;
             Assert.Equal(new[] { "System", "Dark", "Light" }, Radios(mode).Select(r => r.Content));
             Assert.Equal(new[] { "None", "Protanopia", "Deuteranopia", "Tritanopia" }, Radios(vision).Select(r => r.Content));
-            Assert.Equal(MeasurementUnits.Options, Radios(units).Select(r => (string)r.Content!));
             foreach (var radio in Radios(mode))
             {
                 radio.IsChecked = true; Dispatcher.UIThread.RunJobs();
@@ -65,31 +75,14 @@ public sealed partial class MainViewModelTests
                 Assert.Equal(radio.Content!.ToString(), vm.SelectedColourVision!.Mode.ToString());
                 Assert.Equal(vm.SelectedColourVision.Mode, store.State.Settings.Appearance!.ColourVisionMode);
             }
-            var savedUnits = store.State.Settings.Units;
-            foreach (var radio in Radios(units))
-            {
-                radio.IsChecked = true; Dispatcher.UIThread.RunJobs();
-                Assert.Single(Radios(units), r => r.IsChecked == true);
-                Assert.Equal(radio.Content, vm.SettingsUnits);
-                Assert.Equal(savedUnits, store.State.Settings.Units); // Remains on the existing Save settings path.
-            }
             foreach (var scale in new[] { 100d, 150, 200 })
             {
                 await vm.ApplyAppearanceAsync(new(family, TextScale: scale / 100, AppearanceMode: appearance));
                 Dispatcher.UIThread.RunJobs();
                 slider.Value = scale; Dispatcher.UIThread.RunJobs();
                 Assert.Equal($"{scale:0}%", window.FindControl<TextBlock>("AppearanceTextSizeValue")!.Text);
-                foreach (var group in new[] { mode, vision, units })
-                {
-                    foreach (var radio in Radios(group))
-                    {
-                        Assert.True(radio.Bounds.Right <= group.Bounds.Width + 1);
-                        Assert.True(radio.Bounds.Bottom <= group.Bounds.Height + 1);
-                        var text = radio.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == radio.Content!.ToString());
-                        Assert.True(text.TextLayout.Width <= text.Bounds.Width + 1, $"Clipped {text.Text}");
-                    }
-                    if (scale == 100) Assert.Single(Radios(group).Select(r => r.Bounds.Y).Distinct());
-                }
+                AssertUnclipped(mode, scale);
+                AssertUnclipped(vision, scale);
                 if (scale == 200 && width == 720) Assert.True(Radios(vision).Select(r => r.Bounds.Y).Distinct().Count() > 1);
                 AppearancePolishTests.Capture(window, $"settings-radio-{family}-{appearance}-{width}-{scale:0}");
             }
@@ -103,7 +96,7 @@ public sealed partial class MainViewModelTests
             window.KeyReleaseQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None); Dispatcher.UIThread.RunJobs();
             Assert.Equal(160, slider.Value);
             Assert.Equal("160%", window.FindControl<TextBlock>("AppearanceTextSizeValue")!.Text);
-            Assert.Equal(1.6, store.State.Settings.Appearance!.TextScale);
+            Assert.Equal(1.6, store.State.Settings.Appearance!.TextScale); // Keyboard steps commit at once.
             var first = Radios(mode)[0]; first.Focus(NavigationMethod.Tab); Dispatcher.UIThread.RunJobs();
             Assert.True(first.IsFocused);
             Assert.Equal(Color.Parse(service.EffectiveTheme.Palette["FocusBorder"]), ((ISolidColorBrush)first.BorderBrush!).Color);
@@ -112,9 +105,26 @@ public sealed partial class MainViewModelTests
             Assert.True(first.IsChecked);
             Assert.Equal(AppearanceMode.System, vm.SelectedAppearanceMode);
             Assert.NotEqual(service.EffectiveTheme.Palette["FocusBorder"], service.EffectiveTheme.Palette["SelectionBackground"]);
+
+            window.SelectSettingsCategory("General");
+            var units = window.FindControl<WrapPanel>("MeasurementChoices")!;
+            Assert.Equal(MeasurementUnits.Options, Radios(units).Select(r => (string)r.Content!));
+            foreach (var radio in Radios(units))
+            {
+                radio.IsChecked = true; Dispatcher.UIThread.RunJobs();
+                Assert.Single(Radios(units), r => r.IsChecked == true);
+                Assert.Equal(radio.Content, vm.SettingsUnits);
+                await vm.SettleSettingsAsync();
+                Assert.Equal(radio.Content, store.State.Settings.Units); // Saved automatically.
+            }
+            foreach (var scale in new[] { 100d, 200 })
+            {
+                await vm.ApplyAppearanceAsync(new(family, TextScale: scale / 100, AppearanceMode: appearance));
+                Dispatcher.UIThread.RunJobs();
+                AssertUnclipped(units, scale);
+            }
             Assert.Same(session, vm.Session);
             Assert.Equal(calls, (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes));
-            await vm.SaveSettingsCommand.ExecuteAsync(null);
             Assert.Equal("UK", store.State.Settings.Units);
         }
         finally { window.Close(); service.Apply(new()); }

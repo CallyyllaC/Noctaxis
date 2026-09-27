@@ -31,6 +31,7 @@ public partial class App : Application
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
+        Controls.InformationalToolTips.Register();
         Themes = new Themes.ThemeService(this);
     }
 
@@ -181,6 +182,11 @@ public partial class App : Application
         services.AddSingleton<LocationSearchViewModel>();
         services.AddSingleton<DesktopDialogService>();
         services.AddSingleton<IPlannerDialogService>(provider => provider.GetRequiredService<DesktopDialogService>());
+        // Closing the main window runs the normal shutdown: final save, then resource release.
+        services.AddSingleton<IApplicationRestartService>(provider => new ApplicationRestartService(
+            () => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+                (Current?.ApplicationLifetime as IClassicDesktopStyleApplicationLifetime)?.MainWindow?.Close()),
+            provider.GetRequiredService<ILogger<ApplicationRestartService>>()));
         services.AddSingleton<MainViewModel>();
         configureForTest?.Invoke(services);
         return services.BuildServiceProvider();

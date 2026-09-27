@@ -28,7 +28,7 @@ public sealed partial class MainViewModelTests
         Assert.True(vm.SettingsEnableTerrainCalculations);
         Assert.Equal(345, vm.ResolvedGroundElevationMetres);
         vm.SettingsEnableTerrainCalculations = false;
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        await vm.SettleSettingsAsync();
         Assert.False(store.State.Settings.EnableTerrainCalculations);
         Assert.False(vm.Session.EnableTerrainCalculations);
         Assert.Equal(TerrainElevationResolutionState.TerrainDisabledFallback, vm.TerrainElevationResolutionState);
@@ -47,7 +47,7 @@ public sealed partial class MainViewModelTests
         Assert.True(vm.IsElevationManualOverride);
         Assert.Equal(121.7, vm.Snapshot.Terrain.ObserverAbsoluteElevationMetres!.Value, 8);
         vm.SettingsEnableTerrainCalculations = true;
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        await vm.SettleSettingsAsync();
         Assert.True(store.State.Settings.EnableTerrainCalculations);
         Assert.True(vm.Session.EnableTerrainCalculations);
         Assert.Equal(120, vm.ResolvedGroundElevationMetres);

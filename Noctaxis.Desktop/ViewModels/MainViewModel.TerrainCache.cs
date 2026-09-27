@@ -9,7 +9,6 @@ public partial class MainViewModel
 {
     private readonly TerrainDiskCache? _terrainDiskCache;
     private int _cacheUsageQueued;
-    [ObservableProperty] private double _settingsTerrainCacheLimitGiB = 2;
     [ObservableProperty] private string _terrainCacheUsageText = "Not loaded";
     [ObservableProperty] private string _terrainCacheStatus = string.Empty;
     [ObservableProperty] private bool _isClearingTerrainCache;

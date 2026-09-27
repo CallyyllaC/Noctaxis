@@ -11,9 +11,17 @@ internal static class Program
     /// <summary>Durable log for this process; null in tests and when the logs directory is unusable.</summary>
     internal static RollingFileLoggerProvider? FileLogging { get; private set; }
 
+    /// <summary>The command-line arguments this instance was started with, as a restart passes them on.</summary>
+    internal static IReadOnlyList<string> LaunchArguments { get; private set; } = [];
+
     [STAThread]
     public static int Main(string[] args)
     {
+        // A restarted instance first lets the instance it replaces finish saving and exit.
+        LaunchArguments = Services.ApplicationRestartService.WithoutWaitArgument(args, out var previousInstance);
+        if (previousInstance is { } previousId)
+            Services.ApplicationRestartService.WaitForPreviousInstance(previousId, TimeSpan.FromSeconds(20));
+        args = [.. LaunchArguments];
         FileLogging = new RollingFileLoggerProvider(
             Path.Combine(new PlatformUserDataPathProvider().GetApplicationDataDirectory(), "logs"));
         var log = FileLogging.CreateLogger("Noctaxis.Desktop.Program");

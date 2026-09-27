@@ -21,9 +21,9 @@ public sealed class WindowPolicyTests
         Assert.Contains("Copy terrain debug snapshot", markup);
         var document = System.Xml.Linq.XDocument.Parse(markup);
         var tabs = document.Descendants().Where(element => element.Name.LocalName == "TabItem").ToArray();
-        var debug = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Debug");
+        var debug = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Diagnostics");
         var planner = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Planner");
-        var appearance = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Appearance");
+        var appearance = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Planner map");
         var data = Assert.Single(tabs, element => (string?)element.Attribute("Header") == "Data");
         Assert.Single(debug.Descendants(), element => element.Name.LocalName == "TerrainDebugMiniMap");
         Assert.DoesNotContain(planner.Descendants(), element => element.Name.LocalName == "TerrainDebugMiniMap");

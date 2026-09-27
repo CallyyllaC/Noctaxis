@@ -21,11 +21,16 @@ public sealed class PlannerLayersTests
     {
         var document = System.Xml.Linq.XDocument.Load(TestPaths.MainWindowMarkup);
         var data = document.Descendants().Single(x => x.Name.LocalName == "TabItem" && (string?)x.Attribute("Header") == "Data");
-        Assert.DoesNotContain("SettingsShowLightPollution", data.ToString());
-        Assert.DoesNotContain("SettingsLightPollutionOpacityPercent", data.ToString());
-        Assert.DoesNotContain("apply visibility and opacity", data.ToString());
-        Assert.Contains("SettingsLightPollutionColorMap", data.ToString());
-        Assert.Contains("LightPollutionColorMapDescription", data.ToString());
+        // The colour map is a display preference, beside the other Planner map settings; the atlas is data.
+        var map = document.Descendants().Single(x => x.Name.LocalName == "TabItem" && (string?)x.Attribute("Header") == "Planner map");
+        foreach (var category in new[] { data, map })
+        {
+            Assert.DoesNotContain("SettingsShowLightPollution", category.ToString());
+            Assert.DoesNotContain("SettingsLightPollutionOpacityPercent", category.ToString());
+            Assert.DoesNotContain("apply visibility and opacity", category.ToString());
+        }
+        Assert.Contains("SettingsLightPollutionColorMap", map.ToString());
+        Assert.Contains("LightPollutionColorMapDescription", map.ToString());
         foreach (var command in new[] { "OpenLightPollutionSourceCommand", "InstallLightPollutionCommand", "RemoveLightPollutionCommand" })
             Assert.Contains(command, data.ToString());
         var layers = document.Descendants().Single(x => x.Name.LocalName == "PlannerLayersControl");
@@ -181,12 +186,9 @@ public sealed partial class MainViewModelTests
         vm.SettingsLightPollutionColorMap = LightPollutionColorMaps.Resolve("cividis");
         vm.PreviewPlannerLayers(true, 27);
         await vm.CommitPlannerLayersAsync();
-        Assert.Equal(new LightPollutionPreferences(true, .27, "grayscale"), store.State.Settings.LightPollution);
-        Assert.Equal("cividis", vm.SettingsLightPollutionColorMap.Id);
-        await vm.SaveSettingsCommand.ExecuteAsync(null);
+        // The colour map applied when chosen; committing the layers keeps it.
         Assert.Equal(new LightPollutionPreferences(true, .27, "cividis"), store.State.Settings.LightPollution);
-        vm.ResetSettingsEditorCommand.Execute(null);
-        Assert.Equal("grayscale", vm.SettingsLightPollutionColorMap.Id);
+        Assert.Equal("cividis", vm.SettingsLightPollutionColorMap.Id);
         Assert.Equal(new LightPollutionPreferences(true, .27, "cividis"), vm.LightPollutionMapPreferences);
     }
 }

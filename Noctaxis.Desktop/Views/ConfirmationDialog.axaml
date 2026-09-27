@@ -11,8 +11,10 @@
       <TextBlock x:Name="MessageText" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
     </StackPanel></ScrollViewer>
     <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="88"/>
-      <Button x:Name="ConfirmButton" Classes="destructive" Click="ConfirmClick" IsDefault="True" MinWidth="88"/>
+      <!-- Cancel takes focus when the dialog opens and Enter never confirms by default: a stray key press must not
+           remove anything. The destructive button names its action and uses the error colours. -->
+      <Button x:Name="CancelButton" Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="88"/>
+      <Button x:Name="ConfirmButton" Classes="destructive" Click="ConfirmClick" MinWidth="88"/>
     </StackPanel>
   </Grid>
   </Border>
