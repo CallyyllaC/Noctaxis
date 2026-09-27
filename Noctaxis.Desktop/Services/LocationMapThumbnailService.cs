@@ -117,8 +117,14 @@ public sealed record SavedLocationThumbnailMetadata(
     int? SettlementGeneratedStarCount = null,
     string? StyledInputHash = null,
     string? ThumbnailRendererId = null,
-    int? ThumbnailRendererVersion = null)
+    int? ThumbnailRendererVersion = null,
+    string? ThumbnailSkippedReason = null)
 {
+    /// <summary>
+    /// The legacy card artwork was rejected when these assets were composed, so there is deliberately no
+    /// <c>thumbnail.png</c>. The source data is still complete and feeds the saved-location preview.
+    /// </summary>
+    public bool LegacyArtworkSkipped => ThumbnailSkippedReason is not null;
     public string MapProviderId => ProviderId;
     public string MapProviderAttribution => AttributionText;
     public string? MapProviderAttributionUrl => AttributionUrl;
@@ -143,13 +149,16 @@ public sealed record SavedLocationMapRefreshResult(
     bool ThumbnailSucceeded,
     bool ThumbnailUsedPrevious,
     string? FailureReason,
-    EnvironmentalDataState? SettlementState = null)
+    EnvironmentalDataState? SettlementState = null,
+    bool LegacyArtworkSkipped = false)
 {
-    public bool IsComplete => RasterSucceeded && ThumbnailSucceeded &&
+    // The legacy artwork is optional: a frame it rejects still leaves complete source data behind.
+    private bool AssetsUsable => RasterSucceeded && (ThumbnailSucceeded || LegacyArtworkSkipped);
+    public bool IsComplete => AssetsUsable &&
         (Semantic.Status is MapFeatureFetchStatus.Complete or MapFeatureFetchStatus.CachedPrevious) &&
         SettlementState is EnvironmentalDataState.Available or EnvironmentalDataState.Cached or
             EnvironmentalDataState.Partial or EnvironmentalDataState.Empty;
-    public bool IsDegraded => RasterSucceeded && ThumbnailSucceeded && !IsComplete;
+    public bool IsDegraded => AssetsUsable && !IsComplete;
 }
 
 public enum SavedLocationMapRefreshMode
@@ -267,7 +276,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     var thumbnailPath = Path.Combine(LocationDirectory(location.Id), "thumbnail.png");
                     var staleReason = metadata is null ? null : StyledCacheIdentityIssue(metadata);
                     if (metadata is not null && CoordinatesMatch(metadata, location.Coordinate) &&
-                        File.Exists(thumbnailPath) && staleReason is not null)
+                        (File.Exists(thumbnailPath) || metadata.LegacyArtworkSkipped) && staleReason is not null)
                     {
                         _logger.LogDebug(
                             "Cached saved-location thumbnail rejected as stale ({StaleReason}); recomposing locally without source acquisition",
@@ -334,8 +343,9 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     RefreshSucceeded = false,
                     IsPreviousAsset = true,
                     Operation = new SavedLocationMapRefreshResult(false, true, semanticFailure,
-                        true, true, ex.Message, mode == SavedLocationMapRefreshMode.RefreshSettlement
-                            ? EnvironmentalDataState.Unavailable : null)
+                        !previous.Metadata.LegacyArtworkSkipped, !previous.Metadata.LegacyArtworkSkipped, ex.Message,
+                        mode == SavedLocationMapRefreshMode.RefreshSettlement ? EnvironmentalDataState.Unavailable : null,
+                        previous.Metadata.LegacyArtworkSkipped)
                 };
             }
         }
@@ -420,8 +430,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             "Processing saved-location thumbnail using style {StyleVersion}, feature overlay {OverlayVersion}, and {ImageBackend} ({NativeThreads} native threads)",
             ThumbnailStyleVersion, SavedLocationMapImageProcessor.FeatureOverlayStyleVersion,
             _imageAcceleration.Status.Backend, _imageAcceleration.Status.NativeThreadCount);
-        var thumbnailPng = _processor.ProcessSettlement(sourcePng, features?.Data, settlement.Value, viewport,
-            location.Id, out var settlementRender);
+        var artwork = ComposeLegacyArtwork(sourcePng, features?.Data, settlement.Value, viewport, location.Id);
         var now = DateTimeOffset.UtcNow;
         var featureSource = features?.Data.Source;
         var metadata = new SavedLocationThumbnailMetadata(
@@ -431,7 +440,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             mapSource.AttributionUrl, mapSource.LicenceName, mapSource.LicenceUrl, now, TileZoom,
             location.Coordinate.Latitude, location.Coordinate.Longitude, SourceWidth, SourceHeight,
             ThumbnailStyleVersion, mapSource.ConfigurationHash, SourceRenderVersion, "thumbnail.png",
-            "source.png", Hash(sourcePng), Hash(thumbnailPng), now,
+            "source.png", Hash(sourcePng), null, null,
             features is null ? null : "features.json",
             features?.Data.SchemaVersion, featureSource?.QueryVersion, featureSource?.ProviderId,
             featureSource?.AttributionText, featureSource?.AttributionUrl, featureSource?.LicenceName,
@@ -442,16 +451,17 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             semanticOutcome.TimedOut, semanticOutcome.ResponseTooLarge, semanticOutcome.ParseFailed,
             semanticOutcome.AttemptCount, semanticOutcome.AttemptedAtUtc, semanticOutcome.RoadCount,
             semanticOutcome.WaterwayCount, semanticOutcome.FallbackAttempted);
-        metadata = ApplySettlementOutcome(metadata, settlement, settlementRender, settlementBytes);
-        var operation = new SavedLocationMapRefreshResult(true, false, semanticOutcome, true, false, null,
-            settlement.State);
+        metadata = WithArtwork(ApplySettlementOutcome(metadata, settlement, artwork.Render, settlementBytes), artwork);
+        var operation = new SavedLocationMapRefreshResult(true, false, semanticOutcome, artwork.Png is not null, false,
+            null, settlement.State, artwork.Png is null);
         var result = await CommitFullAssetSetAsync(location.Id, sourcePng, features?.Bytes, settlementBytes,
-                thumbnailPng, metadata,
+                artwork.Png, metadata,
                 cancellationToken)
             .ConfigureAwait(false);
         _logger.LogInformation(
-            "Saved-location source and thumbnail completed at {Directory}; source {SourceVersion}, style {StyleVersion}",
-            LocationDirectory(location.Id), SourceRenderVersion, ThumbnailStyleVersion);
+            "Saved-location source data completed at {Directory}; source {SourceVersion}, style {StyleVersion}, legacy artwork {Artwork}",
+            LocationDirectory(location.Id), SourceRenderVersion, ThumbnailStyleVersion,
+            artwork.Png is null ? "skipped" : "written");
         LogThumbnailRoute(result.Metadata, result.ImagePath, generated: true);
         return result with { Operation = operation };
     }
@@ -496,25 +506,21 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             try
             {
                 var featureBytes = JsonSerializer.SerializeToUtf8Bytes(fetch.Data, _featureJson);
-                var thumbnailBytes = _processor.ProcessSettlement(assets.SourceBytes, fetch.Data,
-                    settlement.Value, viewport, location.Id, out var settlementRender);
+                var artwork = ComposeLegacyArtwork(assets.SourceBytes, fetch.Data, settlement.Value, viewport,
+                    location.Id);
                 var metadata = ApplyFeatureOutcome(assets.Metadata, fetch.Outcome, fetch.Data, featureBytes,
-                    thumbnailBytes);
-                metadata = ApplySettlementOutcome(metadata, settlement, settlementRender,
-                    assets.Settlement?.Bytes);
-                await CommitFilesAtomicallyAsync(LocationDirectory(metadata.LocationId),
-                [
-                    ("features.json", featureBytes),
-                    ("thumbnail.png", thumbnailBytes),
-                    ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
-                ], cancellationToken).ConfigureAwait(false);
+                    artwork.Png);
+                metadata = WithArtwork(ApplySettlementOutcome(metadata, settlement, artwork.Render,
+                    assets.Settlement?.Bytes), artwork);
+                await CommitWithArtworkAsync(metadata, [("features.json", featureBytes)], artwork, cancellationToken)
+                    .ConfigureAwait(false);
                 _logger.LogInformation(
                     "Semantic-only refresh completed for {LocationId}: {Status}; roads {RoadCount}, waterways {WaterwayCount}",
                     metadata.LocationId, fetch.Outcome.Status, fetch.Outcome.RoadCount,
                     fetch.Outcome.WaterwayCount);
                 return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true, false,
-                    new SavedLocationMapRefreshResult(true, true, fetch.Outcome, true, false, null,
-                        settlement.State));
+                    new SavedLocationMapRefreshResult(true, true, fetch.Outcome, artwork.Png is not null, false, null,
+                        settlement.State, artwork.Png is null));
             }
             catch (Exception ex) when (ex is IOException or JsonException or InvalidDataException or
                                              UnauthorizedAccessException or ArgumentException)
@@ -548,9 +554,10 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             [("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(failedMetadata, _json)))],
             cancellationToken).ConfigureAwait(false);
         var thumbnailUsable = File.Exists(assets.ThumbnailPath);
-        return new SavedLocationThumbnailResult(assets.ThumbnailPath, failedMetadata, thumbnailUsable, false,
-            thumbnailUsable, new SavedLocationMapRefreshResult(true, true, retainedOutcome,
-                thumbnailUsable, thumbnailUsable, retainedOutcome.FailureReason));
+        var skipped = !thumbnailUsable && failedMetadata.LegacyArtworkSkipped;
+        return new SavedLocationThumbnailResult(assets.ThumbnailPath, failedMetadata, thumbnailUsable || skipped, false,
+            thumbnailUsable || skipped, new SavedLocationMapRefreshResult(true, true, retainedOutcome,
+                thumbnailUsable, thumbnailUsable, retainedOutcome.FailureReason, LegacyArtworkSkipped: skipped));
     }
 
     private async Task<SavedLocationThumbnailResult> ProcessAndCommitStyleAsync(
@@ -562,8 +569,8 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             assets.Metadata.SourceImageWidth, assets.Metadata.SourceImageHeight,
             assets.Metadata.SourceCentreLatitude, assets.Metadata.SourceCentreLongitude);
         var settlement = CachedSettlement(assets.Settlement, assets.Metadata);
-        var thumbnailPng = _processor.ProcessSettlement(assets.SourceBytes, assets.Features?.Data,
-            settlement.Value, viewport, assets.Metadata.LocationId, out var settlementRender);
+        var artwork = ComposeLegacyArtwork(assets.SourceBytes, assets.Features?.Data, settlement.Value, viewport,
+            assets.Metadata.LocationId);
         var metadata = assets.Metadata with
         {
             SchemaVersion = MetadataSchemaVersion,
@@ -573,15 +580,13 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             ImageFileName = "thumbnail.png",
             SourceFileName = "source.png",
             SourceContentHash = Hash(assets.SourceBytes),
-            ThumbnailContentHash = Hash(thumbnailPng),
-            ThumbnailGeneratedAtUtc = DateTimeOffset.UtcNow,
             FeatureOverlayStyleVersion = SavedLocationMapImageProcessor.FeatureOverlayStyleVersion
         };
-        metadata = ApplySettlementOutcome(metadata, settlement, settlementRender, assets.Settlement?.Bytes);
-        await CommitFilesAtomicallyAsync(LocationDirectory(metadata.LocationId),
-            [("thumbnail.png", thumbnailPng), ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))],
-            cancellationToken).ConfigureAwait(false);
-        _logger.LogInformation("Saved-location thumbnail style completed at {ThumbnailPath}", assets.ThumbnailPath);
+        metadata = WithArtwork(ApplySettlementOutcome(metadata, settlement, artwork.Render, assets.Settlement?.Bytes),
+            artwork);
+        await CommitWithArtworkAsync(metadata, [], artwork, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Saved-location thumbnail style completed at {ThumbnailPath}; legacy artwork {Artwork}",
+            assets.ThumbnailPath, artwork.Png is null ? "skipped" : "written");
         LogThumbnailRoute(metadata, assets.ThumbnailPath, generated: true);
         return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true);
     }
@@ -599,26 +604,20 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         if (settlement.HasValue)
         {
             var settlementBytes = SettlementRasterCodec.Encode(settlement.Value!);
-            var thumbnailBytes = _processor.ProcessSettlement(assets.SourceBytes, assets.Features?.Data,
-                settlement.Value, viewport, location.Id, out var settlementRender);
-            var metadata = ApplySettlementOutcome(assets.Metadata with
-            {
-                ThumbnailContentHash = Hash(thumbnailBytes),
-                ThumbnailGeneratedAtUtc = DateTimeOffset.UtcNow
-            }, settlement, settlementRender, settlementBytes);
-            await CommitFilesAtomicallyAsync(LocationDirectory(location.Id),
-            [
-                ("settlement-field.bin.gz", settlementBytes),
-                ("thumbnail.png", thumbnailBytes),
-                ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
-            ], cancellationToken).ConfigureAwait(false);
+            var artwork = ComposeLegacyArtwork(assets.SourceBytes, assets.Features?.Data, settlement.Value, viewport,
+                location.Id);
+            var metadata = WithArtwork(ApplySettlementOutcome(assets.Metadata, settlement, artwork.Render,
+                settlementBytes), artwork);
+            await CommitWithArtworkAsync(metadata, [("settlement-field.bin.gz", settlementBytes)], artwork,
+                cancellationToken).ConfigureAwait(false);
             var core = CoreOutcomeFromAssets(assets.Features);
             _logger.LogInformation(
                 "WSF settlement refresh completed for {LocationId}: {Status}, {DensityCells} active cells, maximum mass {MaximumDensity}",
-                location.Id, settlement.State, settlementRender?.DensityCellCount ?? 0,
-                settlementRender?.MaximumDensityBeforeClamping ?? 0);
+                location.Id, settlement.State, artwork.Render?.DensityCellCount ?? 0,
+                artwork.Render?.MaximumDensityBeforeClamping ?? 0);
             return new SavedLocationThumbnailResult(assets.ThumbnailPath, metadata, true, true, false,
-                new SavedLocationMapRefreshResult(true, true, core, true, false, null, settlement.State));
+                new SavedLocationMapRefreshResult(true, true, core, artwork.Png is not null, false, null,
+                    settlement.State, artwork.Png is null));
         }
 
         _logger.LogWarning("WSF settlement refresh unavailable for {LocationId}; previous thumbnail retained",
@@ -633,10 +632,11 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             [("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(failedMetadata, _json)))],
             cancellationToken).ConfigureAwait(false);
         var thumbnailUsable = File.Exists(assets.ThumbnailPath);
-        return new SavedLocationThumbnailResult(assets.ThumbnailPath, failedMetadata, thumbnailUsable, false,
-            thumbnailUsable, new SavedLocationMapRefreshResult(true, true,
+        var skipped = !thumbnailUsable && failedMetadata.LegacyArtworkSkipped;
+        return new SavedLocationThumbnailResult(assets.ThumbnailPath, failedMetadata, thumbnailUsable || skipped, false,
+            thumbnailUsable || skipped, new SavedLocationMapRefreshResult(true, true,
                 CoreOutcomeFromAssets(assets.Features), thumbnailUsable, thumbnailUsable,
-                settlement.Message, settlement.State));
+                settlement.Message, settlement.State, skipped));
     }
 
     private static SavedLocationThumbnailMetadata ApplyFeatureOutcome(
@@ -779,8 +779,58 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                 null, "Compatible road and water overlays reused.", null,
                 false, false, false, 0, DateTimeOffset.UtcNow);
 
+    /// <summary>
+    /// Composes the legacy card artwork (<c>thumbnail.png</c>). It is optional: the saved-location preview
+    /// is built from the source data, so a frame the artwork rejects as not visible enough (open sea, say)
+    /// yields no artwork instead of failing the acquisition. Invalid source data still throws.
+    /// </summary>
+    private LegacyArtwork ComposeLegacyArtwork(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport viewport, Guid locationId)
+    {
+        try
+        {
+            var png = _processor.ProcessSettlement(sourcePng, features, settlement, viewport, locationId,
+                out var render);
+            return new LegacyArtwork(png, render, null);
+        }
+        catch (LegacyArtworkRejectedException ex)
+        {
+            _logger.LogInformation(
+                "Legacy card artwork skipped for {LocationId}; source data is kept for the preview: {Reason}",
+                locationId, ex.Message);
+            return new LegacyArtwork(null, null, ex.Message);
+        }
+    }
+
+    private static SavedLocationThumbnailMetadata WithArtwork(SavedLocationThumbnailMetadata metadata,
+        LegacyArtwork artwork) => artwork.Png is null
+        ? metadata with
+        {
+            ThumbnailContentHash = null, ThumbnailGeneratedAtUtc = null, ThumbnailSkippedReason = artwork.SkippedReason
+        }
+        : metadata with
+        {
+            ThumbnailContentHash = Hash(artwork.Png), ThumbnailGeneratedAtUtc = DateTimeOffset.UtcNow,
+            ThumbnailSkippedReason = null
+        };
+
+    /// <summary>
+    /// Commits <paramref name="files"/>, the artwork when there is one, and the metadata together. Skipped
+    /// artwork removes any earlier <c>thumbnail.png</c>, which no longer matches the committed data.
+    /// </summary>
+    private async Task CommitWithArtworkAsync(SavedLocationThumbnailMetadata metadata,
+        IReadOnlyList<(string FileName, byte[] Bytes)> files, LegacyArtwork artwork, CancellationToken cancellationToken)
+    {
+        var directory = LocationDirectory(metadata.LocationId);
+        var all = files.ToList();
+        if (artwork.Png is not null) all.Add(("thumbnail.png", artwork.Png));
+        all.Add(("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json))));
+        await CommitFilesAtomicallyAsync(directory, all, cancellationToken).ConfigureAwait(false);
+        if (artwork.Png is null) TryDelete(Path.Combine(directory, "thumbnail.png"));
+    }
+
     private async Task<SavedLocationThumbnailResult> CommitFullAssetSetAsync(Guid locationId, byte[] sourcePng,
-        byte[]? featureBytes, byte[]? settlementBytes, byte[] thumbnailPng,
+        byte[]? featureBytes, byte[]? settlementBytes, byte[]? thumbnailPng,
         SavedLocationThumbnailMetadata metadata,
         CancellationToken cancellationToken)
     {
@@ -788,14 +838,15 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         var files = new List<(string FileName, byte[] Bytes)>
         {
             ("source.png", sourcePng),
-            ("thumbnail.png", thumbnailPng),
             ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
         };
+        if (thumbnailPng is not null) files.Insert(1, ("thumbnail.png", thumbnailPng));
         if (featureBytes is not null) files.Insert(1, ("features.json", featureBytes));
         if (settlementBytes is not null) files.Insert(featureBytes is null ? 1 : 2,
             ("settlement-field.bin.gz", settlementBytes));
         await CommitFilesAtomicallyAsync(directory, files, cancellationToken).ConfigureAwait(false);
         if (featureBytes is null) TryDelete(Path.Combine(directory, "features.json"));
+        if (thumbnailPng is null) TryDelete(Path.Combine(directory, "thumbnail.png"));
         // Legacy building caches are left untouched but no longer referenced by v6 metadata.
         // This makes migration non-destructive while ensuring they cannot feed WSF rendering.
         return new SavedLocationThumbnailResult(Path.Combine(directory, "thumbnail.png"), metadata, true, true);
@@ -908,7 +959,9 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         CancellationToken cancellationToken)
     {
         var assets = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
-        if (assets is null || !File.Exists(assets.ThumbnailPath)) return null;
+        if (assets is null) return null;
+        var artworkSkipped = assets.Metadata.LegacyArtworkSkipped;
+        if (!artworkSkipped && !File.Exists(assets.ThumbnailPath)) return null;
         var staleReason = StyledCacheIdentityIssue(assets.Metadata);
         if (staleReason is not null)
         {
@@ -921,6 +974,8 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             _logger.LogDebug("Cached saved-location thumbnail rejected as degraded: {StaleReason}", settlementIssue);
             return null;
         }
+        // The legacy artwork was rejected for this frame: the validated source data is the complete cache.
+        if (artworkSkipped) return assets;
         var thumbnail = await File.ReadAllBytesAsync(assets.ThumbnailPath, cancellationToken).ConfigureAwait(false);
         var validation = _processor.ValidateThumbnail(thumbnail);
         if (!validation.IsValid)
@@ -966,8 +1021,10 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         {
             EnvironmentalDataState.Available or EnvironmentalDataState.Cached or EnvironmentalDataState.Partial
                 when settlement is null => "usable WSF settlement metadata has no compatible derivative",
+            // Galaxy rendering is part of the legacy artwork, so it is only expected when that artwork exists.
             EnvironmentalDataState.Available or EnvironmentalDataState.Cached or EnvironmentalDataState.Partial
-                when !metadata.SettlementRendered => "usable WSF settlement did not complete galaxy rendering",
+                when !metadata.SettlementRendered && !metadata.LegacyArtworkSkipped =>
+                "usable WSF settlement did not complete galaxy rendering",
             EnvironmentalDataState.Empty when settlement is null =>
                 "valid empty WSF coverage has no compatible derivative",
             EnvironmentalDataState.Empty when metadata.SettlementRendered =>
@@ -1104,6 +1161,16 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         if (metadata is null) return null;
         var directory = LocationDirectory(locationId);
         var preferred = Path.Combine(directory, "thumbnail.png");
+        if (metadata.LegacyArtworkSkipped)
+        {
+            // No artwork by design; the previous assets are usable while their source data is intact.
+            var source = Path.Combine(directory, Path.GetFileName(metadata.SourceFileName ?? "source.png"));
+            if (!File.Exists(source) ||
+                !HashMatches(await File.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false),
+                    metadata.SourceContentHash))
+                return null;
+            return new SavedLocationThumbnailResult(preferred, metadata, true, false);
+        }
         var path = File.Exists(preferred)
             ? preferred
             : Path.Combine(directory, Path.GetFileName(metadata.ImageFileName ?? string.Empty));
@@ -1228,6 +1295,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         string ThumbnailPath, byte[] SourceBytes, byte[]? ThumbnailBytes, ExistingFeatureAssets? Features,
         ExistingSettlementAssets? Settlement);
     private sealed record ExistingFeatureAssets(MapFeatureDataDocument Data, byte[] Bytes);
+    private sealed record LegacyArtwork(byte[]? Png, SettlementRenderDiagnostics? Render, string? SkippedReason);
     private sealed record ExistingSettlementAssets(SettlementRaster Data, byte[] Bytes);
 }
 

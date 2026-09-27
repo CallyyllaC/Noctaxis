@@ -141,11 +141,11 @@
       <Setter Property="Padding" Value="14" />
     </Style>
     <Style Selector="Border.currentLocationPanel">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="10" />
-      <Setter Property="Padding" Value="18" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="18,16" />
     </Style>
     <Style Selector="Border.emptyLocationPanel">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
@@ -161,35 +161,42 @@
       <Setter Property="CornerRadius" Value="12" />
       <Setter Property="ClipToBounds" Value="True" />
     </Style>
+    <!-- Location cards: calm content-first surfaces from LocationCardTokens. State is shown by border weight
+         and by text badges, never by colour alone; decoration never sits behind text. -->
     <Style Selector="Border.editorialLocationCard">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LocationCardBorder}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="CornerRadius" Value="12" />
       <Setter Property="ClipToBounds" Value="True" />
-      <Setter Property="BoxShadow" Value="0 7 18 0 #5003070E" />
+      <Setter Property="BoxShadow" Value="{DynamicResource LocationCardShadow}" />
     </Style>
     <Style Selector="Border.editorialLocationCard:pointerover">
       <Setter Property="BorderThickness" Value="{DynamicResource StateHoverThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
-      <Setter Property="BoxShadow" Value="0 9 22 0 #7003070E" />
-    </Style>
-    <Style Selector="Border.editorialLocationCard.favourite">
-      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
-      <Setter Property="BoxShadow" Value="0 0 15 0 #388F80D8" />
     </Style>
     <Style Selector="Border.editorialLocationCard.selected">
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
       <Setter Property="BorderThickness" Value="{DynamicResource StateSelectedThickness}" />
-      <Setter Property="BoxShadow" Value="0 0 19 1 #668F80D8" />
-    </Style>
-    <Style Selector="Border.editorialLocationCard.favourite.selected">
-      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
-      <Setter Property="BoxShadow" Value="0 0 20 1 #6B8F80D8" />
     </Style>
     <Style Selector="Border.editorialLocationCard:focus-within">
       <Setter Property="BorderThickness" Value="{DynamicResource StateFocusThickness}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource FocusBorder}" />
+    </Style>
+    <Style Selector="Border.lastUsedChip">
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LocationCardBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="12" />
+      <Setter Property="Padding" Value="9,3" />
+    </Style>
+    <Style Selector="Border.locationBadge">
+      <Setter Property="Background" Value="{DynamicResource LocationBadgeBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LocationBadgeBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="7,2,8,2" />
+      <Setter Property="Margin" Value="0,0,6,4" />
     </Style>
     <Style Selector="Button.locationCardBody">
       <Setter Property="Background" Value="Transparent" />
@@ -228,7 +235,7 @@
       <Setter Property="MinHeight" Value="42" />
       <Setter Property="Padding" Value="0" />
       <Setter Property="CornerRadius" Value="12,0,10,0" />
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
       <Setter Property="BorderThickness" Value="1,1,0,0" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
@@ -247,11 +254,9 @@
       <Setter Property="CornerRadius" Value="19" />
       <Setter Property="HorizontalContentAlignment" Value="Center" />
       <Setter Property="VerticalContentAlignment" Value="Center" />
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Foreground" Value="{DynamicResource Warning}" />
-      <Setter Property="FontSize" Value="{DynamicResource TextSubheading}" />
     </Style>
     <Style Selector="Button.favouriteStar:pointerover">
       <Setter Property="Background" Value="{DynamicResource ButtonBackground}" />
@@ -259,14 +264,22 @@
     </Style>
     <Style Selector="Button.addLocationCard">
       <Setter Property="Padding" Value="18" />
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="11" />
+      <Setter Property="CornerRadius" Value="12" />
     </Style>
     <Style Selector="Button.addLocationCard:pointerover">
-      <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
+      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+    </Style>
+    <Style Selector="Border.addLocationGlyph, Border.currentLocationMarker">
+      <Setter Property="Width" Value="40" />
+      <Setter Property="Height" Value="40" />
+      <Setter Property="CornerRadius" Value="20" />
+      <Setter Property="Background" Value="{DynamicResource LocationBadgeBackground}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LocationBadgeBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
     </Style>
     <Style Selector="TextBlock.eyebrow">
       <Setter Property="Foreground" Value="{DynamicResource Accent}" />

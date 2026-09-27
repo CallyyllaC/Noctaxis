@@ -10,7 +10,7 @@ public partial class LocationsPage : UserControl
     private void OnPageSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         var isNarrow = e.NewSize.Width < 780;
-        PageContent.Margin = new Thickness(isNarrow ? 18 : 32);
+        PageContent.Margin = isNarrow ? new Thickness(18) : new Thickness(32, 28, 32, 32);
         ConfigureResponsiveHeader(CurrentLocationLayout, CurrentLocationActions, isNarrow);
         ConfigureResponsiveHeader(SavedLocationsHeader, SavedLocationsSort, isNarrow);
     }

@@ -6,6 +6,14 @@ using SkiaSharp;
 
 namespace Noctaxis.Desktop.Services;
 
+/// <summary>
+/// The legacy card artwork was composed from valid source data but judged not visible enough to use (for
+/// example a frame that is mostly open sea). Only the optional <c>thumbnail.png</c> is affected: the source
+/// data it was composed from remains valid. Invalid source data raises <see cref="InvalidDataException"/>
+/// instead, so the two are never confused.
+/// </summary>
+public sealed class LegacyArtworkRejectedException(string message) : Exception(message);
+
 public sealed record MapImageValidationResult(
     bool IsValid,
     string Reason,
@@ -272,7 +280,7 @@ public sealed class SavedLocationMapImageProcessor
         var bytes = encoded.ToArray();
         var processedValidation = ValidateThumbnail(bytes);
         if (!processedValidation.IsValid)
-            throw new InvalidDataException("Processed thumbnail validation failed: " + processedValidation.Reason);
+            throw new LegacyArtworkRejectedException("Processed thumbnail validation failed: " + processedValidation.Reason);
         _logger.LogDebug(
             "SavedLocationThumbnail renderer timing: Renderer={Renderer}; Style={Style}; StyleVersion={StyleVersion}; Preparation={PreparationMs:F1} ms; Density={DensityMs:F1} ms; Base={BaseMs:F1} ms; Astronomical={AstronomicalMs:F1} ms; Semantic={SemanticMs:F1} ms; Tonemap={ToneMs:F1} ms; EncodeAndValidate={EncodeMs:F1} ms; Total={TotalMs:F1} ms",
             RendererId, _style.PresetName, StyleVersion, preparationMs, densityMs, baseMs, astronomicalMs,
@@ -501,14 +509,14 @@ public sealed class SavedLocationMapImageProcessor
         }
 
         if (samples < 1_000 || opaqueSamples < 800 || edgeSamples < 500)
-            throw new InvalidDataException("Styled map artwork did not contain enough meaningful samples.");
+            throw new LegacyArtworkRejectedException("Styled map artwork did not contain enough meaningful samples.");
 
         var opaqueRatio = opaqueSamples / (double)samples;
         var mean = luminanceSum / opaqueSamples;
         var deviation = Math.Sqrt(Math.Max(0, luminanceSquaredSum / opaqueSamples - mean * mean));
         var meanEdgeDifference = edgeDifferenceSum / edgeSamples;
         if (opaqueRatio < .80 || mean < 28 || deviation < 3.5 || meanEdgeDifference < .65)
-            throw new InvalidDataException(
+            throw new LegacyArtworkRejectedException(
                 $"Styled map artwork is not sufficiently visible: opacity {opaqueRatio:P1}, " +
                 $"mean luminance {mean:F2}, deviation {deviation:F2}, edge difference {meanEdgeDifference:F2}.");
     }

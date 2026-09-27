@@ -859,7 +859,7 @@ public sealed partial class LocationMapThumbnailServiceTests
     private static SavedLocation Location(Guid id, double latitude, double longitude, string name) =>
         new(id, name, new GeoCoordinate(latitude, longitude), "UTC");
 
-    private static ServiceLease CreateService(TestDirectory files, TileHandler handler,
+    private static ServiceLease CreateService(TestDirectory files, HttpMessageHandler handler,
         IMapTileSourceProvider? source = null, IMapFeatureDataService? featureData = null,
         ISettlementDataProvider? settlementData = null, SavedLocationMapImageProcessor? processor = null)
     {

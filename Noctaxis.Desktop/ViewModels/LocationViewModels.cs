@@ -134,7 +134,12 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     public bool HasRegionDescription => !string.IsNullOrWhiteSpace(Location.RegionDescription);
     public string? UserDescription => Location.Notes;
     public bool HasUserDescription => !string.IsNullOrWhiteSpace(Location.Notes);
+    /// <summary>State badges are shown as text and icons, so current and favourite never rest on colour.</summary>
+    public bool HasStateBadges => IsFavourite || IsSelected;
     public string Eyebrow => IsFavourite ? "FAVOURITE LOCATION" : "SAVED LOCATION";
+    /// <summary>The card's open action, named with its state for assistive technology.</summary>
+    public string OpenAccessibleName => string.Join(", ", new[] { Name, IsFavourite ? "favourite" : null, IsSelected ? "current Planner location" : null }
+        .Where(part => part is not null)) + ". Open in Planner";
     public bool IsNotFavourite => !IsFavourite;
     public string FavouriteAccessibleName => IsFavourite ? "Remove from favourites" : "Add to favourites";
     public string? LastUsedText => FormatLastUsed(Location.LastUsedUtc, _now());
@@ -142,6 +147,8 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     [ObservableProperty] private bool _isFavourite;
     [ObservableProperty] private bool _isSelected;
     [ObservableProperty] private Bitmap? _mapThumbnail;
+    /// <summary>Theme-independent preview content; the card renders it with the current theme.</summary>
+    [ObservableProperty] private Mapping.Preview.LocationPreviewScene? _previewScene;
     [ObservableProperty] private bool _isMapThumbnailLoading;
     [ObservableProperty] private SavedLocationThumbnailMetadata? _thumbnailMetadata;
     [ObservableProperty] private SavedLocationThumbnailResult? _lastThumbnailResult;
@@ -209,7 +216,7 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
         OnPropertyChanged(nameof(RegionDescription)); OnPropertyChanged(nameof(HasRegionDescription));
         OnPropertyChanged(nameof(UserDescription)); OnPropertyChanged(nameof(HasUserDescription));
         OnPropertyChanged(nameof(FavouriteLabel));
-        OnPropertyChanged(nameof(Eyebrow)); OnPropertyChanged(nameof(IsNotFavourite));
+        OnPropertyChanged(nameof(OpenAccessibleName)); OnPropertyChanged(nameof(IsNotFavourite));
         OnPropertyChanged(nameof(FavouriteAccessibleName)); OnPropertyChanged(nameof(LastUsedText));
         OnPropertyChanged(nameof(HasLastUsed));
         if (coordinateChanged) _ = LoadMapThumbnailAsync();
@@ -221,8 +228,13 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     [RelayCommand] private Task ToggleFavourite() => _toggleFavourite(this);
     partial void OnIsFavouriteChanged(bool value)
     {
-        OnPropertyChanged(nameof(FavouriteLabel)); OnPropertyChanged(nameof(Eyebrow));
+        OnPropertyChanged(nameof(FavouriteLabel)); OnPropertyChanged(nameof(HasStateBadges)); OnPropertyChanged(nameof(Eyebrow));
         OnPropertyChanged(nameof(IsNotFavourite)); OnPropertyChanged(nameof(FavouriteAccessibleName));
+        OnPropertyChanged(nameof(OpenAccessibleName));
+    }
+    partial void OnIsSelectedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(HasStateBadges)); OnPropertyChanged(nameof(OpenAccessibleName));
     }
 
     [RelayCommand]
@@ -264,7 +276,22 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
                 return false;
             LastThumbnailResult = result;
             ThumbnailMetadata = result.Metadata;
-            try
+            // The same cached assets feed the themed preview; building it never touches the network.
+            if (Path.GetDirectoryName(result.ImagePath) is { Length: > 0 } directory)
+            {
+                var scene = await Mapping.Preview.LocationPreviewSceneLoader.LoadAsync(directory, result.Metadata,
+                    requestedLocation.Coordinate, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                PreviewScene = scene;
+            }
+            if (result.Metadata.LegacyArtworkSkipped)
+            {
+                // No legacy artwork for this frame; an earlier bitmap no longer matches the saved data.
+                var stale = MapThumbnail;
+                MapThumbnail = null;
+                stale?.Dispose();
+            }
+            else try
             {
                 var bitmap = new Bitmap(result.ImagePath);
                 var previous = MapThumbnail;
@@ -357,6 +384,7 @@ public partial class LocationsViewModel : ObservableObject
     ];
     public bool HasSavedLocations => Saved.Count > 0;
     public bool IsFirstRun => Saved.Count == 0;
+    public string SavedSummary => Saved.Count == 1 ? "1 saved location" : $"{Saved.Count} saved locations";
     [ObservableProperty] private LocationSortOption _selectedSortOption;
     [ObservableProperty] private string? _resolutionMessage;
     [ObservableProperty] private bool _canUseDeviceLocation;
@@ -387,7 +415,7 @@ public partial class LocationsViewModel : ObservableObject
         }
         ApplySort();
         RefreshThumbnailAttributions();
-        OnPropertyChanged(nameof(HasSavedLocations)); OnPropertyChanged(nameof(IsFirstRun));
+        OnPropertyChanged(nameof(HasSavedLocations)); OnPropertyChanged(nameof(IsFirstRun)); OnPropertyChanged(nameof(SavedSummary));
     }
 
     public async Task RefreshDeviceAvailabilityAsync(CancellationToken cancellationToken)

@@ -63,9 +63,17 @@ public sealed class ThemeService : IDisposable
         }
         // Celestial and chart data colours as one object for custom-drawn controls (see CelestialThemeTokens).
         next[CelestialThemeTokens.ColourSet] = CelestialColourSet.FromPalette(EffectiveTheme.Palette);
-        var card = Color.Parse(EffectiveTheme.Palette["CardBackground"]);
+        // The saved-location preview is rendered from these theme roles (see Mapping/Preview).
+        var light = EffectiveTheme.AppearanceMode == AppearanceMode.Light;
+        var highContrastFamily = EffectiveTheme.Definition.Id == "builtin.highcontrast";
+        next[LocationPreviewStyleKey] = Mapping.Preview.LocationPreviewStyle.FromPalette(EffectiveTheme.Palette, light, highContrastFamily);
+        // Card scrim over the preview, from the card surface; enlarged text makes it fully opaque.
+        var card = Color.Parse(EffectiveTheme.Palette[LocationCardTokens.Surface]);
         foreach (var (name, alpha) in new (string, byte)[] { ("CardOpaque", 255), ("CardScrim", 242), ("CardFade", 168), ("CardTransparent", 0) })
             next[name] = Color.FromArgb(Preferences.TextScale > 1.2 ? (byte)255 : alpha, card.R, card.G, card.B);
+        // Location cards lift slightly off the page; High Contrast relies on its outlines instead of a shadow.
+        next["LocationCardShadow"] = highContrastFamily ? default
+            : BoxShadows.Parse(light ? "0 2 10 0 #1A1B2433" : "0 6 18 0 #40000000");
         foreach (var (name, size) in Typography)
             next[name] = size * Preferences.TextScale;
         // Only this text-bearing layout grows; this is not whole-window scaling.
@@ -86,6 +94,8 @@ public sealed class ThemeService : IDisposable
         else dictionaries[dictionaries.IndexOf(_resources)] = next;
         _resources = next;
     }
+    /// <summary>Resource key of the <see cref="Mapping.Preview.LocationPreviewStyle"/> for the current theme.</summary>
+    public const string LocationPreviewStyleKey = "LocationPreviewStyle";
     public static IReadOnlyDictionary<string, double> Typography { get; } = new Dictionary<string, double>
     {
         ["TextCaption"] = 10, ["TextSmall"] = 11, ["TextLabel"] = 12,

@@ -3,7 +3,10 @@ using Avalonia.Controls;
 
 namespace Noctaxis.Desktop.Controls;
 
-/// <summary>Lets enlarged card text use the artwork area without sharing mutable grid definitions.</summary>
+/// <summary>
+/// Location card layout: details beside a smaller map preview. Enlarged text takes the preview's
+/// column instead, without sharing mutable grid definitions between cards.
+/// </summary>
 public sealed class LocationCardTextGrid : Grid
 {
     public static readonly StyledProperty<bool> FullWidthProperty =

@@ -232,14 +232,19 @@ public static class BuiltInPalettes
             ["CardPressedOverlay"] = "#20FFFF00",
         },
     ];
-    public static IReadOnlyList<string> RequiredTokens { get; } = Authored[0].Keys.ToArray();
-    private static ThemePaletteDefinition Mode(string family, IReadOnlyDictionary<string, string> palette, bool light) => new(palette,
-        ThemeCatalogue.AllModes.ToDictionary(m => m, m =>
+    public static IReadOnlyList<string> RequiredTokens { get; } = [.. Authored[0].Keys, .. LocationCardTokens.All];
+    private static ThemePaletteDefinition Mode(string family, IReadOnlyDictionary<string, string> authored, bool light)
+    {
+        // Location-card roles are derived from the palette's own roles unless the family authors them.
+        var palette = new Dictionary<string, string>(authored);
+        LocationCardTokens.Derive(palette, light, family == "builtin.highcontrast");
+        return new(palette, ThemeCatalogue.AllModes.ToDictionary(m => m, m =>
         {
             var variant = new Dictionary<string, string>(palette);
             ApplySemanticVariant(variant, m, light, family);
             return (IReadOnlyDictionary<string, string>)variant;
         }));
+    }
 
     // Colour-vision variants. Each deficiency has its own authored sets, measured by simulating that
     // deficiency (Machado et al. 2009, full severity) and CIEDE2000 separation; see
