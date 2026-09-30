@@ -8,6 +8,10 @@ It is still in active development, but I'm happy with where it is going. It look
 
 The plan is to reach a solid V1 around the features below. After that, development will mostly follow my own use cases, along with user feedback that seems useful, sensible, and realistically achievable.
 
+## Inspiration
+
+[Photo Ephemeris](https://photoephemeris.com/) was one of the main early inspirations for Noctaxis, particularly the idea of planning celestial alignments against real geography. Noctaxis grew from that starting point into a broader desktop planning workspace, with its own approach to framing, terrain, weather, equipment and astronomical targets.
+
 ## Key features
 
 - Completely free, with no paid feature gates, required accounts, subscriptions, or user-supplied API tokens
