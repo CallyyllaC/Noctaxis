@@ -8,6 +8,14 @@ It is still in active development, but I'm happy with where it is going. It look
 
 The plan is to reach a solid V1 around the features below. After that, development will mostly follow my own use cases, along with user feedback that seems useful, sensible, and realistically achievable.
 
+## Inspiration
+
+[Photo Ephemeris](https://photoephemeris.com/) was one of the main early inspirations for Noctaxis, particularly the idea of planning celestial alignments against real geography.
+
+[AstroFrame](https://astroframe.app/) was another important early reference, especially its terrain-mesh visualisation of the real horizon beneath the sky. That helped shape Noctaxis's terrain-aware planning direction.
+
+Noctaxis grew from those starting points into a broader desktop planning workspace, with its own approach to framing, terrain, weather, equipment and astronomical targets.
+
 ## Key features
 
 - Completely free, with no paid feature gates, required accounts, subscriptions, or user-supplied API tokens
