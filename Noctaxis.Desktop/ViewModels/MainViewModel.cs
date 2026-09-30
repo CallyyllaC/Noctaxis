@@ -84,8 +84,10 @@ public partial class MainViewModel : ObservableObject
         ExternalMapService? externalMaps = null,
         Noctaxis.Core.LightPollution.LorenzInstallation? lightPollutionInstallation = null,
         Func<TimeSpan, CancellationToken, Task>? persistenceDelay = null,
-        IApplicationRestartService? restartService = null)
+        IApplicationRestartService? restartService = null,
+        ITerrariumTileSource? terrainReliefSource = null)
     {
+        TerrainReliefSource = terrainReliefSource;
         _restartService = restartService ?? new UnavailableApplicationRestartService();
         _planning = planning;
         _catalogue = catalogue;
@@ -515,6 +517,9 @@ public partial class MainViewModel : ObservableObject
         ShowFramingVisibilityLimits = Settings.EffectiveCameraFraming.ShowVisibilityLimits;
         _suppressChanges = false;
         OnPropertyChanged(nameof(CameraFramingMapSettings));
+        // The window is bound before settings load: the map layers must take the loaded preferences.
+        OnPropertyChanged(nameof(TerrainReliefMapPreferences));
+        OnPropertyChanged(nameof(LightPollutionMapPreferences));
         SavedLocations.Clear();
         foreach (var location in persisted.Locations) SavedLocations.Add(location);
         if (_terrainDiskCache is not null && Settings.EnableTerrainCalculations)
@@ -781,6 +786,7 @@ public partial class MainViewModel : ObservableObject
         if (timeZoneChanged) ApplyLocalDateTime(false);
         OnPropertyChanged(nameof(Settings));
         OnPropertyChanged(nameof(LightPollutionMapPreferences));
+        OnPropertyChanged(nameof(TerrainReliefMapPreferences));
         OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
         OnPropertyChanged(nameof(CameraFramingMapSettings));

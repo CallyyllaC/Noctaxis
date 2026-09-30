@@ -86,6 +86,21 @@ public sealed class MapLayerStateController
         return current.IsActive != active && Update(current with { IsActive = active });
     }
 
+    // Content supplied by the active basemap (its reference pass) moves to the new basemap's
+    // native layers; the registration's state is kept and applied to them.
+    internal void ReplaceAdapter(string id, IMapLayerStateAdapter adapter)
+    {
+        ArgumentNullException.ThrowIfNull(adapter);
+        adapter.Apply(_states[id]);
+        _adapters[id] = adapter;
+    }
+
+    // Re-applies unchanged state after something outside it (the theme) changed how it renders.
+    internal void Reapply(string id)
+    {
+        if (_adapters.TryGetValue(id, out var adapter)) adapter.Apply(_states[id]);
+    }
+
     // Called only after successful native activation. Definitions and other states remain stable.
     internal void ActivateBasemap(BasemapDefinition basemap, IMapLayerStateAdapter adapter)
     {

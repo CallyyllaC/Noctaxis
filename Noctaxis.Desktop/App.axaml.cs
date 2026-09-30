@@ -89,6 +89,15 @@ public partial class App : Application
             client.DefaultRequestHeaders.UserAgent.ParseAdd(
                 "Noctaxis/1.0 (photographic planning; Mapzen-Tilezen terrain client)");
         });
+        // The Planner map's terrain relief reads Terrarium through the same client configuration and
+        // the same disk cache as the terrain calculations, so tiles are downloaded and stored once.
+        // Its decoded tiles are held separately, so browsing the map never evicts a tile a horizon
+        // calculation is using.
+        services.AddSingleton<ITerrariumTileSource>(provider => new TerrariumTerrainProvider(
+            provider.GetRequiredService<IHttpClientFactory>().CreateClient(nameof(ITerrainElevationProvider)),
+            provider.GetRequiredService<IEnvironmentalTileCache>(),
+            provider.GetRequiredService<ILogger<TerrariumTerrainProvider>>(),
+            provider.GetRequiredService<TerrariumTerrainOptions>()));
         services.AddHttpClient<ILandCoverProvider, WorldCoverLandCoverProvider>();
         services.AddSingleton<ITerrainSurfaceResolver, TerrainSurfaceResolver>();
         services.AddSingleton<ITerrainDebugMapService, TerrainDebugMapService>();

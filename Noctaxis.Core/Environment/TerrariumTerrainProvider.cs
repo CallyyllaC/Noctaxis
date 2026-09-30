@@ -47,11 +47,38 @@ public sealed record TerrariumProviderMetrics(
     // PNG decodes performed, including the decode that validates a cached file.
     long TileDecodes = 0);
 
+/// <summary>A whole decoded Terrarium tile, or why it is unavailable.</summary>
+public sealed record TerrariumTileResult(TerrariumTile? Tile, TerrainSampleStatus Status);
+
+/// <summary>
+/// Whole Terrarium tiles at any published zoom, for presentation (the Planner map's terrain relief).
+/// Served by <see cref="TerrariumTerrainProvider"/> through the same download, validation and disk
+/// cache as the terrain calculations, so the map and the calculations read the same elevation data
+/// and a tile is downloaded and stored once whichever of them asks first.
+/// </summary>
+public interface ITerrariumTileSource
+{
+    /// <summary>The deepest zoom Terrarium publishes.</summary>
+    const int MaximumZoom = 15;
+
+    /// <summary>Changes whenever stored terrain is cleared, so anything derived from it can be discarded.</summary>
+    long Generation { get; }
+
+    /// <summary>
+    /// The zoom the terrain calculations sample. Deeper Terrarium zooms are, in many regions, coarser
+    /// sources enlarged in steps that shading would exaggerate, so presentation goes no deeper than
+    /// this and shows the terrain the calculations actually use.
+    /// </summary>
+    int DetailZoom => 12;
+
+    Task<TerrariumTileResult> GetTerrainTileAsync(TerrariumTileKey key, CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// Canonical terrain source backed by Mapzen/Tilezen Terrarium PNG tiles. Terrarium is a
 /// composite bare-earth terrain product and includes bathymetry; negative values are valid data.
 /// </summary>
-public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
+public sealed class TerrariumTerrainProvider : ITerrainElevationProvider, ITerrariumTileSource
 {
     public const string SourceId = "mapzen-terrarium";
     public const string SourceVersion = "elevation-tiles-prod-undated";
@@ -238,6 +265,25 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider
             CancellationToken = cancellationToken
         }, async (key, token) => { _ = await GetTileAsync(key, token).ConfigureAwait(false); })
             .ConfigureAwait(false);
+    }
+
+    public long Generation => _cache.TerrainGeneration;
+    public int DetailZoom => _options.Zoom;
+
+    /// <summary>
+    /// One whole tile at the requested zoom. It takes exactly the path elevation sampling takes
+    /// (decoded-tile memory, failure back-off, disk cache and download), so nothing here can
+    /// download or store a tile a second time.
+    /// </summary>
+    public async Task<TerrariumTileResult> GetTerrainTileAsync(TerrariumTileKey key, CancellationToken cancellationToken)
+    {
+        if (key.Zoom is < 0 or > ITerrariumTileSource.MaximumZoom) throw new ArgumentOutOfRangeException(nameof(key));
+        var tiles = 1 << key.Zoom;
+        if (key.X < 0 || key.X >= tiles || key.Y < 0 || key.Y >= tiles) throw new ArgumentOutOfRangeException(nameof(key));
+        var load = await GetTileAsync(key, cancellationToken).ConfigureAwait(false);
+        return load?.Tile is { } tile
+            ? new TerrariumTileResult(tile, TerrainSampleStatus.Valid)
+            : new TerrariumTileResult(null, load?.Status ?? TerrainSampleStatus.Unavailable);
     }
 
     public static double DecodeElevation(byte red, byte green, byte blue) =>
@@ -468,6 +514,15 @@ public sealed class TerrariumTile
     private TerrariumTile(float[] elevations) => _elevations = elevations;
 
     public double this[int column, int row] => _elevations[row * TerrariumTerrainOptions.TileSize + column];
+
+    /// <summary>A tile from row-major elevations in metres (256 x 256), as decoded from a Terrarium PNG.</summary>
+    public static TerrariumTile FromElevations(float[] elevations)
+    {
+        ArgumentNullException.ThrowIfNull(elevations);
+        if (elevations.Length != TerrariumTerrainOptions.TileSize * TerrariumTerrainOptions.TileSize)
+            throw new ArgumentException("A Terrarium tile holds 256 x 256 elevations.", nameof(elevations));
+        return new TerrariumTile((float[])elevations.Clone());
+    }
 
     public static bool IsValid(string path)
     {

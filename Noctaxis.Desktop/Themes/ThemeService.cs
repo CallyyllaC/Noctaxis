@@ -81,6 +81,9 @@ public sealed class ThemeService : IDisposable
         next["DatePickerMinimumWidth"] = 150 + 170 * (Preferences.TextScale - 1);
         next["TabItemHeaderFontSize"] = 20 * Preferences.TextScale;
         var highContrast = EffectiveTheme.Definition.Id == "builtin.highcontrast";
+        // Terrain relief is decorative light and shade; High Contrast halves it so land, water and the
+        // roads and names above keep their full contrast, while mountains still read.
+        next[MapThemeTokens.TerrainReliefStrength] = highContrast ? .5 : 1d;
         // Hover and press thicken the border in every theme, so state never rests on a subtle fill change alone.
         double hover = 2, pressed = highContrast ? 3 : 2, selected = highContrast ? 4 : 2, focus = 3;
         next["StateHoverThickness"] = new Thickness(hover);

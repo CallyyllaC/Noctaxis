@@ -1,6 +1,11 @@
 namespace Noctaxis.Desktop.Mapping;
 
-public enum MapLayerGroup { Basemap, Environmental, Planning, Interaction }
+/// <summary>
+/// The semantic groups, bottom to top. Environmental layers change how the land looks; Reference
+/// (the basemap's roads, boundaries and names) sits above them so they never wash it out; Planning
+/// and Interaction are Noctaxis's own graphics.
+/// </summary>
+public enum MapLayerGroup { Basemap, Environmental, Reference, Planning, Interaction }
 /// <summary>Street is vector data styled by the theme; Satellite is photographic imagery shown as-is.</summary>
 public enum BasemapKind { Street, Satellite }
 
@@ -10,10 +15,14 @@ public enum MapLayerCapabilities { None = 0, Visibility = 1, Opacity = 2 }
 public sealed record MapProviderMetadata(string DisplayName, string? AttributionText = null,
     string? AttributionUrl = null, string? LicenceName = null, string? LicenceUrl = null);
 
-/// <summary>Logical content, independent of its rendering backend. Order is within its group.</summary>
+/// <summary>
+/// Logical content, independent of its rendering backend. Order is within its group.
+/// <paramref name="ShownOverImagery"/> is false for content that photographic imagery already
+/// shows (terrain relief); it is not drawn while a satellite basemap is active.
+/// </summary>
 public sealed record MapLayerDefinition(string Id, MapLayerGroup Group, int Order,
     MapProviderMetadata Provider, MapLayerCapabilities Capabilities = MapLayerCapabilities.None,
-    MapLayerCapabilities PersistedPreferences = MapLayerCapabilities.None);
+    MapLayerCapabilities PersistedPreferences = MapLayerCapabilities.None, bool ShownOverImagery = true);
 
 public sealed record BasemapDefinition(BasemapKind Kind, MapProviderMetadata Provider);
 

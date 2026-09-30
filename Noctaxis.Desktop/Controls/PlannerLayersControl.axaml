@@ -20,6 +20,25 @@
           <StackPanel Width="280" Spacing="8">
             <TextBlock Text="Map layers" Classes="section"/>
             <TextBlock Text="Overlays" Foreground="{DynamicResource SecondaryText}"/>
+            <CheckBox Name="TerrainReliefToggle" Content="Terrain relief"
+                      FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
+                      AutomationProperties.HelpText="Shade hills and valleys so the shape of the land shows on the map."
+                      IsChecked="{Binding ShowTerrainRelief, Mode=TwoWay}"
+                      ToolTip.Tip="Shade hills and valleys so the shape of the land shows on the map."/>
+            <StackPanel Name="TerrainReliefOpacityControls" IsVisible="{Binding ShowTerrainRelief}" Spacing="4">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Opacity"/>
+                <TextBlock Grid.Column="1" Text="{Binding TerrainReliefOpacityPercent, StringFormat='{}{0:F0}%'}"/>
+              </Grid>
+              <Slider Name="TerrainReliefOpacitySlider" Minimum="0" Maximum="100"
+                      Value="{Binding TerrainReliefOpacityPercent, Mode=TwoWay}"
+                      AutomationProperties.Name="Terrain relief opacity"
+                      AutomationProperties.HelpText="Adjust how strongly hills and valleys are shaded."
+                      ToolTip.Tip="Adjust how strongly hills and valleys are shaded."/>
+              <TextBlock Text="Not shown over satellite imagery, which already shows the terrain."
+                         IsVisible="{Binding IsTerrainReliefOverImagery}" TextWrapping="Wrap"
+                         Foreground="{DynamicResource SecondaryText}"/>
+            </StackPanel>
             <CheckBox Name="LightPollutionToggle" Content="Light Pollution"
                       FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
                       AutomationProperties.HelpText="Show modelled artificial zenith sky brightness on the map."

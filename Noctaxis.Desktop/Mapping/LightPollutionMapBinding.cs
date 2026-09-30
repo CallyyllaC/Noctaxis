@@ -12,11 +12,17 @@ public sealed class LightPollutionMapBinding : IAsyncDisposable
         new(LorenzAtlas.Name, LorenzAtlas.Name, LorenzAtlas.InformationUrl),
         MapLayerCapabilities.Visibility | MapLayerCapabilities.Opacity,
         MapLayerCapabilities.Visibility | MapLayerCapabilities.Opacity);
+    /// <summary>
+    /// The Planner's composition with both environmental layers registered: terrain relief beneath
+    /// light pollution. Each is unavailable until its data source is configured.
+    /// </summary>
     public static PlannerMapComposition CreateComposition()
     {
-        var map = new PlannerMapComposition(additionalLayers: [Definition]);
+        var map = new PlannerMapComposition(additionalLayers: [TerrainReliefMapBinding.Definition, Definition]);
         map.Runtime.SetAvailability(LayerId, MapLayerAvailability.Unavailable);
+        map.Runtime.SetAvailability(TerrainReliefMapBinding.LayerId, MapLayerAvailability.Unavailable);
         ApplyPreferences(map, new());
+        TerrainReliefMapBinding.ApplyPreferences(map, new());
         return map;
     }
     public static void ApplyPreferences(PlannerMapComposition map, LightPollutionPreferences preferences)

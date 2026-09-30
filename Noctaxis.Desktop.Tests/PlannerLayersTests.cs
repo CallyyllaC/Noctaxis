@@ -102,8 +102,9 @@ public sealed class PlannerLayersTests
         var map = new PlannerMapView { LightPollutionPreferences = new(true, .35, "cividis") };
         map.ConfigureLightPollution(store);
         var composition = map.CompositionForTesting;
-        composition.Map.Layers.First().Enabled = false;
-        var native = composition.Map.Layers.Last();
+        foreach (var (id, layer) in composition.NativeLayerOrder)
+            if (id is "basemap" or PlannerMapComposition.BasemapReferenceId) layer.Enabled = false; // Offline.
+        var native = composition.NativeLayerOrder.Single(x => x.Id == LightPollutionMapBinding.LayerId).Layer;
         var originalComposition = composition.Composition;
         var restored = MapLayerPreferences.Capture(composition.Runtime);
         var controls = new PlannerLayersControl { DataContext = map.Layers };
@@ -136,7 +137,7 @@ public sealed class PlannerLayersTests
                 Assert.Equal("cividis", map.LightPollutionPreferences.PaletteId);
                 MapLayerPreferences.Restore(composition.Runtime, restored);
                 Assert.Equal(35, map.Layers.LightPollutionOpacityPercent);
-                Assert.Same(native, composition.Map.Layers.Last());
+                Assert.Same(native, composition.NativeLayerOrder.Single(x => x.Id == LightPollutionMapBinding.LayerId).Layer);
                 Assert.Same(originalComposition, composition.Composition);
             }
             button.Flyout!.ShowAt(button); Dispatcher.UIThread.RunJobs();

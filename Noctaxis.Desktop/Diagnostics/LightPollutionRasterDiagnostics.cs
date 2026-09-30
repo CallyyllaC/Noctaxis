@@ -10,4 +10,6 @@ internal sealed class LightPollutionRasterDiagnostics
     public Action<TileIndex>? Requested;
     public Action<TileIndex, bool, double, double, double, int>? Completed;
     public long RejectedRevisions, EmptyResults, Failures;
+    // Stopwatch ticks per stage, summed over generated tiles (probe only).
+    public long ReadWaitTicks, SampleTicks, PaletteTicks, EncodeTicks, Generated;
 }

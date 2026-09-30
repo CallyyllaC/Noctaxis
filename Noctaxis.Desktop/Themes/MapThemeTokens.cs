@@ -56,6 +56,13 @@ public static class MapThemeTokens
     public const string WaterLabel = "MapWaterLabel";
     public const string Poi = "MapPoi";
 
+    /// <summary>
+    /// A number, not a colour: the theme's factor (0–1) on the Planner's terrain relief opacity.
+    /// Relief is neutral light and shade and needs no colour; High Contrast weakens it so land, water
+    /// and the reference layer keep their full contrast. The user's own opacity is applied on top.
+    /// </summary>
+    public const string TerrainReliefStrength = "MapTerrainReliefStrength";
+
     public static IReadOnlyList<string> Basemap { get; } =
         [Land, BuiltUp, Building, Water, Vegetation, RoadMinor, RoadMajor, RoadCasing, Rail, Boundary,
          Label, LabelHalo, WaterLabel, Poi];

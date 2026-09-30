@@ -18,8 +18,10 @@ Revert. The Settings page has no copy of the settings of its own. Every control 
 | Supporter | — | Licence status, add/replace licence, Ko-fi |
 | Diagnostics | Terrain diagnostics | Copy terrain debug snapshot |
 
-Light-pollution overlay visibility and opacity are Planner → Layers controls. They commit through that
-panel and are not duplicated in Settings.
+Terrain relief and light-pollution visibility and opacity are Planner → Layers controls. They commit
+through that panel and are not duplicated in Settings. Terrain relief is shown by default at 60%; light
+pollution defaults to hidden at 10%. A stored opacity is always kept as saved; the defaults apply only
+where no preference was stored (see [terrain-relief.md](terrain-relief.md)).
 
 ### Navigation
 

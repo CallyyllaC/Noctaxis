@@ -19,7 +19,7 @@ public sealed partial class MainViewModelTests
         Assert.Equal("turbo",vm.LightPollutionMapPreferences.PaletteId); // The overlay follows at once.
         vm.SettingsLightPollutionColorMap=LightPollutionColorMaps.Resolve("cividis");
         await vm.SettleSettingsAsync();
-        Assert.Equal(new LightPollutionPreferences(false,.5,"cividis"),store.State.Settings.LightPollution);
+        Assert.Equal(new LightPollutionPreferences(false,.1,"cividis"),store.State.Settings.LightPollution);
         await using var paths=new AtlasTestData(); var disk=new JsonUserDataStore(paths,NullLogger<JsonUserDataStore>.Instance);
         await disk.SaveAsync(store.State,CancellationToken.None);
         var reload=CreateViewModel(new FakePlanning(catalogue),catalogue,disk,new FakeExporter());

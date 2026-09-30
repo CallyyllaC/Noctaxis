@@ -36,11 +36,24 @@ public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap
 
     public BasemapStyle Style => Source.Style;
 
+    /// <summary>The whole basemap in one layer, for a map without environmental layers.</summary>
     public IReadOnlyList<ILayer> CreateLayers()
     {
-        var layer = new ThemedBasemapTileLayer(Source) { Name = "basemap-openfreemap" };
+        var layer = new ThemedBasemapTileLayer(Source, BasemapPass.Full) { Name = "basemap-openfreemap" };
         lock (_gate) _layers = [layer];
         return [layer];
+    }
+
+    /// <summary>
+    /// The basemap as two passes over one shared source: geography below the environmental layers,
+    /// reference (boundaries, roads, labels) above them. See <see cref="BasemapPass"/>.
+    /// </summary>
+    public BasemapLayers CreateLayerSet()
+    {
+        var geography = new ThemedBasemapTileLayer(Source, BasemapPass.Geography) { Name = "basemap-openfreemap" };
+        var reference = new ThemedBasemapTileLayer(Source, BasemapPass.Reference) { Name = "basemap-openfreemap-reference" };
+        lock (_gate) _layers = [geography, reference];
+        return new BasemapLayers([geography], [reference]);
     }
 
     public bool ApplyStyle(BasemapStyle style)
@@ -64,8 +77,14 @@ internal sealed class ThemedBasemapTileLayer : TileLayer
     private readonly ThemedVectorTileSource _source;
     private int _healScheduled;
 
-    public ThemedBasemapTileLayer(ThemedVectorTileSource source)
-        : base(source, fetchTileAsFeature: info => Fetch(source, info)) => _source = source;
+    public ThemedBasemapTileLayer(ThemedVectorTileSource source, BasemapPass pass)
+        : base(source, fetchTileAsFeature: info => Fetch(source, info, pass))
+    {
+        _source = source;
+        Pass = pass;
+    }
+
+    internal BasemapPass Pass { get; }
 
     internal void Restyle()
     {
@@ -95,9 +114,9 @@ internal sealed class ThemedBasemapTileLayer : TileLayer
         public long StyleVersion { get; } = styleVersion;
     }
 
-    private static async Task<IFeature?> Fetch(ThemedVectorTileSource source, TileInfo info)
+    private static async Task<IFeature?> Fetch(ThemedVectorTileSource source, TileInfo info, BasemapPass pass)
     {
-        var (bytes, version) = await source.RenderAsync(info).ConfigureAwait(false);
+        var (bytes, version) = await source.RenderAsync(info, pass).ConfigureAwait(false);
         return bytes is null ? null : new StyledRasterFeature(new MRaster(bytes,
             new MRect(info.Extent.MinX, info.Extent.MinY, info.Extent.MaxX, info.Extent.MaxY)), version);
     }

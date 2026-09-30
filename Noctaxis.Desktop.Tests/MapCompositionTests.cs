@@ -68,7 +68,8 @@ public sealed class MapCompositionTests
         Assert.Same(replacement.Layers[0], controller.Map.Layers.First());
         Assert.Same(overlay, controller.Map.Layers.Last());
         Assert.Single(composition.Layers, x => x.Group == MapLayerGroup.Basemap);
-        Assert.Equal(4, composition.Layers.Count(x => x.Group != MapLayerGroup.Basemap));
+        Assert.Equal(new[] { "basemap-reference", "environmental-shading", "camera-framing", "celestial-rays", "observer-pin" },
+            composition.Layers.Where(x => x.Group != MapLayerGroup.Basemap).Select(x => x.Id));
         Assert.Throws<ArgumentException>(() => controller.ReplaceBasemap(new TestBasemap(0)));
         Assert.Same(composition, controller.Composition);
         Assert.Equal(2, controller.Map.Layers.Count);
@@ -85,9 +86,10 @@ public sealed class MapCompositionTests
         Assert.Equal("OpenFreeMap", composition.Basemap.Provider.DisplayName);
         Assert.Equal(Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap.AttributionText, composition.AttributionText);
         Assert.IsType<Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap>(controller.ActiveBasemap);
-        Assert.Single(controller.Map.Layers);
-        var native = controller.Map.Layers.First();
-        native.Enabled = false; // Offline lifecycle test, retaining the actual registration.
+        // The vector basemap is split: geography at the bottom, its reference pass above.
+        var native = controller.Map.Layers.ToArray();
+        Assert.Equal(new[] { "basemap-openfreemap", "basemap-openfreemap-reference" }, native.Select(x => x.Name));
+        foreach (var layer in native) layer.Enabled = false; // Offline lifecycle test, retaining the actual registration.
         var window = new Window { Content = view, Width = 400, Height = 300 };
         try
         {
@@ -99,7 +101,7 @@ public sealed class MapCompositionTests
                 window.Content = view;
                 controller.Map.Navigator.CenterOnAndZoomTo(new(1000 * i, 2000), 200, 0);
                 Assert.Same(composition, controller.Composition);
-                Assert.Same(native, Assert.Single(controller.Map.Layers));
+                Assert.Equal(native, controller.Map.Layers.ToArray());
                 Assert.False(view.AnimationTimerEnabled);
             }
         }

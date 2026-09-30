@@ -152,6 +152,23 @@ public sealed class TerrariumPlannerIntegrationTests
     }
 
     [AvaloniaFact]
+    public async Task ProductionArchitecture_MapTerrainReliefReadsTheCanonicalTerrariumSourceAndCache()
+    {
+        await using var services = App.ConfigureServices();
+        var calculations = Assert.IsType<TerrariumTerrainProvider>(services.GetRequiredService<ITerrainElevationProvider>());
+        var map = Assert.IsType<TerrariumTerrainProvider>(services.GetRequiredService<ITerrariumTileSource>());
+        Assert.Same(map, services.GetRequiredService<MainViewModel>().TerrainReliefSource);
+        // One download path and one store: both read through the same environmental tile cache,
+        // with the same options; only the decoded-tile memory is separate.
+        var cache = typeof(TerrariumTerrainProvider).GetField("_cache",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        Assert.Same(services.GetRequiredService<IEnvironmentalTileCache>(), cache.GetValue(calculations));
+        Assert.Same(cache.GetValue(calculations), cache.GetValue(map));
+        Assert.Equal(calculations.Options, map.Options);
+        Assert.NotSame(calculations, map);
+    }
+
+    [AvaloniaFact]
     public async Task ProductionCompositionMovesBetweenTerrariumLocationsWithoutElevationLeak()
     {
         using var fixture = new TerrariumFixtureCache();

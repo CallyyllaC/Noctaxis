@@ -17,6 +17,22 @@ public readonly record struct BasemapTileRequest(int Zoom, int Column, int Row)
 }
 
 /// <summary>
+/// Which part of the basemap a tile holds. The Planner draws <see cref="Geography"/> at the bottom
+/// of the map and <see cref="Reference"/> above its environmental layers (terrain relief, light
+/// pollution), so those change the look of the land without covering roads, boundaries or names.
+/// Together the two passes draw exactly what <see cref="Full"/> draws, each feature once.
+/// </summary>
+public enum BasemapPass
+{
+    /// <summary>Everything, on an opaque background: for a map with no environmental layers.</summary>
+    Full,
+    /// <summary>Land, land cover, water and buildings, on an opaque background.</summary>
+    Geography,
+    /// <summary>Boundaries, roads, railways and labels, on a transparent background.</summary>
+    Reference
+}
+
+/// <summary>
 /// Draws OpenMapTiles-schema vector tiles (the OpenFreeMap schema) with a <see cref="BasemapStyle"/>.
 /// Only semantic roles reach this class; it knows nothing about theme families. Labels are placed
 /// only where they fit entirely inside the tile, so no label is ever cut at a tile edge.
@@ -34,19 +50,21 @@ public sealed class BasemapTileRenderer
     public int PixelRatio { get; }
     public int PixelSize => LogicalTileSize * PixelRatio;
 
-    public byte[] RenderPng(VectorTile tile, BasemapTileRequest request, BasemapStyle style)
+    public byte[] RenderPng(VectorTile tile, BasemapTileRequest request, BasemapStyle style,
+        BasemapPass pass = BasemapPass.Full)
     {
-        using var bitmap = RenderBitmap(tile, request, style);
+        using var bitmap = RenderBitmap(tile, request, style, pass);
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
     }
 
-    public SKBitmap RenderBitmap(VectorTile tile, BasemapTileRequest request, BasemapStyle style)
+    public SKBitmap RenderBitmap(VectorTile tile, BasemapTileRequest request, BasemapStyle style,
+        BasemapPass pass = BasemapPass.Full)
     {
         var bitmap = new SKBitmap(PixelSize, PixelSize, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
-        new Pass(this, canvas, tile, request, style).Draw();
+        new Pass(this, canvas, tile, request, style).Draw(pass);
         return bitmap;
     }
 
@@ -58,12 +76,19 @@ public sealed class BasemapTileRenderer
         private readonly int _zoom = request.Zoom;
         private readonly List<SKRect> _placed = [];
 
-        public void Draw()
+        public void Draw(BasemapPass pass)
         {
-            canvas.Clear(style.Land);
-            DrawAreas();
-            DrawWater();
-            if (_zoom >= 13) Fill("building", _ => true, style.Building, 1);
+            if (pass == BasemapPass.Reference) canvas.Clear(SKColors.Transparent);
+            else
+            {
+                canvas.Clear(style.Land);
+                DrawAreas();
+                DrawWater();
+                // Buildings are area fills: drawn above the environmental layers they would hide
+                // them across every town, so they belong to the geography.
+                if (_zoom >= 13) Fill("building", _ => true, style.Building, 1);
+                if (pass == BasemapPass.Geography) return;
+            }
             DrawBoundaries();
             DrawTransportation();
             DrawLabels();

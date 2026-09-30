@@ -69,8 +69,12 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
 
     public async Task<byte[]?> GetTileAsync(TileInfo tileInfo) => (await RenderAsync(tileInfo).ConfigureAwait(false)).Bytes;
 
-    /// <summary>Renders a tile and reports the style version it was drawn with.</summary>
-    internal async Task<(byte[]? Bytes, long StyleVersion)> RenderAsync(TileInfo tileInfo)
+    /// <summary>
+    /// Renders one pass of a tile and reports the style version it was drawn with. Every pass is
+    /// drawn from the same decoded vector tile, so splitting the basemap never fetches or decodes twice.
+    /// </summary>
+    internal async Task<(byte[]? Bytes, long StyleVersion)> RenderAsync(TileInfo tileInfo,
+        BasemapPass pass = BasemapPass.Full)
     {
         var index = tileInfo.Index;
         if (index.Level < 0 || index.Level > MaximumDisplayZoom) return (null, StyleVersion);
@@ -85,7 +89,7 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
                 BasemapStyle style;
                 long version;
                 lock (_gate) { style = _style; version = _styleVersion; }
-                var bytes = _renderer.RenderPng(tile, request, style);
+                var bytes = _renderer.RenderPng(tile, request, style, pass);
                 Interlocked.Increment(ref _renders);
                 // A theme change during the render would leave this tile in the old style: draw it again.
                 if (version == StyleVersion) return ((byte[]?)bytes, version);

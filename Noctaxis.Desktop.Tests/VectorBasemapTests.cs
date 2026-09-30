@@ -110,6 +110,40 @@ public sealed class VectorBasemapTests : IDisposable
     }
 
     [Fact]
+    public void GeographyAndReferencePassesSplitTheBasemapAndTogetherDrawAllOfIt()
+    {
+        var builder = new VectorTileTestBuilder();
+        builder.Layer("water").Rectangle(-64, -64, 2048, 4160, ("class", "lake"));
+        builder.Layer("transportation").Line([(-64, 1024), (4160, 1024)], ("class", "motorway"));
+        builder.Layer("boundary").Line([(3000, -64), (3000, 4160)], ("admin_level", 2L));
+        builder.Layer("place").Point(3072, 3072, ("class", "city"), ("name", "Keld"));
+        var tile = VectorTile.Decode(builder.Build());
+        var renderer = new BasemapTileRenderer(1);
+        var request = new BasemapTileRequest(14, 0, 0);
+        using var full = renderer.RenderBitmap(tile, request, NoctaxisDark);
+        using var geography = renderer.RenderBitmap(tile, request, NoctaxisDark, BasemapPass.Geography);
+        using var reference = renderer.RenderBitmap(tile, request, NoctaxisDark, BasemapPass.Reference);
+
+        // Geography: the land and water, opaque, with no road across it.
+        Assert.Equal(NoctaxisDark.Water, geography.GetPixel(40, 100));
+        Assert.Equal(NoctaxisDark.Land, geography.GetPixel(200, 64));
+        Assert.All(Pixels(geography), pixel => Assert.Equal(255, pixel.Alpha));
+        // Reference: roads, boundaries and names only, with everything else transparent.
+        Assert.Equal(NoctaxisDark.RoadMajor, reference.GetPixel(200, 64));
+        Assert.Equal(0, reference.GetPixel(200, 120).Alpha);
+        Assert.Contains(Pixels(reference), pixel => pixel.Alpha > 0 && Near(pixel, NoctaxisDark.Label, 60));
+
+        // Reference drawn over geography is the whole basemap: nothing lost, nothing drawn twice.
+        using var composite = geography.Copy();
+        using (var canvas = new SKCanvas(composite)) canvas.DrawBitmap(reference, 0, 0);
+        for (var y = 0; y < full.Height; y++)
+            for (var x = 0; x < full.Width; x++)
+                Assert.True(Near(full.GetPixel(x, y), composite.GetPixel(x, y), 6), $"pixel {x},{y}");
+    }
+
+    private static IEnumerable<SKColor> Pixels(SKBitmap bitmap) => bitmap.Pixels;
+
+    [Fact]
     public void TheSameVectorDataTakesAnotherThemeWithoutChange()
     {
         var tile = WaterAndRoadTile();
@@ -279,8 +313,12 @@ public sealed class VectorBasemapTests : IDisposable
         var basemap = Assert.IsType<OpenFreeMapBasemap>(composition.ActiveBasemap);
         Assert.Equal(BasemapKind.Street, composition.Composition.Basemap.Kind);
         Assert.Equal(OpenFreeMapBasemap.AttributionText, composition.Composition.AttributionText);
-        var layer = Assert.IsAssignableFrom<TileLayer>(Assert.Single(composition.Map.Layers));
-        Assert.Same(basemap.Source, layer.TileSource);
+        // Two passes over one shared source: the vector data is fetched and decoded once for both.
+        var layers = composition.Map.Layers.Cast<TileLayer>().ToArray();
+        Assert.Equal(2, layers.Length);
+        Assert.All(layers, layer => Assert.Same(basemap.Source, layer.TileSource));
+        Assert.Equal(new[] { BasemapPass.Geography, BasemapPass.Reference },
+            layers.Select(layer => ((ThemedBasemapTileLayer)layer).Pass));
         composition.Map.Dispose();
     }
 
@@ -316,7 +354,7 @@ public sealed class VectorBasemapTests : IDisposable
                 versions.Add(source.StyleVersion);
                 // Same native layers in the same order, same source: only the drawing changed.
                 Assert.Equal(layers, map.Layers.ToArray());
-                Assert.Same(source, ((TileLayer)map.Layers.First()).TileSource);
+                Assert.All(map.Layers, layer => Assert.Same(source, ((TileLayer)layer).TileSource));
                 Assert.Same(basemap, composition.ActiveBasemap);
             }
             Assert.Equal(versions.Count, versions.Distinct().Count());

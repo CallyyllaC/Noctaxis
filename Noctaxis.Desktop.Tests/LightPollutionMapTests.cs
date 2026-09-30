@@ -81,10 +81,14 @@ public sealed class LightPollutionMapTests
         var view = new PlannerMapView();
         view.ConfigureLightPollution(store);
         var map = view.CompositionForTesting;
-        map.Map.Layers.First().Enabled = false;
+        foreach (var (id, native) in map.NativeLayerOrder)
+            if (id is "basemap" or PlannerMapComposition.BasemapReferenceId) native.Enabled = false; // Offline.
         var composition = map.Composition;
-        var layer = map.Map.Layers.Last();
-        Assert.Equal(2, map.Map.Layers.Count);
+        // Light pollution sits between the basemap's geography and its roads and names.
+        Assert.Equal(new[] { "basemap", "light-pollution", PlannerMapComposition.BasemapReferenceId },
+            map.NativeLayerOrder.Select(x => x.Id));
+        var layer = map.NativeLayerOrder.Single(x => x.Id == "light-pollution").Layer;
+        Assert.Equal(3, map.Map.Layers.Count);
         Assert.Equal(MapLayerGroup.Environmental, composition.Layers.Single(x => x.Id == "light-pollution").Group);
         Assert.False(layer.Enabled);
         var window = new Window { Content = view, Width = 600, Height = 400 };
@@ -106,8 +110,8 @@ public sealed class LightPollutionMapTests
             {
                 window.Content = null; window.Content = view;
                 map.Map.Navigator.CenterOnAndZoomTo(new(i * 100, 0), 100, 0);
-                Assert.Same(composition, map.Composition); Assert.Same(layer, map.Map.Layers.Last());
-                Assert.Equal(2, map.Map.Layers.Count);
+                Assert.Same(composition, map.Composition); Assert.Same(layer, map.Map.Layers.ElementAt(1));
+                Assert.Equal(3, map.Map.Layers.Count);
             }
             await store.RemoveAsync(); Dispatcher.UIThread.RunJobs();
             Assert.False(layer.Enabled); Assert.Same(composition, map.Composition);

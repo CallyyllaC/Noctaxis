@@ -312,6 +312,50 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
         Assert.True(File.Exists(cached));
     }
 
+    [Fact]
+    public async Task MapTileAccessSharesTheCalculationsDownloadAndDiskCache()
+    {
+        // Production gives the map its own provider instance over the same cache: nothing is fetched twice.
+        Seed(new TerrariumTileKey(1, 1, 1), 42);
+        var bytes = File.ReadAllBytes(Path.Combine(_directory, "1-1-1.png"));
+        var handler = new PngHandler(bytes);
+        using var http = new HttpClient(handler);
+        var paths = new TerrainPaths(_directory);
+        var manager = new TerrainDiskCache(paths, NullLogger<TerrainDiskCache>.Instance);
+        var cache = new EnvironmentalTileCache(paths, NullLogger<EnvironmentalTileCache>.Instance, manager);
+        var options = new TerrariumTerrainOptions(1, 4);
+        var calculations = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance, options);
+        ITerrariumTileSource map = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance, options);
+
+        Assert.Equal(42, (await calculations.GetElevationAsync(CoordinateAtGlobalPixelCentre(1, 256, 256), default)).Value);
+        var tile = await map.GetTerrainTileAsync(new TerrariumTileKey(1, 1, 1), default);
+
+        Assert.Equal(TerrainSampleStatus.Valid, tile.Status);
+        Assert.Equal(42, tile.Tile![0, 0]);
+        Assert.Equal(42, tile.Tile[255, 255]);
+        Assert.Equal(1, handler.Calls);
+        // The same instance serves whole tiles from the decoded tile it already holds.
+        Assert.Same(tile.Tile, (await map.GetTerrainTileAsync(new TerrariumTileKey(1, 1, 1), default)).Tile);
+        Assert.Equal(1, ((TerrariumTerrainProvider)map).Metrics.TileLoads);
+
+        // Clearing stored terrain advances the generation that the map's derived relief is keyed on.
+        var generation = map.Generation;
+        await manager.ClearAsync();
+        Assert.True(map.Generation > generation);
+    }
+
+    [Fact]
+    public async Task MapTileAccessReportsAbsenceAndRejectsTilesOutsideThePublishedPyramid()
+    {
+        ITerrariumTileSource provider = Provider(1);
+        var missing = await provider.GetTerrainTileAsync(new TerrariumTileKey(1, 0, 0), default);
+        Assert.Null(missing.Tile);
+        Assert.NotEqual(TerrainSampleStatus.Valid, missing.Status);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(16, 0, 0), default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(1, 2, 0), default));
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(1, 0, -1), default));
+    }
+
     private sealed class TerrainPaths(string path) : Noctaxis.Core.Persistence.IUserDataPathProvider
     { public string GetApplicationDataDirectory() => path; }
     private sealed class PngHandler(byte[] bytes) : HttpMessageHandler

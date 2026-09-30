@@ -28,7 +28,7 @@ public sealed partial class MainViewModelTests
             Microsoft.Extensions.Logging.Abstractions.NullLogger<Noctaxis.Desktop.ViewModels.LocationSearchViewModel>.Instance);
         var window = new MainWindow(vm, new DesktopDialogService(search)) { Width = 1440, Height = 1000 };
         var map = window.FindControl<PlannerMapView>("PlannerMap")!;
-        map.CompositionForTesting.Map.Layers.First().Enabled = false;
+        foreach (var (id, basemapLayer) in map.CompositionForTesting.NativeLayerOrder) if (id is "basemap" or PlannerMapComposition.BasemapReferenceId) basemapLayer.Enabled = false;
         window.Show();
         try
         {

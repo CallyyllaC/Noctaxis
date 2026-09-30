@@ -157,7 +157,7 @@ public sealed class LightPollutionPaletteTests
     {
         await using var paths=new AtlasTestData(); using var http=Offline(); var store=new LorenzInstallation(paths,http);
         await paths.SeedAsync(store);
-        var map=LightPollutionMapBinding.CreateComposition(); map.Map.Layers.First().Enabled=false;
+        var map=LightPollutionMapBinding.CreateComposition(); foreach (var basemapLayer in map.Map.Layers) basemapLayer.Enabled=false;
         await using var binding=new LightPollutionMapBinding(map,store);
         binding.Attach(); binding.Attach();
         var composition=map.Composition; var layers=map.Map.Layers.ToArray();
@@ -186,10 +186,10 @@ public sealed class LightPollutionPaletteTests
         await using var paths=new AtlasTestData(); using var http=Offline(); var store=new LorenzInstallation(paths,http);
         await paths.SeedAsync(store);
         var composition=LightPollutionMapBinding.CreateComposition();
-        composition.Map.Layers.First().Enabled=false;
+        foreach (var basemapLayer in composition.Map.Layers) basemapLayer.Enabled=false;
         await using var binding=new LightPollutionMapBinding(composition,store);
         binding.Attach(); LightPollutionMapBinding.ApplyPreferences(composition,new(true,.5));
-        var layer=Assert.IsType<LightPollutionTileLayer>(composition.Map.Layers.Last());
+        var layer=Assert.IsType<LightPollutionTileLayer>(composition.NativeLayerOrder.Single(x=>x.Id==LightPollutionMapBinding.LayerId).Layer);
         var map=composition.Map;
         map.Navigator.SetSize(256,256); map.Navigator.CenterOnAndZoomTo(new MPoint(0,0),156543.03392804097,0);
         try
@@ -204,7 +204,7 @@ public sealed class LightPollutionPaletteTests
             var colored=Assert.IsAssignableFrom<RasterFeature>(features[0]); Assert.NotNull(colored.Raster);
             using var turbo=SKBitmap.Decode(colored.Raster.Data);
             Assert.NotEqual(gray.GetPixel(128,128),turbo.GetPixel(128,128));
-            Assert.Same(layer,map.Layers.Last());
+            Assert.Same(layer,Assert.Single(map.Layers.OfType<LightPollutionTileLayer>()));
         }
         finally { await binding.DisposeAsync(); map.Dispose(); }
     }

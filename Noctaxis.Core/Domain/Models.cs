@@ -777,7 +777,8 @@ public sealed record AppSettings(
       AppearancePreferences? Appearance = null,
       string? AwooSupporterLicenceCode = null,
     ExternalMapProvider ExternalMapProvider = ExternalMapProvider.OpenStreetMap,
-    LightPollutionPreferences? LightPollution = null)
+    LightPollutionPreferences? LightPollution = null,
+    TerrainReliefPreferences? TerrainRelief = null)
 {
     public const string UseSystemTimeZoneId = "system";
     [JsonIgnore]

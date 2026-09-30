@@ -1,5 +1,10 @@
 # Planner map composition foundation
 
+> The composition now has a Reference group between Environmental and Planning, the vector basemap is
+> split into geography and reference passes, and terrain relief joins light pollution in the
+> Environmental group. See [Terrain relief and environmental composition](terrain-relief.md) for the
+> current stack; this page records the original foundation.
+
 This records Phase 2. Phase 3 adds runtime state and active attribution; see
 [Planner map runtime state](planner-map-runtime-state.md) for current selection/state APIs.
 In particular, basemap replacement now preserves the original composition and stores the

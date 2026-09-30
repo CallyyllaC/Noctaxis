@@ -56,7 +56,7 @@ public sealed partial class MainViewModelTests
         var store = CreateSupporterStore(new AppSettings());
         var vm = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter(), externalUriLauncher: launcher);
         await vm.InitializeAsync();
-        Assert.False(vm.LightPollutionMapPreferences.IsVisible); Assert.Equal(.5, vm.LightPollutionMapPreferences.Opacity);
+        Assert.False(vm.LightPollutionMapPreferences.IsVisible); Assert.Equal(.1, vm.LightPollutionMapPreferences.Opacity);
         vm.PreviewPlannerLayers(true, 25); Assert.True(vm.LightPollutionMapPreferences.IsVisible);
         await vm.CommitPlannerLayersAsync();
         Assert.Equal(new LightPollutionPreferences(true, .25), store.State.Settings.LightPollution);

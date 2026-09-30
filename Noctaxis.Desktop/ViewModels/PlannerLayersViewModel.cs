@@ -32,11 +32,36 @@ public sealed class PlannerLayersViewModel : ObservableObject
         _runtime = runtime;
         runtime.StateChanged += (_, state) =>
         {
+            if (state.Id == TerrainId)
+            {
+                OnPropertyChanged(nameof(ShowTerrainRelief));
+                OnPropertyChanged(nameof(TerrainReliefOpacityPercent));
+                OnPropertyChanged(nameof(IsTerrainReliefOverImagery));
+                return;
+            }
             if (state.Id != Id) return;
             OnPropertyChanged(nameof(ShowLightPollution));
             OnPropertyChanged(nameof(LightPollutionOpacityPercent));
         };
     }
+
+    private const string TerrainId = TerrainReliefMapBinding.LayerId;
+    public bool ShowTerrainRelief
+    {
+        get => _runtime[TerrainId].IsVisible;
+        set { if (_runtime.SetVisibility(TerrainId, value)) Edited(); }
+    }
+    public double TerrainReliefOpacityPercent
+    {
+        get => _runtime[TerrainId].Opacity * 100;
+        set
+        {
+            if (!double.IsFinite(value)) return;
+            if (_runtime.SetOpacity(TerrainId, Math.Clamp(value / 100, 0, 1))) Edited();
+        }
+    }
+    /// <summary>Relief is switched on but not drawn, because the basemap is photographic imagery.</summary>
+    public bool IsTerrainReliefOverImagery => _runtime[TerrainId] is { IsVisible: true, IsActive: false };
     public bool ShowLightPollution
     {
         get => _runtime[Id].IsVisible;

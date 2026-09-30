@@ -88,6 +88,28 @@ public class NoctaxisMapView : UserControl
         _lightPollution.SetPalette(LightPollutionPreferences.PaletteId);
         if (_attached) _lightPollution.Attach();
     }
+    private TerrainReliefMapBinding? _terrainRelief;
+    public static readonly StyledProperty<TerrainReliefPreferences> TerrainReliefPreferencesProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, TerrainReliefPreferences>(nameof(TerrainReliefPreferences), new());
+    public TerrainReliefPreferences TerrainReliefPreferences
+    {
+        get => GetValue(TerrainReliefPreferencesProperty);
+        set => SetValue(TerrainReliefPreferencesProperty, value);
+    }
+    // The theme's factor on terrain relief (MapThemeTokens.TerrainReliefStrength): High Contrast weakens it.
+    private static readonly StyledProperty<double> TerrainReliefStrengthProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, double>("TerrainReliefStrength", 1);
+    internal double TerrainReliefStrengthForTesting => GetValue(TerrainReliefStrengthProperty);
+    internal TerrainReliefMapBinding? TerrainReliefForTesting => _terrainRelief;
+
+    /// <summary>Shows terrain relief from the terrain calculations' own Terrarium source.</summary>
+    public void ConfigureTerrainRelief(Noctaxis.Core.Environment.ITerrariumTileSource elevation)
+    {
+        if (_terrainRelief is not null) throw new InvalidOperationException("Terrain relief is already configured.");
+        if (!_composition.Composition.Layers.Any(x => x.Id == TerrainReliefMapBinding.LayerId)) return;
+        _terrainRelief = new(_composition, elevation, () => GetValue(TerrainReliefStrengthProperty));
+    }
+
     // Final window close only; ordinary visual detachment must remain reattachable.
     public async ValueTask ReleaseLightPollutionAsync()
     {
@@ -158,6 +180,7 @@ public class NoctaxisMapView : UserControl
         // The vector basemap is drawn from the theme's basemap roles and restyled live.
         foreach (var (property, token) in BasemapRoleProperties.Zip(MapThemeTokens.Basemap))
             Bind(property, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(token)));
+        Bind(TerrainReliefStrengthProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.TerrainReliefStrength));
         ApplyBasemapStyle();
         Content = new Grid { Children = { _mapControl, _overlay, attribution } };
 
@@ -333,6 +356,9 @@ public class NoctaxisMapView : UserControl
             }
             return;
         }
+        if (change.Property == TerrainReliefPreferencesProperty && _composition is not null)
+            TerrainReliefMapBinding.ApplyPreferences(_composition, TerrainReliefPreferences);
+        if (change.Property == TerrainReliefStrengthProperty) _terrainRelief?.ThemeStrengthChanged();
         if (change.Property == LightPollutionPreferencesProperty && _composition is not null)
         {
             LightPollutionMapBinding.ApplyPreferences(_composition, LightPollutionPreferences);

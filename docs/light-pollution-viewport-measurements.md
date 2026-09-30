@@ -1,5 +1,8 @@
 # Light Pollution viewport measurements
 
+> Tile generation has since been made parallel and faster; see
+> [Light pollution tile performance](light-pollution-tile-performance.md) for current timings.
+
 Generated from `artifacts/lp-viewport/baseline-final` and `after-native`. All times are milliseconds. Working sets are the lists recorded inside the native fetch strategy, including cached tiles; dispatch counts are actual source requests. Eviction, repeat and numerical counters in the tables below are stage deltas. Native relevance includes all current required fallback levels. Native eviction totals include tiles published and evicted within the same four-job batch.
 
 ## Path overview

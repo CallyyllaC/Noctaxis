@@ -54,43 +54,69 @@ public sealed class LightPollutionRasterSource : ILocalTileSource, IDisposable
         trace?.Requested?.Invoke(tileInfo.Index);
         try
         {
-            using var session = await _provider.OpenAsync(_lifetime.Token);
-            if (session is null) { if (trace is not null) Interlocked.Increment(ref trace.EmptyResults); return ((byte[]?)null, PaletteRevision); }
-            var acquired = trace is null ? 0 : Stopwatch.GetTimestamp();
             var z = tileInfo.Index.Level; var x = tileInfo.Index.Col; var y = tileInfo.Index.Row;
             if (z < 0 || z > MaximumNativeZoom) return ((byte[]?)null, PaletteRevision);
-            // A palette is immutable and captured once per tile. If it changes while this
-            // tile is being prepared, retry using the same numerical lease/cache.
+            var n = Math.Pow(2, z);
+            static double Latitude(double row, double tiles) => Math.Atan(Math.Sinh(Math.PI * (1 - 2 * row / tiles))) * 180 / Math.PI;
+            // The atlas lease is held only to look up the cache and gather the source tiles this map
+            // tile needs. Sampling, colouring and encoding then run without it, so tiles are prepared
+            // in parallel instead of one at a time behind the lease.
+            long generation, acquired;
+            LightPollutionDataProvider.Region region;
+            using (var session = await _provider.OpenAsync(_lifetime.Token))
+            {
+                if (session is null) { if (trace is not null) Interlocked.Increment(ref trace.EmptyResults); return ((byte[]?)null, PaletteRevision); }
+                acquired = trace is null ? 0 : Stopwatch.GetTimestamp();
+                generation = session.Generation;
+                lock (_visualGate)
+                    if (_cache.TryGet((generation, z, x, y, LightPollutionDisplayScale.Version, _colors.Id, _colors.Version), out var cached))
+                    {
+                        trace?.Completed?.Invoke(tileInfo.Index, true, Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                            Stopwatch.GetElapsedTime(started, acquired).TotalMilliseconds, 0, cached.Length);
+                        return ((byte[]?)cached, _paletteRevision);
+                    }
+                region = await session.ReadRegionAsync(Latitude(y + 1, n), Latitude(y, n), x / n * 360 - 180, (x + 1) / n * 360 - 180,
+                    overview: z <= 4);
+            }
+            if (trace is not null) Interlocked.Add(ref trace.ReadWaitTicks, acquired - started);
+            var sampleStarted = trace is null ? 0 : Stopwatch.GetTimestamp();
+            var latitudes = new double[256];
+            var longitudes = new double[256];
+            for (var i = 0; i < 256; i++)
+            {
+                latitudes[i] = Latitude(y + (i + .5) / 256, n);
+                longitudes[i] = (x + (i + .5) / 256) / n * 360 - 180;
+            }
+            _lifetime.Token.ThrowIfCancellationRequested();
+            var intensity = new double[256 * 256];
+            region.SampleGrid(latitudes, longitudes, intensity);
+            for (var i = 0; i < intensity.Length; i++)
+                if (!double.IsNaN(intensity[i])) intensity[i] = _scale.Normalize(intensity[i]);
+            if (trace is not null) Interlocked.Add(ref trace.SampleTicks, Stopwatch.GetTimestamp() - sampleStarted);
+            // A palette is immutable and captured once per tile. If it changes while this tile is
+            // being coloured, colour the same intensities again with the new one.
             while (true)
             {
                 ILightPollutionColorMap colors; long revision;
                 lock (_visualGate) { colors = _colors; revision = _paletteRevision; }
-                var key = (session.Generation, z, x, y, LightPollutionDisplayScale.Version, colors.Id, colors.Version);
-                lock (_visualGate) if (_cache.TryGet(key, out var cached))
-                {
-                    trace?.Completed?.Invoke(tileInfo.Index, true, Stopwatch.GetElapsedTime(started).TotalMilliseconds,
-                        Stopwatch.GetElapsedTime(started, acquired).TotalMilliseconds, 0, cached.Length);
-                    return ((byte[]?)cached, revision);
-                }
-                using var bitmap = new SKBitmap(256, 256, SKColorType.Rgba8888, SKAlphaType.Premul);
+                var key = (generation, z, x, y, LightPollutionDisplayScale.Version, colors.Id, colors.Version);
+                var paletteStarted = trace is null ? 0 : Stopwatch.GetTimestamp();
                 var pixels = new SKColor[256 * 256];
-                var n = Math.Pow(2, z);
-                for (var py = 0; py < 256; py++)
-                {
-                    _lifetime.Token.ThrowIfCancellationRequested();
-                    var latitude = Math.Atan(Math.Sinh(Math.PI * (1 - 2 * (y + (py + .5) / 256) / n))) * 180 / Math.PI;
-                    for (var px = 0; px < 256; px++)
-                    {
-                        var longitude = (x + (px + .5) / 256) / n * 360 - 180;
-                        var lpi = await session.SampleAsync(latitude, longitude, bilinear: true, overview: z <= 4);
-                        pixels[py * 256 + px] = lpi is { } value ? colors.Map(_scale.Normalize(value)) : SKColors.Transparent;
-                    }
-                }
+                for (var i = 0; i < pixels.Length; i++)
+                    pixels[i] = double.IsNaN(intensity[i]) ? SKColors.Transparent : colors.Map(intensity[i]);
+                using var bitmap = new SKBitmap(256, 256, SKColorType.Rgba8888, SKAlphaType.Premul);
                 bitmap.Pixels = pixels;
-                using var image = SKImage.FromBitmap(bitmap);
                 var encodeStarted = trace is null ? 0 : Stopwatch.GetTimestamp();
-                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                using var pixmap = bitmap.PeekPixels();
+                using var data = pixmap?.Encode(FastPng);
+                if (data is null) return ((byte[]?)null, revision);
                 var bytes = data.ToArray();
+                if (trace is not null)
+                {
+                    Interlocked.Add(ref trace.PaletteTicks, encodeStarted - paletteStarted);
+                    Interlocked.Add(ref trace.EncodeTicks, Stopwatch.GetTimestamp() - encodeStarted);
+                    Interlocked.Increment(ref trace.Generated);
+                }
                 var encodeMs = trace is null ? 0 : Stopwatch.GetElapsedTime(encodeStarted).TotalMilliseconds;
                 lock (_visualGate)
                 {
@@ -106,6 +132,9 @@ public sealed class LightPollutionRasterSource : ILocalTileSource, IDisposable
         catch (ObjectDisposedException) when (_lifetime.IsCancellationRequested) { return ((byte[]?)null, PaletteRevision); }
         catch { if (trace is not null) Interlocked.Increment(ref trace.Failures); throw; }
     });
+    // Fast compression: the image is kept briefly and decoded once, so a smaller file is not worth
+    // the encoding time a thorough filter search and deflate cost on every tile.
+    private static readonly SKPngEncoderOptions FastPng = new(SKPngEncoderFilterFlags.Sub, 1);
     public void Dispose()
     {
         _lifetime.Cancel(); _installation.Changed -= Clear;

@@ -27,9 +27,13 @@ public partial class MainWindow : Window
         _viewModel = viewModel;
         dialogs.Owner = this;
         DataContext = viewModel;
-        PlannerMap.Layers.PreferencesEdited += (_, _) => viewModel.PreviewPlannerLayers(
-            PlannerMap.Layers.ShowLightPollution, PlannerMap.Layers.LightPollutionOpacityPercent);
+        PlannerMap.Layers.PreferencesEdited += (_, _) =>
+        {
+            viewModel.PreviewTerrainRelief(PlannerMap.Layers.ShowTerrainRelief, PlannerMap.Layers.TerrainReliefOpacityPercent);
+            viewModel.PreviewPlannerLayers(PlannerMap.Layers.ShowLightPollution, PlannerMap.Layers.LightPollutionOpacityPercent);
+        };
         PlannerMap.Layers.PersistAsync = viewModel.CommitPlannerLayersAsync;
+        if (viewModel.TerrainReliefSource is { } terrain) PlannerMap.ConfigureTerrainRelief(terrain);
         if (viewModel.LightPollutionInstallation is { } lightPollution) PlannerMap.ConfigureLightPollution(lightPollution);
         PlannerMap.PreviewCoordinateChanged += (_, coordinate) => _viewModel.PreviewObserverLocation(coordinate);
         PlannerMap.CoordinateCommitted += (_, coordinate) => _viewModel.CommitUnresolvedObserverLocation(coordinate);

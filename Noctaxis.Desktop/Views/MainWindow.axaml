@@ -132,6 +132,7 @@
                                        ShowCelestialOverlays="{Binding CelestialOverlaysReady}"
                                        ShowCameraOverlay="{Binding CameraOverlayReady}"
                                        LightPollutionPreferences="{Binding LightPollutionMapPreferences}"
+                                       TerrainReliefPreferences="{Binding TerrainReliefMapPreferences}"
                                        ShowTerrainDebug="False" />
             <Border x:Name="PlannerRefreshStrip"
                     Classes="mapChrome"
