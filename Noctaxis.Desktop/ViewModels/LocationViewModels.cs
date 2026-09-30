@@ -16,7 +16,8 @@ public sealed record SavedLocationEdit(string Name, string? Description);
 public interface IPlannerDialogService
 {
     Task<bool> ConfirmClearTerrainCacheAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
-    Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default);
+    /// <param name="initialQuery">What the shared search field already held, so the user does not retype it.</param>
+    Task<LocationSearchResult?> ShowLocationSearchAsync(string? initialQuery = null, CancellationToken cancellationToken = default);
     Task<SavedLocationEdit?> ShowSavedLocationEditAsync(SavedLocation location, bool isCreateMode = false,
         CancellationToken cancellationToken = default);
     Task<bool> ConfirmDeleteSavedLocationAsync(SavedLocation location, CancellationToken cancellationToken = default) =>
@@ -108,9 +109,25 @@ public partial class LocationSearchViewModel(ILocationSearchProvider provider, I
 
 public interface ILocationGridItem;
 
-public sealed class AddLocationCardViewModel(Func<Task> addLocation) : ILocationGridItem
+/// <summary>
+/// The tile that saves the Planner's current pin. It is the only place on the page that stands for
+/// that pin, so it also shows where the pin is: the action first, the coordinates as quiet metadata.
+/// </summary>
+public sealed partial class AddLocationCardViewModel(Func<Task> addLocation) : ObservableObject, ILocationGridItem
 {
     public IAsyncRelayCommand AddCommand { get; } = new AsyncRelayCommand(addLocation);
+
+    /// <summary>The active pin, written the way a saved card writes its own coordinates.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCoordinates)), NotifyPropertyChangedFor(nameof(AccessibleName))]
+    private string? _coordinates;
+
+    public bool HasCoordinates => !string.IsNullOrWhiteSpace(Coordinates);
+
+    /// <summary>Everything the tile shows, in one name, so the coordinates are not hover-only.</summary>
+    public string AccessibleName => HasCoordinates
+        ? Strings.Format("Locations_AddLocationAt_AccessibleName_Format", Coordinates)
+        : Strings.Get("Locations_AddLocation_AccessibleName");
 }
 
 public partial class LocationCardViewModel : ObservableObject, ILocationGridItem, IDisposable
@@ -139,7 +156,14 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     public SavedLocation Location { get; private set; }
     public Guid Id => Location.Id;
     public string Name => Location.Name;
-    public string Coordinates => $"{Location.Coordinate.Latitude:F4}°, {Location.Coordinate.Longitude:F4}°";
+    public string Coordinates => FormatCoordinates(Location.Coordinate);
+
+    /// <summary>
+    /// How a coordinate is written on this page, in one place: the saved cards and the tile that saves
+    /// the current pin read the same, and the numbers follow the user's regional format.
+    /// </summary>
+    public static string FormatCoordinates(GeoCoordinate coordinate) =>
+        Strings.Format("Locations_Card_Coordinates_Format", coordinate.Latitude, coordinate.Longitude);
     public string? RegionDescription => Location.RegionDescription;
     public bool HasRegionDescription => !string.IsNullOrWhiteSpace(Location.RegionDescription);
     public string? UserDescription => Location.Notes;
@@ -363,7 +387,7 @@ public partial class LocationsViewModel : ObservableObject
     private readonly IDeviceLocationAvailabilityService _deviceAvailability;
     private readonly Func<LocationResolution, Task> _openCustom;
     private readonly Func<LocationSearchResult, bool, Task> _useSearchResult;
-    private readonly Func<Task<LocationSearchResult?>> _showSearch;
+    private readonly Func<string?, Task<LocationSearchResult?>> _showSearch;
     private readonly Func<LocationCardViewModel, Task> _openSaved;
     private readonly Func<LocationCardViewModel, Task> _edit;
     private readonly Func<LocationCardViewModel, Task> _delete;
@@ -375,7 +399,7 @@ public partial class LocationsViewModel : ObservableObject
 
     public LocationsViewModel(ILocationResolver resolver, IDeviceLocationAvailabilityService deviceAvailability,
         Func<LocationResolution, Task> openCustom, Func<LocationSearchResult, bool, Task> useSearchResult,
-        Func<Task<LocationSearchResult?>> showSearch,
+        Func<string?, Task<LocationSearchResult?>> showSearch,
         Func<LocationCardViewModel, Task> openSaved, Func<LocationCardViewModel, Task> edit,
         Func<LocationCardViewModel, Task> delete, Func<LocationCardViewModel, Task> toggleFavourite,
         Func<Task> addLocation, ILocationMapThumbnailService mapThumbnails, Func<DateTimeOffset> now)
@@ -400,6 +424,52 @@ public partial class LocationsViewModel : ObservableObject
     public bool HasSavedLocations => Saved.Count > 0;
     public bool IsFirstRun => Saved.Count == 0;
     public string SavedSummary => Saved.Count == 1 ? Strings.Get("Locations_Summary_One") : Strings.Format("Locations_Summary_Many_Format", Saved.Count);
+
+    // ---- Filtering -------------------------------------------------------------------------------
+    // A filter is a view of the saved locations, never a change to them: Saved keeps every location in
+    // its sorted order and only the grid is rebuilt, so clearing the filter restores the list exactly.
+
+    private string _searchText = string.Empty;
+
+    /// <summary>The text the shared search field holds while the Locations page is open.</summary>
+    public string SearchText
+    {
+        get => _searchText;
+        set
+        {
+            var text = value ?? string.Empty;
+            if (string.Equals(_searchText, text, StringComparison.Ordinal)) return;
+            _searchText = text;
+            OnPropertyChanged();
+            RebuildGridItems();
+            OnPropertyChanged(nameof(IsFiltered));
+            OnPropertyChanged(nameof(HasNoMatches));
+            OnPropertyChanged(nameof(NoMatchesMessage));
+        }
+    }
+
+    public bool IsFiltered => _searchText.Trim().Length > 0;
+
+    /// <summary>The filter matched nothing. The page says so rather than showing an empty grid.</summary>
+    public bool HasNoMatches => IsFiltered && HasSavedLocations && !GridItems.OfType<LocationCardViewModel>().Any();
+
+    public string NoMatchesMessage => Strings.Format("Locations_Search_NoMatches_Format", _searchText.Trim());
+
+    /// <summary>
+    /// Whether a card answers the current filter. It looks at what identifies a location to its owner:
+    /// the name, their own description, and the region the place resolved to. Comparison is
+    /// case-insensitive and ignores accents, in the culture the interface is running in, so searching
+    /// "kielder" finds "Kielder" and "durrenstein" finds "Dürrenstein".
+    /// </summary>
+    private bool Matches(LocationCardViewModel card)
+    {
+        var term = _searchText.Trim();
+        if (term.Length == 0) return true;
+        var compare = System.Globalization.CultureInfo.CurrentCulture.CompareInfo;
+        bool Contains(string? value) => !string.IsNullOrEmpty(value) && compare.IndexOf(value, term,
+            System.Globalization.CompareOptions.IgnoreCase | System.Globalization.CompareOptions.IgnoreNonSpace) >= 0;
+        return Contains(card.Name) || Contains(card.UserDescription) || Contains(card.RegionDescription);
+    }
     [ObservableProperty] private LocationSortOption _selectedSortOption;
     [ObservableProperty] private string? _resolutionMessage;
     [ObservableProperty] private bool _canUseDeviceLocation;
@@ -456,9 +526,15 @@ public partial class LocationsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private async Task SearchForPlace()
+    private Task SearchForPlace() => SearchForPlaceAsync(null);
+
+    /// <summary>
+    /// The one place search: the shared search field hands it what was typed, and it opens the existing
+    /// search surface with that text already in it. There is no second geocoding path.
+    /// </summary>
+    public async Task SearchForPlaceAsync(string? initialQuery)
     {
-        var result = await _showSearch();
+        var result = await _showSearch(initialQuery);
         if (result is null) return;
         _lastCustomCoordinate = result.Coordinate;
         await _useSearchResult(result, false);
@@ -536,7 +612,13 @@ public partial class LocationsViewModel : ObservableObject
     private void RebuildGridItems()
     {
         GridItems.Clear();
-        foreach (var card in Saved) GridItems.Add(card);
+        foreach (var card in Saved.Where(Matches)) GridItems.Add(card);
+        // The way to save the current pin is always on the page, filtered or not.
         GridItems.Add(_addLocationCard);
+        OnPropertyChanged(nameof(HasNoMatches));
     }
+
+    /// <summary>The Planner's active pin, shown on the tile that saves it.</summary>
+    public void SetCurrentPin(GeoCoordinate coordinate) =>
+        _addLocationCard.Coordinates = LocationCardViewModel.FormatCoordinates(coordinate);
 }

@@ -131,6 +131,26 @@ public partial class MainWindow : Window
     private async void PlannerSearchResultSelected(object? sender, LocationSearchResult result) =>
         await _viewModel.UsePlannerSearchResultCommand.ExecuteAsync(result);
 
+    /// <summary>
+    /// Enter hands the text to whichever search the open page has; Escape empties the field, which on a
+    /// page that filters restores the full list. Neither key is the only way to do either thing.
+    /// </summary>
+    private async void ShellSearchKeyDown(object? sender, KeyEventArgs e)
+    {
+        // The field lives in the navigation template, which is bound to the DataContext rather than to
+        // the constructor's view model, so the search is read from there.
+        if (DataContext is not MainViewModel viewModel) return;
+        if (e.Key == Key.Escape && viewModel.Search.HasText)
+        {
+            viewModel.Search.ClearCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+        if (e.Key is not (Key.Enter or Key.Return)) return;
+        e.Handled = true;
+        await viewModel.Search.SubmitCommand.ExecuteAsync(null);
+    }
+
     private void MinimizeWindowClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         WindowState = WindowState.Minimized;
 

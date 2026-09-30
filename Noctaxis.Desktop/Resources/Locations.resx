@@ -111,9 +111,6 @@
   <data name="Locations_CurrentLocation_Label" xml:space="preserve">
     <value>Current location</value>
   </data>
-  <data name="Locations_CurrentPlannerLocation_Label" xml:space="preserve">
-    <value>CURRENT PLANNER LOCATION</value>
-  </data>
   <data name="Locations_DefaultName_Format" xml:space="preserve">
     <value>Location {0}</value>
     <comment>Suggested name for a new saved location; {0} is its number.</comment>
@@ -162,12 +159,6 @@
   <data name="Locations_FavouritesKeptFirst_Description" xml:space="preserve">
     <value> · favourites are kept first</value>
   </data>
-  <data name="Locations_KeepPlacesWorth_Description" xml:space="preserve">
-    <value>Keep the places worth returning to close at hand.</value>
-  </data>
-  <data name="Locations_Label" xml:space="preserve">
-    <value>Locations</value>
-  </data>
   <data name="Locations_MoreLocationActions_AccessibleName" xml:space="preserve">
     <value>More location actions</value>
   </data>
@@ -207,9 +198,6 @@
   <data name="Locations_SavedLocations_Label" xml:space="preserve">
     <value>Saved locations</value>
   </data>
-  <data name="Locations_SavingLocationUses_Description" xml:space="preserve">
-    <value>Saving a location uses the active Planner pin.</value>
-  </data>
   <data name="Locations_Search_NoMatches" xml:space="preserve">
     <value>No matching locations found.</value>
   </data>
@@ -227,9 +215,6 @@
   </data>
   <data name="Locations_Search_SelectResultOpen_Description" xml:space="preserve">
     <value>Select a result to open it as the temporary Custom location.</value>
-  </data>
-  <data name="Locations_SearchPlace_Button" xml:space="preserve">
-    <value>Search for a place</value>
   </data>
   <data name="Locations_Sort_DateAdded" xml:space="preserve">
     <value>Date added</value>
@@ -264,5 +249,20 @@
   <data name="Locations_Edit_EditLocation_Title" xml:space="preserve">
     <value>Edit location</value>
     <comment>Window title when an existing location is being changed.</comment>
+  </data>
+  <data name="Locations_Card_Coordinates_Format" xml:space="preserve">
+    <value>{0:F4}°, {1:F4}°</value>
+    <comment>{0} is the latitude and {1} the longitude, written in the user's regional number format.</comment>
+  </data>
+  <data name="Locations_AddLocationAt_AccessibleName_Format" xml:space="preserve">
+    <value>Add location. Save the current Planner pin at {0}.</value>
+    <comment>{0} is the coordinates of the active Planner pin.</comment>
+  </data>
+  <data name="Locations_Search_NoMatches_Format" xml:space="preserve">
+    <value>No saved location matches “{0}”.</value>
+    <comment>{0} is what the user typed into the header search field.</comment>
+  </data>
+  <data name="Locations_Search_ClearFilter_Button" xml:space="preserve">
+    <value>Clear search</value>
   </data>
 </root>

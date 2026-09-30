@@ -102,6 +102,27 @@
     </Border>
 
     <TabControl Grid.Row="2" Classes="appNavigation" Padding="0" SelectedIndex="{Binding SelectedPageIndex}" TabStripPlacement="Top">
+      <controls:NavigationHost.Trailing>
+        <!-- One search field for the window. Its placeholder, its accessible name and what it does all
+             follow the open page (ShellSearchViewModel); on a page with no search it is not shown at
+             all, rather than sitting there looking as though it works. It is bounded so that it uses
+             spare width on a wide window without stretching across it. -->
+        <TextBox x:Name="ShellSearch"
+                 Text="{Binding Search.Text, Mode=TwoWay}"
+                 PlaceholderText="{Binding Search.Placeholder}"
+                 IsVisible="{Binding Search.IsAvailable}"
+                 AutomationProperties.Name="{Binding Search.AccessibleName}"
+                 KeyDown="ShellSearchKeyDown"
+                 MinHeight="34" MinWidth="{DynamicResource ShellSearchMinWidth}" MaxWidth="{DynamicResource ShellSearchMaxWidth}"
+                 HorizontalAlignment="Stretch"
+                 Margin="24,0,24,6" VerticalContentAlignment="Center">
+          <TextBox.InnerRightContent>
+            <Button x:Name="ShellSearchClear" Classes="searchClear" Content="×"
+                    Command="{Binding Search.ClearCommand}" IsVisible="{Binding Search.HasText}"
+                    AutomationProperties.Name="{loc:Text Shell_Search_Clear_AccessibleName}"/>
+          </TextBox.InnerRightContent>
+        </TextBox>
+      </controls:NavigationHost.Trailing>
     <TabItem Header="{loc:Text Shell_Locations_Tab}">
       <views:LocationsPage/>
     </TabItem>

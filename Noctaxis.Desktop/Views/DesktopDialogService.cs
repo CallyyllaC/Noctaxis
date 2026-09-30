@@ -17,9 +17,10 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
             Strings.Get("Dialogs_ClearTerrainCache_Message"),
             Strings.Get("Dialogs_ClearTerrainCache_Confirm")), false, cancellationToken);
 
-    public async Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default)
+    public async Task<LocationSearchResult?> ShowLocationSearchAsync(string? initialQuery = null,
+        CancellationToken cancellationToken = default)
     {
-        return await ShowOwnedDialogAsync(() => new LocationSearchDialog(search),
+        return await ShowOwnedDialogAsync(() => new LocationSearchDialog(search, initialQuery),
             default(LocationSearchResult?), cancellationToken);
     }
 

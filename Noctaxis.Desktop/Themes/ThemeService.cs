@@ -69,13 +69,20 @@ public sealed class ThemeService : IDisposable
         next[LocationPreviewStyleKey] = Mapping.Preview.LocationPreviewStyle.FromPalette(EffectiveTheme.Palette, light, highContrastFamily);
         // Card scrim over the preview, from the card surface; enlarged text makes it fully opaque.
         var card = Color.Parse(EffectiveTheme.Palette[LocationCardTokens.Surface]);
-        foreach (var (name, alpha) in new (string, byte)[] { ("CardOpaque", 255), ("CardScrim", 242), ("CardFade", 168), ("CardTransparent", 0) })
+        // Five stops, not four: the extra one removes the step from CardFade straight to nothing, which
+        // read as a vertical seam down the card. Every stop is the card surface at a different alpha, so
+        // the fade belongs to whichever theme is loaded and never to a hard-coded colour.
+        foreach (var (name, alpha) in new (string, byte)[] { ("CardOpaque", 255), ("CardScrim", 242), ("CardFade", 168), ("CardSoft", 70), ("CardTransparent", 0) })
             next[name] = Color.FromArgb(Preferences.TextScale > 1.2 ? (byte)255 : alpha, card.R, card.G, card.B);
         // Location cards lift slightly off the page; High Contrast relies on its outlines instead of a shadow.
         next["LocationCardShadow"] = highContrastFamily ? default
             : BoxShadows.Parse(light ? "0 2 10 0 #1A1B2433" : "0 6 18 0 #40000000");
         foreach (var (name, size) in Typography)
             next[name] = size * Preferences.TextScale;
+        // The header search field grows with the text it has to hold, so its placeholder still fits when
+        // text is enlarged. It remains a cap: the navigation strip gives it no more room than it has.
+        next["ShellSearchMinWidth"] = 240d * Preferences.TextScale;
+        next["ShellSearchMaxWidth"] = 520d * Preferences.TextScale;
         // Only this text-bearing layout grows; this is not whole-window scaling.
         next["LocationCardFullWidth"] = Preferences.TextScale > 1.2;
         next["DatePickerMinimumWidth"] = 150 + 170 * (Preferences.TextScale - 1);

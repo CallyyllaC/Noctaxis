@@ -137,7 +137,7 @@ public partial class MainViewModel : ObservableObject
         _previewObserver = _session.Observer;
         LocationSearch = locationSearch;
         Locations = new LocationsViewModel(locationResolver, deviceLocationAvailability, OpenCustomAsync, UseSearchResultAsync,
-            () => _dialogs.ShowLocationSearchAsync(),
+            query => _dialogs.ShowLocationSearchAsync(query),
             OpenSavedLocationAsync, EditLocationAsync, DeleteLocationAsync, ToggleFavouriteAsync,
             SaveCurrentAsNewLocation,
             locationMapThumbnails ?? new NullLocationMapThumbnailService(),
@@ -146,7 +146,14 @@ public partial class MainViewModel : ObservableObject
         // notification subscription cannot keep an otherwise-discarded view model alive.
         Locations.Saved.CollectionChanged += OnSavedLocationCardsChanged;
         SettingsCelestialSearch = new CelestialSearchViewModel(targetSearch, catalogue);
+        // One search field for the whole window; what it does follows the page that is open.
+        Search = new ShellSearchViewModel(text => Locations.SearchText = text, Locations.SearchForPlaceAsync);
+        Search.FollowPage(SelectedPageIndex);
+        Locations.SetCurrentPin(PreviewObserver);
     }
+
+    /// <summary>The application header's search field. See <see cref="ShellSearchViewModel"/>.</summary>
+    public ShellSearchViewModel Search { get; }
 
     public IReadOnlyList<AstralTarget> Targets { get; }
     public IReadOnlyList<CameraOrientation> Orientations { get; } = Enum.GetValues<CameraOrientation>();
@@ -188,6 +195,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private bool _isInspectorOpen = true;
     [ObservableProperty] private int _selectedPageIndex;
     [ObservableProperty] private GeoCoordinate _previewObserver;
+    // The Add location tile is the only thing on the Locations page standing for the active pin, so it
+    // shows where that pin is, and follows it as the Planner moves.
+    partial void OnPreviewObserverChanged(GeoCoordinate value) => Locations?.SetCurrentPin(value);
     [ObservableProperty] private double _previewMinutesOfDay;
     [ObservableProperty] private double _previewDateOffsetDays;
     [ObservableProperty] private bool _isCameraFramingOverlayVisible = true;
@@ -1215,7 +1225,11 @@ public partial class MainViewModel : ObservableObject
 
     private bool _initialised;
     private bool _plannerActivated;
-    partial void OnSelectedPageIndexChanged(int value) => ActivatePlannerIfReady();
+    partial void OnSelectedPageIndexChanged(int value)
+    {
+        Search.FollowPage(value);
+        ActivatePlannerIfReady();
+    }
 
     private void ActivatePlannerIfReady()
     {

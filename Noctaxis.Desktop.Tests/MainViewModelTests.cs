@@ -2169,7 +2169,9 @@ public sealed partial class MainViewModelTests
         public bool LastEditorWasCreateMode { get; private set; }
         public int RefreshThumbnailConfirmations { get; private set; }
         public int RefreshSettlementConfirmations { get; private set; }
-        public Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default) => Task.FromResult(SearchResult);
+        public string? LastSearchQuery { get; set; }
+        public Task<LocationSearchResult?> ShowLocationSearchAsync(string? initialQuery = null, CancellationToken cancellationToken = default)
+        { LastSearchQuery = initialQuery; return Task.FromResult(SearchResult); }
         public Task<SavedLocationEdit?> ShowSavedLocationEditAsync(SavedLocation location, bool isCreateMode = false,
             CancellationToken cancellationToken = default)
         {

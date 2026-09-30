@@ -166,6 +166,26 @@
          height and padding are hit area, not decoration. -->
     <Style Selector="TabControl.appNavigation">
       <Setter Property="Background" Value="Transparent" />
+      <!-- The strip holds the page names on the left and shell-level content on the right, so the
+           window's spare width carries the shared search field instead of sitting empty. -->
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid RowDefinitions="Auto,*">
+            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+              <ItemsPresenter Name="PART_ItemsPresenter" ItemsPanel="{TemplateBinding ItemsPanel}"/>
+              <!-- Stretched, so the trailing content fills the room beside the page names and, once it
+                   reaches its own maximum width, sits centred in what is left rather than pinned to the
+                   window's edge. The page names take their size first and are never squeezed. -->
+              <ContentPresenter Grid.Column="1" Name="PART_NavigationTrailing" VerticalAlignment="Center"
+                                HorizontalAlignment="Stretch"
+                                Content="{TemplateBinding controls:NavigationHost.Trailing}"/>
+            </Grid>
+            <ContentPresenter Grid.Row="1" Name="PART_SelectedContentHost" Margin="{TemplateBinding Padding}"
+                              Content="{TemplateBinding SelectedContent}"
+                              ContentTemplate="{TemplateBinding SelectedContentTemplate}"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
     </Style>
     <Style Selector="TabControl.appNavigation > TabItem">
       <Setter Property="FontSize" Value="{DynamicResource TextBody}" />
@@ -251,13 +271,19 @@
       <Setter Property="CornerRadius" Value="8" />
       <Setter Property="Padding" Value="14" />
     </Style>
-    <Style Selector="Border.currentLocationPanel">
-      <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
-      <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="CornerRadius" Value="12" />
-      <!-- Room for the slightly larger type inside; the panel keeps its proportions rather than growing. -->
-      <Setter Property="Padding" Value="22,19" />
+    <!-- Empties the shared search field. It sits inside the field, so it is small, but its padding keeps
+         the tap target usable and it is never the only way to clear a search (Escape does it too). -->
+    <Style Selector="Button.searchClear">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="MinWidth" Value="30" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.searchClear:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
     </Style>
     <Style Selector="Border.emptyLocationPanel">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
@@ -403,7 +429,7 @@
       <Setter Property="Background" Value="{DynamicResource LocationCardSurface}" />
       <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
     </Style>
-    <Style Selector="Border.addLocationGlyph, Border.currentLocationMarker">
+    <Style Selector="Border.addLocationGlyph">
       <Setter Property="Width" Value="40" />
       <Setter Property="Height" Value="40" />
       <Setter Property="CornerRadius" Value="20" />

@@ -12,38 +12,15 @@
     <StreamGeometry x:Key="LocationStarGlyph">M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z</StreamGeometry>
   </UserControl.Resources>
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-    <StackPanel x:Name="PageContent" Margin="32,28,32,32" Spacing="24" HorizontalAlignment="Stretch" MaxWidth="1720">
-      <StackPanel Spacing="4">
-        <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_Label}" FontSize="{DynamicResource TextDisplay}" FontWeight="SemiBold"/>
-        <TextBlock Text="{loc:Text Locations_KeepPlacesWorth_Description}" Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap"/>
+    <!-- The page holds one thing, the saved locations, so it has no separate title above them: the
+         Saved locations heading is the page's heading. -->
+    <StackPanel x:Name="PageContent" Margin="32,20,32,32" Spacing="20" HorizontalAlignment="Stretch" MaxWidth="1720">
+      <!-- The Add location tile is the one place that stands for the Planner's active pin, so there is no
+           separate current-location panel repeating it. Device location, which has no tile, stays here. -->
+      <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding Locations.CanUseDeviceLocation}">
+        <Button Content="{loc:Text Locations_UseDeviceLocation_Button}" Command="{Binding Locations.UseDeviceLocationCommand}"/>
       </StackPanel>
-
-      <!-- The Planner's current pin: a state card, related to the saved cards but marked as the source. -->
-      <Border Classes="currentLocationPanel">
-        <Grid x:Name="CurrentLocationLayout" ColumnDefinitions="*,Auto" ColumnSpacing="22">
-          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
-            <Border Classes="currentLocationMarker" VerticalAlignment="Top">
-              <!-- The glyph's own bounds are taller than they are wide, so it is centred explicitly
-                   rather than relying on the stretch default to land it in the circle. -->
-              <Path Data="{StaticResource LocationPinGlyph}" Fill="{DynamicResource LocationCardAccent}" Width="18" Height="18" Stretch="Uniform"
-                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            </Border>
-            <StackPanel Grid.Column="1" Spacing="3">
-              <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_CurrentPlannerLocation_Label}" Classes="eyebrow" FontSize="{DynamicResource TextLabel}"/>
-              <TextBlock TextWrapping="Wrap" Text="{Binding LocationName}" FontSize="{DynamicResource TextNumeric}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-              <TextBlock TextWrapping="Wrap" Text="{Binding PreviewObserver}" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextBody}"/>
-              <TextBlock Text="{loc:Text Locations_SavingLocationUses_Description}" Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextLabel}" TextWrapping="Wrap" Margin="0,3,0,0"/>
-              <TextBlock TextWrapping="Wrap" Text="{Binding CurrentLocationAttribution}" IsVisible="{Binding HasCurrentLocationAttribution}" Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextCaption}"/>
-              <controls:StatusText Kind="Information" Text="{Binding Locations.ResolutionMessage}" FontSize="{DynamicResource TextSmall}" Margin="0,3,0,0"/>
-            </StackPanel>
-          </Grid>
-          <WrapPanel x:Name="CurrentLocationActions" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
-            <Button Content="{loc:Text Locations_SearchPlace_Button}" Command="{Binding Locations.SearchForPlaceCommand}" Margin="0,0,8,8"/>
-            <Button Content="{loc:Text Locations_UseDeviceLocation_Button}" Command="{Binding Locations.UseDeviceLocationCommand}" IsVisible="{Binding Locations.CanUseDeviceLocation}" Margin="0,0,8,8"/>
-            <Button Classes="accent" Content="{loc:Text Locations_SaveCurrentLocation_Button}" Command="{Binding SaveCurrentAsNewLocationCommand}" Margin="0,0,0,8"/>
-          </WrapPanel>
-        </Grid>
-      </Border>
+      <controls:StatusText Kind="Information" Text="{Binding Locations.ResolutionMessage}" FontSize="{DynamicResource TextSmall}"/>
 
       <Border Classes="emptyLocationPanel" IsVisible="{Binding Locations.IsFirstRun}">
         <StackPanel Spacing="12">
@@ -58,7 +35,8 @@
       <StackPanel Spacing="14">
         <Grid x:Name="SavedLocationsHeader" ColumnDefinitions="*,Auto" ColumnSpacing="12">
           <StackPanel Spacing="2" VerticalAlignment="Bottom">
-            <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_SavedLocations_Label}" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold"/>
+            <!-- The page's heading. A step up from a section heading, not a banner. -->
+            <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_SavedLocations_Label}" FontSize="{DynamicResource TextNumeric}" FontWeight="SemiBold"/>
             <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextSmall}" IsVisible="{Binding Locations.HasSavedLocations}">
               <Run Text="{Binding Locations.SavedSummary}"/><Run Text="{loc:Text Locations_FavouritesKeptFirst_Description}"/>
             </TextBlock>
@@ -102,11 +80,17 @@
 
                   <Border Grid.ColumnSpan="2" IsHitTestVisible="False">
                     <Border.Background>
+                      <!-- One card, not two panels: the text sits on solid card surface on the left, which
+                           then falls away gradually into the artwork. The stops are close enough together
+                           that no single step is visible as an edge, and the text-safe area stays at or
+                           above the scrim alpha the contrast tests require. -->
                       <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
                         <GradientStop Color="{DynamicResource CardOpaque}" Offset="0"/>
-                        <GradientStop Color="{DynamicResource CardScrim}" Offset="0.33"/>
-                        <GradientStop Color="{DynamicResource CardFade}" Offset="0.46"/>
-                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="0.61"/>
+                        <GradientStop Color="{DynamicResource CardOpaque}" Offset="0.30"/>
+                        <GradientStop Color="{DynamicResource CardScrim}" Offset="0.42"/>
+                        <GradientStop Color="{DynamicResource CardFade}" Offset="0.52"/>
+                        <GradientStop Color="{DynamicResource CardSoft}" Offset="0.62"/>
+                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="0.74"/>
                         <GradientStop Color="{DynamicResource CardTransparent}" Offset="1"/>
                       </LinearGradientBrush>
                     </Border.Background>
@@ -186,7 +170,7 @@
               <Button Classes="addLocationCard" Command="{Binding AddCommand}"
                       HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
                       HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
-                      AutomationProperties.Name="{loc:Text Locations_AddLocation_AccessibleName}">
+                      AutomationProperties.Name="{Binding AccessibleName}">
                 <Grid>
                   <Border Width="250" Height="250" HorizontalAlignment="Center" VerticalAlignment="Center"
                           CornerRadius="125" IsHitTestVisible="False">
@@ -206,6 +190,10 @@
                       <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_AddLocation_Label}" FontSize="{DynamicResource TextSubheading}" FontWeight="SemiBold" HorizontalAlignment="Center"/>
                       <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_SaveCurrentPlannerPin_Label}" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextSmall}"
                                  HorizontalAlignment="Center"/>
+                      <!-- Where that pin is: metadata, quieter than the action and never hover-only. -->
+                      <TextBlock x:Name="AddLocationCoordinates" TextWrapping="Wrap" Text="{Binding Coordinates}" IsVisible="{Binding HasCoordinates}"
+                                 Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextCaption}"
+                                 HorizontalAlignment="Center" Margin="0,2,0,0"/>
                     </StackPanel>
                   </StackPanel>
                 </Grid>
@@ -213,6 +201,13 @@
             </DataTemplate>
           </ItemsControl.DataTemplates>
         </ItemsControl>
+
+        <!-- The filter matched nothing. The page says which search found nothing and offers the way back,
+             rather than showing a grid with only the Add tile in it and no explanation. -->
+        <StackPanel x:Name="NoSearchMatches" Spacing="8" IsVisible="{Binding Locations.HasNoMatches}" Margin="2,2,0,0">
+          <TextBlock TextWrapping="Wrap" Text="{Binding Locations.NoMatchesMessage}" Foreground="{DynamicResource SecondaryText}"/>
+          <Button Content="{loc:Text Locations_Search_ClearFilter_Button}" Command="{Binding Search.ClearCommand}" HorizontalAlignment="Left"/>
+        </StackPanel>
 
         <!-- Required source credit for the data the card images are built from. It stays quiet and aligned
              with the grid above it; see docs/location-preview-rendering.md for what each provider covers. -->
