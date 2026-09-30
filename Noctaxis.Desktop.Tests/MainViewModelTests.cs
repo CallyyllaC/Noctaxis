@@ -1126,7 +1126,7 @@ public sealed partial class MainViewModelTests
     [CoversSettingsInput("SettingsFramingShadingOpacityPercent")]
     [CoversSettingsInput("SettingsFramingLineThickness")]
     [CoversSettingsInput("SettingsTerrainDebugOverlay")]
-    [CoversSettingsInput("SettingsWeatherCacheDistance")]
+    [CoversSettingsInput("SettingsWeatherCacheDistanceDisplay")]
     public async Task ScalarSettings_LoadApplyAtOnceAndSaveEveryValue()
     {
         var catalogue = new OpenNgcTargetCatalogue();
@@ -1212,7 +1212,7 @@ public sealed partial class MainViewModelTests
     }
 
     [Fact]
-    [CoversSettingsInput("SettingsCameraHeightAboveGroundMetres")]
+    [CoversSettingsInput("SettingsCameraHeightAboveGround")]
     [CoversSettingsInput("AddCameraProfileCommand")]
     [CoversSettingsInput("AddLensProfileCommand")]
     [CoversSettingsInput("DisplayName")]
@@ -1255,7 +1255,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void PlannerSidebarAndSettings_HaveTheRequestedSingleOwnershipStructure()
     {
-        var document = XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var planner = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Planner");
         var expanders = planner.Descendants().Where(element => element.Name.LocalName == "Expander")
@@ -1309,7 +1309,7 @@ public sealed partial class MainViewModelTests
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
         var equipment = settings.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Equipment");
-        Assert.Contains("SettingsCameraHeightAboveGroundMetres", equipment.ToString(), StringComparison.Ordinal);
+        Assert.Contains("SettingsCameraHeightAboveGround}", equipment.ToString(), StringComparison.Ordinal);
         Assert.Contains("EquipmentCameraEditors", equipment.ToString(), StringComparison.Ordinal);
         Assert.Contains("EquipmentLensEditors", equipment.ToString(), StringComparison.Ordinal);
     }
@@ -1343,7 +1343,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void SettingsCategories_GroupSettingsByWhatTheUserIsConfiguring()
     {
-        var document = XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var settings = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
         XElement Category(string header) => settings.Descendants().Single(element =>
@@ -1433,7 +1433,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void EverySettingsInput_HasDeclaredBehavioralTestCoverage()
     {
-        var document = XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var settingsTab = document.Descendants().Single(element =>
             element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Settings");
         var bindingAttributes = new Dictionary<string, string>

@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -7,6 +8,7 @@ using System.Buffers;
 using System.Runtime.InteropServices;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
+using Noctaxis.Core.Measurements;
 using Noctaxis.Core.Terrain;
 
 namespace Noctaxis.Desktop.Controls;
@@ -34,7 +36,12 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         double.IsFinite(MetresPerPixel) && MetresPerPixel > 0
             ? Math.Clamp(MetresPerPixel * (double.IsFinite(MainViewportHeightPixels) && MainViewportHeightPixels > 0 ? MainViewportHeightPixels / 2 : Bounds.Height / 2) * Math.Clamp(ContextMultiplier, 1, 2.5), 1_000, 20_000)
             : Map?.RangeMetres ?? 20_000);
-    public double ScaleBarMetres => ScaleDistance(DisplayedRadiusMetres);
+    /// <summary>The measurement system the radius and scale bar are labelled in.</summary>
+    public static readonly StyledProperty<MeasurementSystem> MeasurementsProperty =
+        AvaloniaProperty.Register<LocalTerrainMap, MeasurementSystem>(nameof(Measurements), MeasurementSystem.Metric);
+    public MeasurementSystem Measurements { get => GetValue(MeasurementsProperty); set => SetValue(MeasurementsProperty, value); }
+    /// <summary>The scale bar's length on the ground: a round number in the unit it is labelled in.</summary>
+    public double ScaleBarMetres => MeasurementProfile.For(Measurements).ScaleBar(DisplayedRadiusMetres / 2).Metres;
     internal Rect SourceRectangle
     {
         get
@@ -68,9 +75,9 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
     public bool ExternalChrome { get => GetValue(ExternalChromeProperty); set => SetValue(ExternalChromeProperty, value); }
     private string StatusLabel => LoadState switch
     {
-        TerrainDebugMapLoadState.Disabled => "Terrain calculations disabled",
-        TerrainDebugMapLoadState.Resolving => "Resolving terrain…",
-        _ => "Terrain unavailable"
+        TerrainDebugMapLoadState.Disabled => Strings.Get("Terrain_CalculationsDisabled"),
+        TerrainDebugMapLoadState.Resolving => Strings.Get("Terrain_Status_Resolving"),
+        _ => Strings.Get("Terrain_Status_Unavailable")
     };
     protected override Size MeasureOverride(Size availableSize) => new(208, !ExternalChrome ? 208 :
         LoadState == TerrainDebugMapLoadState.Ready && Map is not null
@@ -141,7 +148,8 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         AffectsRender<LocalTerrainMap>(ExternalChromeProperty, MapProperty, ProfileProperty,
         ObserverProperty, GenerationProperty, LoadStateProperty, CentreBearingDegreesProperty,
         HorizontalFieldOfViewDegreesProperty, MetresPerPixelProperty, MainViewportHeightPixelsProperty, ContextMultiplierProperty,
-        ObserverFillProperty, ObserverOutlineProperty, ViewFillProperty, ViewStrokeProperty, BearingColourProperty);
+        ObserverFillProperty, ObserverOutlineProperty, ViewFillProperty, ViewStrokeProperty, BearingColourProperty,
+        MeasurementsProperty);
     }
 
     public TerrainDebugMapSnapshot? Map
@@ -207,11 +215,12 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         // The same observer symbol as the Planner map pin.
         context.DrawEllipse(new SolidColorBrush(ObserverFill), new Pen(new SolidColorBrush(ObserverOutline), 1),
             centre, 3.5, 3.5);
-        var north = ChromeText("N ↑");
-        DrawLabel(context, "N ↑", new Point(bounds.Width - north.Width - 3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
+        var northLabel = Strings.Get("Planner_Terrain_Minimap_North");
+        var north = ChromeText(northLabel);
+        DrawLabel(context, northLabel, new Point(bounds.Width - north.Width - 3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
         DrawScale(context, bounds, DisplayedRadiusMetres);
-        DrawLabel(context, DisplayedRadiusMetres >= 1000
-                ? $"{DisplayedRadiusMetres / 1_000:0.##} km radius" : $"{DisplayedRadiusMetres:0.#} m radius",
+        DrawLabel(context, Strings.Format("Planner_Terrain_Minimap_Radius_Format",
+                MeasurementProfile.For(Measurements).Distance(DisplayedRadiusMetres).Format("0.##")),
             new Point(3, 2), ExternalChrome ? ChromeForeground : Brushes.White);
     }
 
@@ -417,7 +426,7 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
 
     private void DrawScale(DrawingContext context, Rect bounds, double rangeMetres)
     {
-        var scaleMetres = ScaleDistance(rangeMetres);
+        var (scaleMetres, scaleLabel) = MeasurementProfile.For(Measurements).ScaleBar(rangeMetres / 2);
         var width = scaleMetres / (rangeMetres * 2) * bounds.Width;
         var y = ExternalChrome ? bounds.Bottom + 8 : bounds.Height - 26;
         var x = bounds.Width - width - 10;
@@ -425,17 +434,9 @@ public sealed class LocalTerrainMap : ChromeDrawingControl
         context.DrawLine(pen, new Point(x, y), new Point(x + width, y));
         context.DrawLine(pen, new Point(x, y - 3), new Point(x, y + 3));
         context.DrawLine(pen, new Point(x + width, y - 3), new Point(x + width, y + 3));
-        var label = scaleMetres >= 1000 ? $"{scaleMetres / 1_000:0.#} km" : $"{scaleMetres:0.#} m";
+        var label = scaleLabel.Format("0.#");
         DrawLabel(context, label, new Point(Math.Min(x, Bounds.Width - ChromeText(label).Width),
             ExternalChrome ? y + 5 : y - ChromeFontSize - 4), ExternalChrome ? ChromeForeground : Brushes.White);
-    }
-
-    private static double ScaleDistance(double radius)
-    {
-        var target = radius / 2;
-        var magnitude = Math.Pow(10, Math.Floor(Math.Log10(target)));
-        var leading = target / magnitude;
-        return (leading >= 5 ? 5 : leading >= 2 ? 2 : 1) * magnitude;
     }
 
     internal static Point BearingPoint(Point centre, double radius, double bearingDegrees)

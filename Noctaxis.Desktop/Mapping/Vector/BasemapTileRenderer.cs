@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using SkiaSharp;
 
 namespace Noctaxis.Desktop.Mapping.Vector;
@@ -50,26 +51,31 @@ public sealed class BasemapTileRenderer
     public int PixelRatio { get; }
     public int PixelSize => LogicalTileSize * PixelRatio;
 
+    /// <param name="labelLanguage">
+    /// The language names are preferred in, a culture identifier; see <see cref="BasemapLabelNames"/>.
+    /// It affects the passes that draw names (<see cref="BasemapPass.Full"/> and
+    /// <see cref="BasemapPass.Reference"/>) and nothing else.
+    /// </param>
     public byte[] RenderPng(VectorTile tile, BasemapTileRequest request, BasemapStyle style,
-        BasemapPass pass = BasemapPass.Full)
+        BasemapPass pass = BasemapPass.Full, string? labelLanguage = null)
     {
-        using var bitmap = RenderBitmap(tile, request, style, pass);
+        using var bitmap = RenderBitmap(tile, request, style, pass, labelLanguage);
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
     }
 
     public SKBitmap RenderBitmap(VectorTile tile, BasemapTileRequest request, BasemapStyle style,
-        BasemapPass pass = BasemapPass.Full)
+        BasemapPass pass = BasemapPass.Full, string? labelLanguage = null)
     {
         var bitmap = new SKBitmap(PixelSize, PixelSize, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var canvas = new SKCanvas(bitmap);
-        new Pass(this, canvas, tile, request, style).Draw(pass);
+        new Pass(this, canvas, tile, request, style, labelLanguage ?? AppLanguages.DefaultId).Draw(pass);
         return bitmap;
     }
 
     private sealed class Pass(BasemapTileRenderer owner, SKCanvas canvas, VectorTile tile,
-        BasemapTileRequest request, BasemapStyle style)
+        BasemapTileRequest request, BasemapStyle style, string labelLanguage)
     {
         private readonly float _ratio = owner.PixelRatio;
         private readonly float _size = owner.PixelSize;
@@ -243,14 +249,12 @@ public sealed class BasemapTileRenderer
             {
                 if (kind == LabelKind.Poi && pois >= 12) continue;
                 // One label per name per tile: stations and landmarks appear as several points.
-                var name = LabelText(feature);
+                // The name in the application's language where the data has one; never no name for want of it.
+                var name = BasemapLabelNames.Resolve(feature, labelLanguage);
                 if (name is null || !names.Add(name)) continue;
                 if (PlaceLabel(feature, kind, name) && kind == LabelKind.Poi) pois++;
             }
         }
-
-        private static string? LabelText(VectorTileFeature feature) =>
-            (feature.Text("name:latin") ?? feature.Text("name")) is { } name && !string.IsNullOrWhiteSpace(name) ? name : null;
 
         private static SKColor Mix(SKColor from, SKColor to, float amount)
         {

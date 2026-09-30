@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Equipment_Camera_IdRequired" xml:space="preserve">
+    <value>Camera identifier is required.</value>
+  </data>
+  <data name="Equipment_Camera_Name_ApsC" xml:space="preserve">
+    <value>APS-C camera</value>
+  </data>
+  <data name="Equipment_Camera_Name_CanonApsC" xml:space="preserve">
+    <value>Canon APS-C camera</value>
+  </data>
+  <data name="Equipment_Camera_Name_Custom" xml:space="preserve">
+    <value>Custom camera</value>
+  </data>
+  <data name="Equipment_Camera_Name_FullFrame" xml:space="preserve">
+    <value>Full Frame camera</value>
+  </data>
+  <data name="Equipment_Camera_Name_MicroFourThirds" xml:space="preserve">
+    <value>Micro Four Thirds camera</value>
+  </data>
+  <data name="Equipment_Camera_Name_OneInch" xml:space="preserve">
+    <value>1-inch camera</value>
+  </data>
+  <data name="Equipment_Camera_NameRequired" xml:space="preserve">
+    <value>Camera name is required.</value>
+  </data>
+  <data name="Equipment_Camera_SensorHeightInvalid" xml:space="preserve">
+    <value>Sensor height must be greater than zero.</value>
+  </data>
+  <data name="Equipment_Camera_SensorWidthInvalid" xml:space="preserve">
+    <value>Sensor width must be greater than zero.</value>
+  </data>
+  <data name="Equipment_Lens_FocalLengthOrderInvalid" xml:space="preserve">
+    <value>Minimum focal length cannot exceed maximum focal length.</value>
+  </data>
+  <data name="Equipment_Lens_IdRequired" xml:space="preserve">
+    <value>Lens identifier is required.</value>
+  </data>
+  <data name="Equipment_Lens_MaximumFocalLengthInvalid" xml:space="preserve">
+    <value>Maximum focal length must be greater than zero.</value>
+  </data>
+  <data name="Equipment_Lens_MinimumFocalLengthInvalid" xml:space="preserve">
+    <value>Minimum focal length must be greater than zero.</value>
+  </data>
+  <data name="Equipment_Lens_Name_Migrated_Format" xml:space="preserve">
+    <value>{0:0.#} mm lens</value>
+    <comment>Name given to a lens converted from an older settings file; {0} is its focal length in millimetres.</comment>
+  </data>
+  <data name="Equipment_Lens_NameRequired" xml:space="preserve">
+    <value>Lens name is required.</value>
+  </data>
+</root>

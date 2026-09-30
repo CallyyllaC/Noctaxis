@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Globalization;
 using Noctaxis.Core.Domain;
 
@@ -28,7 +29,7 @@ public sealed class ExternalMapService(IExternalUriLauncher launcher)
         var uri = CreateUri(latitude, longitude, provider);
         if (uri is null)
         {
-            error = "The location or map provider is invalid.";
+            error = Strings.Get("Planner_Location_MapProviderInvalid");
             return false;
         }
         return launcher.TryOpen(uri, out error);

@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -178,7 +179,7 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private LensProfile? _selectedLens;
     [ObservableProperty] private CameraOrientation _selectedOrientation;
     [ObservableProperty] private double _focalLength;
-    [ObservableProperty] private string _locationName = "Current location";
+    [ObservableProperty] private string _locationName = Strings.Get("Planner_Location_CurrentLocation_Name");
     [ObservableProperty] private string? _currentLocationAttribution;
     public bool HasCurrentLocationAttribution => !string.IsNullOrWhiteSpace(CurrentLocationAttribution);
     [ObservableProperty] private PlanningSnapshot? _snapshot;
@@ -200,8 +201,8 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private string? _locationThumbnailRefreshStatus;
     public bool CanExport => !IsLocationInteracting && Snapshot is not null;
     public int VisibleCelestialCount => CelestialObjects.Count(item => item.IsVisible);
-    public string VisibleCelestialCountText => $"Visible objects: {VisibleCelestialCount} / {CelestialVisibilityPolicy.MaximumVisibleObjects}";
-    [ObservableProperty] private string _statusMessage = "Starting Noctaxis…";
+    public string VisibleCelestialCountText => Strings.Format("Planner_Targets_VisibleCount_Format", VisibleCelestialCount, CelestialVisibilityPolicy.MaximumVisibleObjects);
+    [ObservableProperty] private string _statusMessage = Strings.Get("Shell_Status_Starting");
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasStartupError))] private string? _startupError;
     public bool HasStartupError => StartupError is not null;
     /// <summary>
@@ -227,7 +228,7 @@ public partial class MainViewModel : ObservableObject
         : null;
     public double TerrainDebugBearing => CurrentCameraBearing ?? 0;
     public double TerrainDebugHorizontalFieldOfView => CameraFramingGuide?.HorizontalFieldOfViewDegrees ?? 60;
-    public string TerrainDebugText => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : !Settings.TerrainDebugOverlay ? "Terrain diagnostics disabled" : CurrentTerrain is { } terrain
+    public string TerrainDebugText => !Settings.EnableTerrainCalculations ? Strings.Get("Terrain_CalculationsDisabled") : !Settings.TerrainDebugOverlay ? Strings.Get("Settings_Diagnostics_TerrainDiagnosticsDisabled") : CurrentTerrain is { } terrain
         ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
             CurrentCameraBearing ?? CurrentSnapshot?.Position.Horizontal.AzimuthDegrees ?? 0,
             TerrainDebugTargetAltitude, TerrainDebugGeneration,
@@ -244,15 +245,24 @@ public partial class MainViewModel : ObservableObject
     public bool CanResetGroundElevation => IsElevationManualOverride &&
         (!Settings.EnableTerrainCalculations || _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue);
     public string GroundElevationSourceText => IsElevationManualOverride
-        ? "Manual ground-elevation override"
-        : !Settings.EnableTerrainCalculations ? "Terrain disabled · 0 m MSL fallback"
+        ? Strings.Get("Terrain_GroundSource_ManualOverride")
+        // With terrain off the ground is taken as mean sea level: zero, in the profile's height unit.
+        : !Settings.EnableTerrainCalculations ? Strings.Format("Planner_Location_GroundSource_TerrainDisabled_Format",
+            Settings.MeasurementProfile.Height.Of(0).Format())
         : _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue
-            ? "Terrain-derived ground elevation"
-            : "Resolving terrain surface elevation…";
+            ? Strings.Get("Planner_Location_GroundSource_TerrainDerived")
+            : Strings.Get("Planner_Location_GroundSource_Resolving");
+    /// <summary>The ground elevation in the measurement profile's height unit, beside <see cref="GroundElevationUnitText"/>.</summary>
+    public double? GroundElevationDisplay => ResolvedGroundElevationMetres is double ground
+        ? Math.Round(Settings.MeasurementProfile.Height.FromBase(ground), 1)
+        : null;
+    public string GroundElevationUnitText =>
+        Strings.Format("Planner_Location_AboveSeaLevel_Unit_Format", Settings.MeasurementProfile.Height.Symbol);
     public string EffectiveObserverAltitudeText => ResolvedGroundElevationMetres is double ground
-        ? $"Effective camera altitude: {ground + Settings.EffectiveCameraHeightAboveGroundMetres:F1} m ASL " +
-          $"(ground + {Settings.EffectiveCameraHeightAboveGroundMetres:F1} m camera height)"
-        : "Effective camera altitude: resolving terrain surface…";
+        ? Strings.Format("Planner_Location_EffectiveAltitude_Format",
+            Settings.MeasurementProfile.Height.Of(ground + Settings.EffectiveCameraHeightAboveGroundMetres, 1).Format(),
+            Settings.MeasurementProfile.Height.Of(Settings.EffectiveCameraHeightAboveGroundMetres, 1).Format())
+        : Strings.Get("Planner_Location_EffectiveAltitude_Resolving");
     public bool IsFocalLengthEditable => SelectedLens is { IsPrime: false };
     public double FocalLengthMinimum => SelectedLens?.MinimumFocalLengthMillimetres ?? 1;
     public double FocalLengthMaximum => SelectedLens?.MaximumFocalLengthMillimetres ?? 2_000;
@@ -272,9 +282,9 @@ public partial class MainViewModel : ObservableObject
             if (value) SelectedOrientation = CameraOrientation.Portrait;
         }
     }
-    public string LensFocalRangeText => SelectedLens is null ? "No lens selected" :
-        SelectedLens.IsPrime ? $"Prime · {SelectedLens.MinimumFocalLengthMillimetres:0.#} mm" :
-        $"Zoom · {SelectedLens.MinimumFocalLengthMillimetres:0.#}–{SelectedLens.MaximumFocalLengthMillimetres:0.#} mm";
+    public string LensFocalRangeText => SelectedLens is null ? Strings.Get("Planner_Camera_NoLensSelected") :
+        SelectedLens.IsPrime ? Strings.Format("Planner_Camera_PrimeLens_Format", SelectedLens.MinimumFocalLengthMillimetres) :
+        Strings.Format("Planner_Camera_ZoomLens_Format", SelectedLens.MinimumFocalLengthMillimetres, SelectedLens.MaximumFocalLengthMillimetres);
 
     public string AzimuthText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AzimuthDegrees:F1}°";
     public string AltitudeText => Snapshot is null ? "—" : $"{Snapshot.Position.Horizontal.AltitudeDegrees:+0.0;-0.0;0.0}°";
@@ -282,57 +292,57 @@ public partial class MainViewModel : ObservableObject
         ? null
         : _localHorizonCalculator.AssessTarget(Snapshot.Terrain,
             Snapshot.Position.Horizontal.AzimuthDegrees, Snapshot.Position.Horizontal.AltitudeDegrees);
-    public string HorizonStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : CurrentTargetLocalVisibility?.State switch
+    public string HorizonStatus => !Settings.EnableTerrainCalculations ? Strings.Get("Terrain_CalculationsDisabled") : CurrentTargetLocalVisibility?.State switch
     {
-        null => "Calculating…",
-        TargetLocalVisibilityState.BelowAstronomicalHorizon => "Below astronomical horizon",
-        TargetLocalVisibilityState.TerrainBlocked => "Terrain blocked",
-        TargetLocalVisibilityState.Marginal => "Marginal",
-        TargetLocalVisibilityState.Clear => "Clear",
-        _ => "Above astronomical horizon · terrain unavailable"
+        null => Strings.Get("Planner_Target_Horizon_Calculating"),
+        TargetLocalVisibilityState.BelowAstronomicalHorizon => Strings.Get("Planner_Target_Horizon_BelowAstronomical"),
+        TargetLocalVisibilityState.TerrainBlocked => Strings.Get("Planner_Target_Horizon_TerrainBlocked"),
+        TargetLocalVisibilityState.Marginal => Strings.Get("Planner_Target_Horizon_Marginal"),
+        TargetLocalVisibilityState.Clear => Strings.Get("Planner_Target_Horizon_Clear"),
+        _ => Strings.Get("Planner_Target_Horizon_TerrainUnavailable")
     };
     public bool HasTargetLocalHorizonDetails => CurrentTargetLocalVisibility is
         { State: TargetLocalVisibilityState.TerrainBlocked or TargetLocalVisibilityState.Marginal or TargetLocalVisibilityState.Clear };
     public string TargetLocalHorizonText => FormatHorizonAngle(CurrentTargetLocalVisibility?.LocalHorizonAltitudeDegrees);
     public string TargetTerrainMarginLabel => CurrentTargetLocalVisibility?.State == TargetLocalVisibilityState.TerrainBlocked
-        ? "Blocked by"
-        : "Clearance";
+        ? Strings.Get("Planner_Target_BlockedBy_Label")
+        : Strings.Get("Planner_Target_Clearance_Label");
     public string TargetTerrainMarginText => CurrentTargetLocalVisibility?.ClearanceDegrees is double clearance
         ? $"{Math.Abs(clearance):0.0}°"
         : "—";
     public string RiseText => FormatTime(Snapshot?.Position.Events.Rise);
     public string TransitText => FormatTime(Snapshot?.Position.Events.Transit);
     public string SetText => FormatTime(Snapshot?.Position.Events.Set);
-    public string TerrainStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled" : CurrentEnvironment is { } environment
+    public string TerrainStatus => !Settings.EnableTerrainCalculations ? Strings.Get("Terrain_CalculationsDisabled") : CurrentEnvironment is { } environment
         ? environment.ActiveSourceDescription
         : CurrentTerrain is { } terrain
             ? terrain.Status
-            : "Loading terrain horizon…";
+            : Strings.Get("Planner_Horizon_Loading");
     public string TerrainCurrentLocationText => $"{Observer.Latitude:F5}, {Observer.Longitude:F5}";
-    public string GroundHorizonState => !Settings.EnableTerrainCalculations ? "Disabled" : IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
-        ? CurrentTerrain is { IsComplete: false, HasTerrainCoverage: true } ? "Ready · refining…" : "Loading…"
+    public string GroundHorizonState => !Settings.EnableTerrainCalculations ? Strings.Get("Planner_Horizon_State_Disabled") : IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
+        ? CurrentTerrain is { IsComplete: false, HasTerrainCoverage: true } ? Strings.Get("Planner_Horizon_State_Refining") : Strings.Get("Planner_Horizon_State_LoadingEllipsis")
         : FormatHorizonState(CurrentTerrain?.HasTerrainCoverage == true,
             CurrentTerrain?.GroundHorizonState);
     public string GroundHorizonAngleText => FormatHorizonAngle(
         CurrentCameraBearing is double bearing ? CurrentTerrain?.GroundAltitudeAt(bearing) : null);
     public string TerrainDatumText => !Settings.EnableTerrainCalculations ? GroundElevationSourceText : CurrentTerrain switch
     {
-        null => "Observer datum: Loading",
-        { ObserverDatumConfidence: ObserverDatumConfidence.Normal } => "Observer datum: Normal",
-        _ => "Observer datum: Unavailable"
+        null => Strings.Get("Planner_Horizon_ObserverDatum_Loading"),
+        { ObserverDatumConfidence: ObserverDatumConfidence.Normal } => Strings.Get("Planner_Horizon_ObserverDatum_Normal"),
+        _ => Strings.Get("Planner_Horizon_ObserverDatum_Unavailable")
     };
     public string GroundObstructionText => FormatObstruction(
         CurrentCameraObstruction.HasGroundData,
         CurrentCameraObstruction.GroundFirstObstructionDistanceMetres);
     public string WeatherSummary => Snapshot?.Weather.Conditions is { } weather
-        ? "Open-Meteo · " + weather.Summary
-        : Snapshot?.Weather.Message ?? "Loading weather…";
+        ? Strings.Format("Planner_Weather_Summary_Format", weather.Summary)
+        : Snapshot?.Weather.Message ?? Strings.Get("Weather_Loading");
     public string WeatherDetails
     {
         get
         {
             var w = Snapshot?.Weather.Conditions;
-            if (w is null) return "No weather values";
+            if (w is null) return Strings.Get("Planner_Weather_NoValues");
             var units = Settings.EffectiveMeasurementSystem;
             var temperature = MeasurementUnits.FormatTemperature(w.TemperatureCelsius, units);
             var dew = MeasurementUnits.FormatTemperature(w.DewPointCelsius, units);
@@ -340,48 +350,51 @@ public partial class MainViewModel : ObservableObject
             var gust = MeasurementUnits.FormatWindSpeed(w.WindGustMetresPerSecond, units);
             var visibility = MeasurementUnits.FormatVisibility(w.VisibilityKilometres, units);
             var precipitation = MeasurementUnits.FormatPrecipitation(w.PrecipitationMillimetres, units);
-            return $"{(w.IsStale ? "STALE · " : "")}Cloud {Value(w.CloudCoverPercent, "%")} · {temperature}\nLow/Mid/High {Value(w.LowCloudPercent, "%")} / {Value(w.MediumCloudPercent, "%")} / {Value(w.HighCloudPercent, "%")}\nPrecip {Value(w.PrecipitationProbabilityPercent, "%")} · {precipitation}\nWind {wind} from {Value(w.WindDirectionDegrees, "°")} · gust {gust}\nHumidity {Value(w.HumidityPercent, "%")} · Dew {dew} · Visibility {visibility}";
+            return Strings.Format("Planner_Weather_Details_Format", w.IsStale ? Strings.Get("Planner_Weather_Stale_Prefix") : "",
+                Value(w.CloudCoverPercent, "%"), temperature, Value(w.LowCloudPercent, "%"), Value(w.MediumCloudPercent, "%"),
+                Value(w.HighCloudPercent, "%"), Value(w.PrecipitationProbabilityPercent, "%"), precipitation, wind,
+                Value(w.WindDirectionDegrees, "°"), gust, Value(w.HumidityPercent, "%"), dew, visibility);
         }
     }
     public string MoonDetails => Snapshot?.Position.MoonIlluminatedFraction is double fraction
-        ? $"{MoonPhaseName(Snapshot.Position.MoonPhaseAngleDegrees ?? 0)} · illumination {fraction * 100:F0}% · phase angle {Snapshot.Position.MoonPhaseAngleDegrees:F0}°"
+        ? Strings.Format("Planner_Moon_Details_Format", MoonPhaseName(Snapshot.Position.MoonPhaseAngleDegrees ?? 0), fraction * 100, Snapshot.Position.MoonPhaseAngleDegrees)
         : string.Empty;
     public string ConfiguredWeatherDetails
     {
         get
         {
             var w = Snapshot?.Weather.Conditions;
-            if (w is null) return "No weather values";
+            if (w is null) return Strings.Get("Planner_Weather_NoValues");
             var settings = Settings.EffectiveWeather;
             var units = Settings.EffectiveMeasurementSystem;
             var lines = new List<string>();
             void Add(WeatherField weatherField, string text) { if (settings.IsEnabled(weatherField)) lines.Add(text); }
-            Add(WeatherField.TotalCloudCover, "Cloud " + Value(w.CloudCoverPercent, "%"));
-            Add(WeatherField.LowCloudCover, "Low cloud " + Value(w.LowCloudPercent, "%"));
-            Add(WeatherField.MediumCloudCover, "Medium cloud " + Value(w.MediumCloudPercent, "%"));
-            Add(WeatherField.HighCloudCover, "High cloud " + Value(w.HighCloudPercent, "%"));
-            Add(WeatherField.PrecipitationProbability, "Precipitation probability " + Value(w.PrecipitationProbabilityPercent, "%"));
-            Add(WeatherField.PrecipitationAmount, "Precipitation " + MeasurementUnits.FormatPrecipitation(w.PrecipitationMillimetres, units));
-            Add(WeatherField.PrecipitationType, "Precipitation type " + (w.PrecipitationType ?? "—"));
-            Add(WeatherField.Temperature, "Temperature " + MeasurementUnits.FormatTemperature(w.TemperatureCelsius, units));
-            Add(WeatherField.DewPoint, "Dew point " + MeasurementUnits.FormatTemperature(w.DewPointCelsius, units));
-            Add(WeatherField.RelativeHumidity, "Humidity " + Value(w.HumidityPercent, "%"));
-            Add(WeatherField.WindSpeed, "Wind speed " + MeasurementUnits.FormatWindSpeed(w.WindSpeedMetresPerSecond, units));
-            Add(WeatherField.WindGusts, "Wind gusts " + MeasurementUnits.FormatWindSpeed(w.WindGustMetresPerSecond, units));
-            Add(WeatherField.WindDirection, "Wind direction " + Value(w.WindDirectionDegrees, "°"));
-            Add(WeatherField.Visibility, "Visibility " + MeasurementUnits.FormatVisibility(w.VisibilityKilometres, units));
+            Add(WeatherField.TotalCloudCover, Strings.Format("Planner_Weather_Cloud_Format", Value(w.CloudCoverPercent, "%")));
+            Add(WeatherField.LowCloudCover, Strings.Format("Planner_Weather_LowCloud_Format", Value(w.LowCloudPercent, "%")));
+            Add(WeatherField.MediumCloudCover, Strings.Format("Planner_Weather_MediumCloud_Format", Value(w.MediumCloudPercent, "%")));
+            Add(WeatherField.HighCloudCover, Strings.Format("Planner_Weather_HighCloud_Format", Value(w.HighCloudPercent, "%")));
+            Add(WeatherField.PrecipitationProbability, Strings.Format("Planner_Weather_PrecipitationProbability_Format", Value(w.PrecipitationProbabilityPercent, "%")));
+            Add(WeatherField.PrecipitationAmount, Strings.Format("Planner_Weather_Precipitation_Format", MeasurementUnits.FormatPrecipitation(w.PrecipitationMillimetres, units)));
+            Add(WeatherField.PrecipitationType, Strings.Format("Planner_Weather_PrecipitationType_Format", w.PrecipitationType ?? "—"));
+            Add(WeatherField.Temperature, Strings.Format("Planner_Weather_Temperature_Format", MeasurementUnits.FormatTemperature(w.TemperatureCelsius, units)));
+            Add(WeatherField.DewPoint, Strings.Format("Planner_Weather_DewPoint_Format", MeasurementUnits.FormatTemperature(w.DewPointCelsius, units)));
+            Add(WeatherField.RelativeHumidity, Strings.Format("Planner_Weather_Humidity_Format", Value(w.HumidityPercent, "%")));
+            Add(WeatherField.WindSpeed, Strings.Format("Planner_Weather_WindSpeed_Format", MeasurementUnits.FormatWindSpeed(w.WindSpeedMetresPerSecond, units)));
+            Add(WeatherField.WindGusts, Strings.Format("Planner_Weather_WindGusts_Format", MeasurementUnits.FormatWindSpeed(w.WindGustMetresPerSecond, units)));
+            Add(WeatherField.WindDirection, Strings.Format("Planner_Weather_WindDirection_Format", Value(w.WindDirectionDegrees, "°")));
+            Add(WeatherField.Visibility, Strings.Format("Planner_Weather_Visibility_Format", MeasurementUnits.FormatVisibility(w.VisibilityKilometres, units)));
             var t = Snapshot!.Astronomy.Sun.Twilight;
-            Add(WeatherField.Sunrise, "Sunrise " + FormatTime(t?.Sunrise));
-            Add(WeatherField.Sunset, "Sunset " + FormatTime(t?.Sunset));
-            Add(WeatherField.CivilTwilight, $"Civil twilight {FormatTime(t?.CivilDawn)}–{FormatTime(t?.CivilDusk)}");
-            Add(WeatherField.NauticalTwilight, $"Nautical twilight {FormatTime(t?.NauticalDawn)}–{FormatTime(t?.NauticalDusk)}");
-            Add(WeatherField.AstronomicalTwilight, $"Astronomical twilight {FormatTime(t?.AstronomicalDawn)}–{FormatTime(t?.AstronomicalDusk)}");
-            Add(WeatherField.AstronomicalDarkness, $"Astronomical darkness before {FormatTime(t?.AstronomicalDawn)} / after {FormatTime(t?.AstronomicalDusk)}");
+            Add(WeatherField.Sunrise, Strings.Format("Planner_Weather_Sunrise_Format", FormatTime(t?.Sunrise)));
+            Add(WeatherField.Sunset, Strings.Format("Planner_Weather_Sunset_Format", FormatTime(t?.Sunset)));
+            Add(WeatherField.CivilTwilight, Strings.Format("Planner_Weather_CivilTwilight_Format", FormatTime(t?.CivilDawn), FormatTime(t?.CivilDusk)));
+            Add(WeatherField.NauticalTwilight, Strings.Format("Planner_Weather_NauticalTwilight_Format", FormatTime(t?.NauticalDawn), FormatTime(t?.NauticalDusk)));
+            Add(WeatherField.AstronomicalTwilight, Strings.Format("Planner_Weather_AstronomicalTwilight_Format", FormatTime(t?.AstronomicalDawn), FormatTime(t?.AstronomicalDusk)));
+            Add(WeatherField.AstronomicalDarkness, Strings.Format("Planner_Weather_AstronomicalDarkness_Format", FormatTime(t?.AstronomicalDawn), FormatTime(t?.AstronomicalDusk)));
             var moon = Snapshot.Astronomy.Moon;
-            Add(WeatherField.MoonPhase, "Moon phase " + MoonPhaseName(moon.MoonPhaseAngleDegrees ?? 0));
-            Add(WeatherField.MoonIllumination, $"Moon illumination {moon.MoonIlluminatedFraction * 100:F0}%");
-            Add(WeatherField.Moonrise, "Moonrise " + FormatTime(moon.Events.Rise));
-            Add(WeatherField.Moonset, "Moonset " + FormatTime(moon.Events.Set));
+            Add(WeatherField.MoonPhase, Strings.Format("Planner_Weather_MoonPhase_Format", MoonPhaseName(moon.MoonPhaseAngleDegrees ?? 0)));
+            Add(WeatherField.MoonIllumination, Strings.Format("Planner_Weather_MoonIllumination_Format", moon.MoonIlluminatedFraction * 100));
+            Add(WeatherField.Moonrise, Strings.Format("Planner_Weather_Moonrise_Format", FormatTime(moon.Events.Rise)));
+            Add(WeatherField.Moonset, Strings.Format("Planner_Weather_Moonset_Format", FormatTime(moon.Events.Set)));
             return string.Join('\n', lines);
         }
     }
@@ -392,7 +405,9 @@ public partial class MainViewModel : ObservableObject
         get
         {
             var t = Snapshot?.Position.Twilight;
-            return t is null ? string.Empty : $"Sunrise {FormatTime(t.Sunrise)} · Sunset {FormatTime(t.Sunset)}\nCivil {FormatTime(t.CivilDawn)}–{FormatTime(t.CivilDusk)} · Nautical {FormatTime(t.NauticalDawn)}–{FormatTime(t.NauticalDusk)}\nAstronomical {FormatTime(t.AstronomicalDawn)}–{FormatTime(t.AstronomicalDusk)}";
+            return t is null ? string.Empty : Strings.Format("Planner_Sun_Details_Format", FormatTime(t.Sunrise), FormatTime(t.Sunset),
+                FormatTime(t.CivilDawn), FormatTime(t.CivilDusk), FormatTime(t.NauticalDawn), FormatTime(t.NauticalDusk),
+                FormatTime(t.AstronomicalDawn), FormatTime(t.AstronomicalDusk));
         }
     }
     public string FieldOfViewText => Snapshot is null ? "—" : $"{Snapshot.FieldOfView.HorizontalDegrees:F1}° × {Snapshot.FieldOfView.VerticalDegrees:F1}°";
@@ -437,8 +452,8 @@ public partial class MainViewModel : ObservableObject
     public string FramingVisibilityStatus => !IsCameraFramingOverlayVisible
         ? string.Empty
         : !ShowFramingVisibilityLimits
-            ? "Visibility limits hidden"
-            : CameraFramingVisibility?.Status ?? "Visibility data unavailable";
+            ? Strings.Get("Planner_Framing_LimitsHidden")
+            : CameraFramingVisibility?.StatusFor(Settings.MeasurementProfile) ?? Strings.Get("Planning_Visibility_DataUnavailable");
     public CameraFramingSettings CameraFramingMapSettings => Settings.EffectiveCameraFraming;
 
     private PlanningSnapshot? CurrentSnapshot =>
@@ -494,7 +509,7 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogCritical(ex, "Noctaxis initialisation failed; the Planner was not activated");
-            StartupError = $"Noctaxis could not start: {ex.Message}";
+            StartupError = Strings.Format("Shell_Status_StartFailed_Format", ex.Message);
             StatusMessage = StartupError;
         }
     }
@@ -504,6 +519,8 @@ public partial class MainViewModel : ObservableObject
         var persisted = await _store.LoadAsync(CancellationToken.None);
         Settings = persisted.Settings with
         {
+            // A language this version does not ship (a hand edit, a newer version's file) becomes the default.
+            Language = persisted.Settings.EffectiveLanguage,
             CameraHeightAboveGroundMetres = persisted.Settings.EffectiveCameraHeightAboveGroundMetres,
             Equipment = persisted.Settings.EffectiveEquipment(persisted.Session.Lens)
         };
@@ -535,7 +552,7 @@ public partial class MainViewModel : ObservableObject
                 // The on-disk cache is an optimisation; an unreadable cache directory must not
                 // prevent the rest of the application from starting.
                 _logger.LogWarning(ex, "Terrain cache could not be reconciled at startup");
-                TerrainCacheStatus = $"Terrain cache could not be read: {ex.Message}";
+                TerrainCacheStatus = Strings.Format("Settings_Data_TerrainCacheUnreadable_Format", ex.Message);
                 ShowOperationalNotice(TerrainCacheStatus);
             }
         }
@@ -580,7 +597,7 @@ public partial class MainViewModel : ObservableObject
         {
             CancelReverseLocationLookup();
             _resolvedPlaceSuggestion = null;
-            LocationName = "New location";
+            LocationName = Strings.Get("Planner_Location_NewLocation_Name");
             CurrentLocationAttribution = null;
         }
         SetPreviewObserver(normalised);
@@ -620,7 +637,7 @@ public partial class MainViewModel : ObservableObject
         };
         CancelReverseLocationLookup();
         _resolvedPlaceSuggestion = string.IsNullOrWhiteSpace(resolvedName) ? null : resolvedName.Trim();
-        LocationName = _resolvedPlaceSuggestion ?? "New location";
+        LocationName = _resolvedPlaceSuggestion ?? Strings.Get("Planner_Location_NewLocation_Name");
         CurrentLocationAttribution = null;
         SetPreviewObserver(normalised);
         _session = _session with
@@ -749,7 +766,7 @@ public partial class MainViewModel : ObservableObject
             _suppressChanges = false;
             if (Snapshot is not null) Snapshot = Snapshot with { Session = _session,
                 Terrain = Settings.EnableTerrainCalculations
-                    ? new TerrainHorizonProfile(_session.Observer, [], false, "Resolving terrain profile", _session.Instant)
+                    ? new TerrainHorizonProfile(_session.Observer, [], false, Strings.Get("Terrain_Status_ResolvingProfile"), _session.Instant)
                     : DisabledTerrain(), TerrainCrossings = new(null, null), Environment = null };
             NotifySnapshotProperties();
         }
@@ -766,7 +783,7 @@ public partial class MainViewModel : ObservableObject
             {
                 // As at startup: the cache is an optimisation and must not abort applying settings.
                 _logger.LogWarning(ex, "Terrain cache could not be reconfigured");
-                cacheFailure = $"Terrain cache could not be read: {ex.Message}";
+                cacheFailure = Strings.Format("Settings_Data_TerrainCacheUnreadable_Format", ex.Message);
             }
             // A newer toggle owns the UI (and its save) even if this reconciliation completed later.
             if (settingsGeneration != Volatile.Read(ref _settingsApplyGeneration)) return true;
@@ -822,8 +839,8 @@ public partial class MainViewModel : ObservableObject
             WeatherFieldOptions.Add(option);
         }
         WeatherFieldGroups.Clear();
-        foreach (var (label, fields) in WeatherFieldGroupDefinitions)
-            WeatherFieldGroups.Add(new WeatherFieldGroupViewModel(label,
+        foreach (var (labelKey, fields) in WeatherFieldGroupDefinitions)
+            WeatherFieldGroups.Add(new WeatherFieldGroupViewModel(Strings.Get(labelKey),
                 fields.Select(field => WeatherFieldOptions.Single(option => option.Field == field)).ToArray()));
         EquipmentCameraEditors.Clear();
         foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Cameras!)
@@ -871,37 +888,39 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void AddCameraProfile()
     {
-        EquipmentCameraEditors.Add(NewCameraEditor(new CameraProfile(Guid.NewGuid().ToString("N"), "New camera", 36, 24)));
+        EquipmentCameraEditors.Add(NewCameraEditor(new CameraProfile(Guid.NewGuid().ToString("N"), Strings.Get("Settings_Equipment_NewCamera_Name"), 36, 24)));
         EquipmentListChanged();
     }
 
     [RelayCommand]
     private void AddLensProfile()
     {
-        EquipmentLensEditors.Add(NewLensEditor(new LensProfile(Guid.NewGuid().ToString("N"), "New lens", 24, 70)));
+        EquipmentLensEditors.Add(NewLensEditor(new LensProfile(Guid.NewGuid().ToString("N"), Strings.Get("Settings_Equipment_NewLens_Name"), 24, 70)));
         EquipmentListChanged();
     }
 
     private async Task RemoveCameraProfileEditor(CameraProfileEditorViewModel profile)
     {
-        if (!await ConfirmRemoveEquipmentAsync("camera", profile.DisplayName)) return;
+        if (!await ConfirmRemoveEquipmentAsync("Dialogs_RemoveCamera", profile.DisplayName)) return;
         EquipmentCameraEditors.Remove(profile);
         EquipmentRemoved();
     }
 
     private async Task RemoveLensProfileEditor(LensProfileEditorViewModel profile)
     {
-        if (!await ConfirmRemoveEquipmentAsync("lens", profile.DisplayName)) return;
+        if (!await ConfirmRemoveEquipmentAsync("Dialogs_RemoveLens", profile.DisplayName)) return;
         EquipmentLensEditors.Remove(profile);
         EquipmentRemoved();
     }
 
-    private Task<bool> ConfirmRemoveEquipmentAsync(string kind, string name) =>
-        _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation($"Remove {kind}?",
+    // Each kind has its own whole sentences (keys <prefix>_Title, _Unnamed_Message, _Confirm), so a
+    // translation never has to fit a noun into a shared sentence.
+    private Task<bool> ConfirmRemoveEquipmentAsync(string keyPrefix, string name) =>
+        _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation(Strings.Get(keyPrefix + "_Title"),
             string.IsNullOrWhiteSpace(name)
-                ? $"This {kind} will be removed from your equipment."
-                : $"“{name.Trim()}” will be removed from your equipment.",
-            $"Remove {kind}"));
+                ? Strings.Get(keyPrefix + "_Unnamed_Message")
+                : Strings.Format("Dialogs_RemoveEquipment_Named_Message", name.Trim()),
+            Strings.Get(keyPrefix + "_Confirm")));
 
     /// <summary>A confirmed removal is applied and saved now, not after the usual editing pause.</summary>
     private void EquipmentRemoved()
@@ -914,9 +933,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>Why equipment edits are not being saved yet, or null when they are.</summary>
     public string? EquipmentValidationMessage =>
-        EquipmentCameraEditors.Count == 0 ? "Add a camera. Equipment changes are saved once there is at least one camera and one lens." :
-        EquipmentLensEditors.Count == 0 ? "Add a lens. Equipment changes are saved once there is at least one camera and one lens." :
-        EquipmentIsValid() ? null : "Equipment changes are saved once every profile is complete.";
+        EquipmentCameraEditors.Count == 0 ? Strings.Get("Settings_Equipment_Validation_AddCamera") :
+        EquipmentLensEditors.Count == 0 ? Strings.Get("Settings_Equipment_Validation_AddLens") :
+        EquipmentIsValid() ? null : Strings.Get("Settings_Equipment_Validation_Incomplete");
 
     private bool CanRefreshSavedLocationThumbnails() =>
         !IsRefreshingLocationThumbnails && Locations.Saved.Count > 0;
@@ -940,24 +959,27 @@ public partial class MainViewModel : ObservableObject
     {
         if (!await _dialogs.ConfirmRefreshSavedLocationThumbnailsAsync(Locations.Saved.Count)) return;
         await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.RefreshSource,
-            "Regenerating saved location map images...", "map images regenerated");
+            Strings.Get("Settings_Data_MapImages_Regenerating"), Strings.Get("Settings_Data_MapImages_Regenerated"),
+            Strings.Get("Settings_Data_MapImages_RegeneratedDegraded"));
     }
 
     [RelayCommand(CanExecute = nameof(CanRefreshSavedLocationThumbnails))]
     private Task ReapplySavedLocationMapStyles() => RunSavedLocationMapOperationAsync(
         SavedLocationMapRefreshMode.ReapplyStyle,
-        "Reapplying saved location map image style...", "map image styles reapplied");
+        Strings.Get("Settings_Data_MapImages_Reapplying"), Strings.Get("Settings_Data_MapImages_Reapplied"),
+        Strings.Get("Settings_Data_MapImages_ReappliedDegraded"));
 
     [RelayCommand(CanExecute = nameof(CanRefreshSavedLocationThumbnails))]
     private async Task RefreshSavedLocationSettlementCaches()
     {
         if (!await _dialogs.ConfirmRefreshSavedLocationSettlementCachesAsync(Locations.Saved.Count)) return;
         await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.RefreshSettlement,
-            "Refreshing saved location WSF settlement data...", "settlement data refreshed");
+            Strings.Get("Settings_Data_MapImages_RefreshingSettlement"), Strings.Get("Settings_Data_MapImages_SettlementRefreshed"),
+            Strings.Get("Settings_Data_MapImages_SettlementRefreshedDegraded"));
     }
 
     private async Task RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode mode,
-        string busyMessage, string completedDescription)
+        string busyMessage, string completedMessage, string degradedMessage)
     {
         IsRefreshingLocationThumbnails = true;
         LocationThumbnailRefreshStatus = busyMessage;
@@ -992,7 +1014,7 @@ public partial class MainViewModel : ObservableObject
                 else if (operation.RasterUsedPrevious) rasterCached++;
                 else rasterComplete++;
                 var outcome = operation?.Semantic ?? MapFeatureFetchOutcome.Failure(
-                    "operation_failed", "the requested map operation did not complete");
+                    "operation_failed", Strings.Get("Settings_Data_MapImages_OperationIncomplete"));
                 switch (outcome.Status)
                 {
                     case MapFeatureFetchStatus.Complete: coreComplete++; break;
@@ -1001,7 +1023,8 @@ public partial class MainViewModel : ObservableObject
                         break;
                     default:
                         coreFailed++;
-                        details.Add($"{card.Name}: {outcome.FailureReason ?? "road and water overlays unavailable"}");
+                        details.Add(Strings.Format("Settings_Data_MapImages_FeaturesFailed_Format", card.Name,
+                            outcome.FailureReason ?? Strings.Get("Settings_Data_MapImages_FeaturesUnavailable")));
                         break;
                 }
 
@@ -1018,33 +1041,33 @@ public partial class MainViewModel : ObservableObject
                         break;
                     case Noctaxis.Core.Environment.EnvironmentalDataState.Partial:
                         settlementPartial++;
-                        details.Add($"{card.Name}: WSF settlement coverage is partial");
+                        details.Add(Strings.Format("Settings_Data_MapImages_SettlementPartial_Format", card.Name));
                         break;
                     case Noctaxis.Core.Environment.EnvironmentalDataState.TileAbsent:
                         settlementFailed++;
-                        details.Add($"{card.Name}: WSF coverage tile absent");
+                        details.Add(Strings.Format("Settings_Data_MapImages_SettlementTileAbsent_Format", card.Name));
                         break;
                     case Noctaxis.Core.Environment.EnvironmentalDataState.InvalidRaster:
                         settlementFailed++;
-                        details.Add($"{card.Name}: WSF raster failed scientific validation");
+                        details.Add(Strings.Format("Settings_Data_MapImages_SettlementInvalid_Format", card.Name));
                         break;
                     default:
                         settlementFailed++;
-                        details.Add($"{card.Name}: WSF source unavailable");
+                        details.Add(Strings.Format("Settings_Data_MapImages_SettlementUnavailable_Format", card.Name));
                         break;
                 }
             }
             Locations.RefreshThumbnailAttributions();
             LocationThumbnailRefreshStatus = mode == SavedLocationMapRefreshMode.ReapplyStyle
-                ? $"{succeeded} refreshed, {failed} failed."
-                : $"Raster maps: {rasterComplete} complete, {rasterCached} cached, {rasterFailed} failed.{Environment.NewLine}" +
-                  $"Road and water overlays: {coreComplete} complete, {coreCached} cached, {coreFailed} failed.{Environment.NewLine}" +
-                  $"WSF settlement layers: {settlementComplete} complete, {settlementCached} cached, " +
-                  $"{settlementEmpty} valid empty, {settlementPartial} partial, {settlementFailed} failed." +
+                ? Strings.Format("Settings_Data_MapImages_StyleSummary_Format", succeeded, failed)
+                : Strings.Format("Settings_Data_MapImages_RasterSummary_Format", rasterComplete, rasterCached, rasterFailed) + Environment.NewLine +
+                  Strings.Format("Settings_Data_MapImages_OverlaySummary_Format", coreComplete, coreCached, coreFailed) + Environment.NewLine +
+                  Strings.Format("Settings_Data_MapImages_SettlementSummary_Format", settlementComplete, settlementCached,
+                      settlementEmpty, settlementPartial, settlementFailed) +
                   (details.Count == 0 ? string.Empty : Environment.NewLine + string.Join(Environment.NewLine, details));
             StatusMessage = failed == 0 && coreFailed == 0 && settlementFailed == 0 && settlementPartial == 0
-                ? $"Saved location {completedDescription}"
-                : $"Saved location {completedDescription} with degraded or failed results";
+                ? completedMessage
+                : degradedMessage;
             _logger.LogInformation(
                 "Saved-location map operation {RefreshMode} completed: raster complete {RasterComplete}, cached {RasterCached}, failed {RasterFailed}; core complete {CoreComplete}, cached {CoreCached}, failed {CoreFailed}; WSF settlement complete {SettlementComplete}, cached {SettlementCached}, valid empty {SettlementEmpty}, partial {SettlementPartial}, failed {SettlementFailed}; thumbnails failed {Failed}",
                 mode, rasterComplete, rasterCached, rasterFailed, coreComplete, coreCached, coreFailed,
@@ -1058,35 +1081,26 @@ public partial class MainViewModel : ObservableObject
 
     private static string WeatherFieldLabel(WeatherField field) => field switch
     {
-        WeatherField.TotalCloudCover => "Total cloud cover", WeatherField.LowCloudCover => "Low cloud cover",
-        WeatherField.MediumCloudCover => "Medium cloud cover", WeatherField.HighCloudCover => "High cloud cover",
-        WeatherField.PrecipitationProbability => "Precipitation probability", WeatherField.PrecipitationAmount => "Precipitation amount",
-        WeatherField.PrecipitationType => "Precipitation type", WeatherField.Visibility => "Visibility",
-        WeatherField.Temperature => "Temperature", WeatherField.DewPoint => "Dew point", WeatherField.RelativeHumidity => "Relative humidity",
-        WeatherField.WindSpeed => "Wind speed", WeatherField.WindGusts => "Wind gusts", WeatherField.WindDirection => "Wind direction",
-        WeatherField.Sunrise => "Sunrise", WeatherField.Sunset => "Sunset",
-        WeatherField.CivilTwilight => "Civil twilight", WeatherField.NauticalTwilight => "Nautical twilight",
-        WeatherField.AstronomicalTwilight => "Astronomical twilight", WeatherField.AstronomicalDarkness => "Astronomical darkness",
-        WeatherField.MoonPhase => "Moon phase", WeatherField.MoonIllumination => "Moon illumination",
-        WeatherField.Moonrise => "Moonrise", WeatherField.Moonset => "Moonset",
+        // One key per field, named after the enum member: Settings_Weather_Field_<Member>.
+        _ when Enum.IsDefined(field) => Strings.Get("Settings_Weather_Field_" + field),
         _ => field.ToString()
     };
 
-    private static readonly IReadOnlyList<(string Label, IReadOnlyList<WeatherField> Fields)> WeatherFieldGroupDefinitions =
+    private static readonly IReadOnlyList<(string LabelKey, IReadOnlyList<WeatherField> Fields)> WeatherFieldGroupDefinitions =
     [
-        ("Weather",
+        ("Settings_Weather_Group_Weather",
         [
             WeatherField.TotalCloudCover, WeatherField.LowCloudCover, WeatherField.MediumCloudCover, WeatherField.HighCloudCover,
             WeatherField.PrecipitationProbability, WeatherField.PrecipitationAmount, WeatherField.PrecipitationType,
             WeatherField.Visibility, WeatherField.Temperature, WeatherField.DewPoint, WeatherField.RelativeHumidity,
             WeatherField.WindSpeed, WeatherField.WindGusts, WeatherField.WindDirection
         ]),
-        ("Sun & darkness",
+        ("Settings_Weather_Group_SunAndDarkness",
         [
             WeatherField.Sunrise, WeatherField.Sunset, WeatherField.CivilTwilight, WeatherField.NauticalTwilight,
             WeatherField.AstronomicalTwilight, WeatherField.AstronomicalDarkness
         ]),
-        ("Moon", [WeatherField.MoonPhase, WeatherField.MoonIllumination, WeatherField.Moonrise, WeatherField.Moonset])
+        ("Settings_Weather_Group_Moon", [WeatherField.MoonPhase, WeatherField.MoonIllumination, WeatherField.Moonrise, WeatherField.Moonset])
     ];
 
     public async Task<byte[]> CreateExportPngAsync(CancellationToken cancellationToken)
@@ -1097,13 +1111,13 @@ public partial class MainViewModel : ObservableObject
         var exported = Snapshot ?? throw new InvalidOperationException("The plan is not ready to export.");
         var exportedWeather = Settings.EffectiveWeather;
         var context = new ScoutingCardExportContext(LocationName, SelectedLocation, exportedWeather, Settings.Units);
-        StatusMessage = "Refreshing weather for export…";
+        StatusMessage = Strings.Get("Planner_Export_RefreshingWeather");
         _logger.LogInformation("Starting export weather refresh");
         try
         {
             var result = await _planning.RefreshWeatherAsync(exported.Session, exportedWeather, cancellationToken);
             if (result.State != DataState.Ready || result.Conditions is null)
-                throw new InvalidOperationException("Export cancelled: " + result.Message);
+                throw new InvalidOperationException(Strings.Format("Planner_Export_Cancelled_Format", result.Message));
             // The card always pairs the plan the export started from with the weather fetched for it.
             var rendered = exported with { Weather = result };
             if (IsCurrentWeatherRequest(exported.Session, exportedWeather) && Snapshot is { } current)
@@ -1114,7 +1128,7 @@ public partial class MainViewModel : ObservableObject
             }
             else _logger.LogInformation("The plan changed during export; the card keeps the plan it started from");
             var bytes = await _exporter.RenderPngAsync(rendered, context, cancellationToken);
-            StatusMessage = "Scouting card ready";
+            StatusMessage = Strings.Get("Planner_Export_Ready");
             return bytes;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1127,7 +1141,7 @@ public partial class MainViewModel : ObservableObject
 
     public void ReportExportDestinationFailure(Exception exception)
     {
-        StatusMessage = "Export failed: " + exception.Message;
+        StatusMessage = Strings.Format("Planner_Export_Failed_Format", exception.Message);
         _logger.LogWarning(exception, "PNG export destination failed");
     }
 
@@ -1168,8 +1182,7 @@ public partial class MainViewModel : ObservableObject
         // A successful save resolves only the save-failure notice; an unrelated warning stays.
         _saveFailureNotice = result.Succeeded
             ? null
-            : "Your settings and locations could not be saved: " + result.Failure?.Message +
-              " Noctaxis will try again when something changes.";
+            : Strings.Format("Shell_Notice_SaveFailed_Format", result.Failure?.Message);
         UpdateOperationalNotice();
     }
 
@@ -1283,7 +1296,7 @@ public partial class MainViewModel : ObservableObject
         if (SavedLocations.Any(location => location.Id != card.Id &&
                                            location.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase)))
         {
-            StatusMessage = "A saved location already uses that name.";
+            StatusMessage = Strings.Get("Locations_Save_NameInUse");
             return;
         }
         var updated = card.Location with { Name = name, Notes = edit.Description };
@@ -1401,7 +1414,7 @@ public partial class MainViewModel : ObservableObject
         if (item.IsVisible && VisibleCelestialCount > CelestialVisibilityPolicy.MaximumVisibleObjects)
         {
             item.SetVisibilitySilently(false);
-            CelestialLimitMessage = "A maximum of eight celestial objects can be visible at once.";
+            CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_Maximum");
             NotifyCelestialCount();
             return;
         }
@@ -1421,7 +1434,7 @@ public partial class MainViewModel : ObservableObject
         {
             if (VisibleCelestialCount >= CelestialVisibilityPolicy.MaximumVisibleObjects)
             {
-                CelestialLimitMessage = "Hide another object before making this target visible.";
+                CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_HideAnother");
                 return;
             }
             item.SetVisibilitySilently(true);
@@ -1462,7 +1475,7 @@ public partial class MainViewModel : ObservableObject
             CelestialObjectChanged, MakePrimaryTarget, RemoveCelestialObject, MoveCelestialObject);
         CelestialObjects.Add(item);
         if (visible) SetPrimaryTarget(item);
-        else CelestialLimitMessage = "Object added hidden because eight objects are already visible.";
+        else CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_AddedHidden");
         SaveCelestialSelections(); ScheduleAstronomyRefresh(80);
     }
 
@@ -1500,8 +1513,8 @@ public partial class MainViewModel : ObservableObject
         var current = Settings.EffectiveCelestialObjects;
         var isDefault = current.DefaultPrimaryTargetId == "sun" &&
                         current.EffectiveConfiguredObjects.SequenceEqual(CelestialObjectSettings.Defaults);
-        if (!isDefault && !await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation("Restore default objects?",
-                "Your configured celestial objects will be replaced by the Sun and the Moon.", "Restore defaults")))
+        if (!isDefault && !await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation(Strings.Get("Dialogs_RestoreDefaultObjects_Title"),
+                Strings.Get("Dialogs_RestoreDefaultObjects_Message"), Strings.Get("Dialogs_RestoreDefaultObjects_Confirm"))))
             return;
         _session = _session with { VisibleObjects = CelestialObjectSettings.Defaults, TargetId = "sun" };
         Settings = Settings with { CelestialObjects = new CelestialObjectSettings(CelestialObjectSettings.Defaults, "sun") };
@@ -1535,7 +1548,7 @@ public partial class MainViewModel : ObservableObject
     {
         IsWeatherRefreshing = true;
         RefreshWeatherCommand.NotifyCanExecuteChanged();
-        StatusMessage = "Refreshing weather…";
+        StatusMessage = Strings.Get("Planner_Weather_Refreshing");
         _logger.LogInformation("Manual weather refresh requested");
         // Captured before the first await: what this answer describes.
         var requested = _session;
@@ -1554,12 +1567,12 @@ public partial class MainViewModel : ObservableObject
             if (result.State == DataState.Ready && result.Conditions is not null && Snapshot is not null)
             {
                 Snapshot = Snapshot with { Weather = result };
-                StatusMessage = "Weather refreshed";
+                StatusMessage = Strings.Get("Planner_Weather_Refreshed");
                 NotifySnapshotProperties();
             }
             else
             {
-                StatusMessage = "Weather refresh failed: " + result.Message;
+                StatusMessage = Strings.Format("Planner_Weather_RefreshFailed_Format", result.Message);
                 _logger.LogWarning("Manual weather refresh failed: {Message}", result.Message);
             }
         }
@@ -1570,7 +1583,7 @@ public partial class MainViewModel : ObservableObject
                 _logger.LogDebug(ex, "Discarded a failed weather request that had been superseded");
                 return;
             }
-            StatusMessage = "Weather refresh failed: " + ex.Message;
+            StatusMessage = Strings.Format("Planner_Weather_RefreshFailed_Format", ex.Message);
             _logger.LogWarning(ex, "Manual weather refresh failed");
         }
         finally { IsWeatherRefreshing = false; RefreshWeatherCommand.NotifyCanExecuteChanged(); }
@@ -1590,7 +1603,7 @@ public partial class MainViewModel : ObservableObject
         if (SavedLocations.Any(location => location.Id != existing?.Id &&
                                            location.Name.Equals(proposedName, StringComparison.CurrentCultureIgnoreCase)))
         {
-            StatusMessage = "A saved location already uses that name.";
+            StatusMessage = Strings.Get("Locations_Save_NameInUse");
             return;
         }
         var location = existing is null
@@ -1609,8 +1622,8 @@ public partial class MainViewModel : ObservableObject
         SyncLocationHomepage();
         var saved = await FlushAsync();
         if (requiresMapGeneration) await GenerateSavedLocationMapAsync(location);
-        StatusMessage = !saved ? "Location could not be saved"
-            : existing is null ? "Location saved" : "Location updated";
+        StatusMessage = !saved ? Strings.Get("Locations_Save_Failed")
+            : existing is null ? Strings.Get("Locations_Save_Saved") : Strings.Get("Locations_Save_Updated");
     }
 
     [RelayCommand]
@@ -1618,9 +1631,9 @@ public partial class MainViewModel : ObservableObject
     {
         var now = _clock.GetCurrentInstant().ToDateTimeOffset();
         var suggestedName = _resolvedPlaceSuggestion ?? (string.IsNullOrWhiteSpace(LocationName) ||
-                            LocationName.Equals("Current location", StringComparison.OrdinalIgnoreCase) ||
-                            LocationName.Equals("New location", StringComparison.OrdinalIgnoreCase)
-            ? $"Location {SavedLocations.Count + 1}"
+                            LocationName.Equals(Strings.Get("Planner_Location_CurrentLocation_Name"), StringComparison.OrdinalIgnoreCase) ||
+                            LocationName.Equals(Strings.Get("Planner_Location_NewLocation_Name"), StringComparison.OrdinalIgnoreCase)
+            ? Strings.Format("Locations_DefaultName_Format", SavedLocations.Count + 1)
             : LocationName.Trim());
         var draft = new SavedLocation(Guid.NewGuid(), suggestedName, _session.Observer, _session.TimeZoneId,
             SortOrder: SavedLocations.Count, DateAddedUtc: now,
@@ -1632,8 +1645,8 @@ public partial class MainViewModel : ObservableObject
                 location.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase)))
         {
             StatusMessage = name.Length == 0
-                ? "A location name is required."
-                : "A saved location already uses that name.";
+                ? Strings.Get("Locations_Save_NameRequired")
+                : Strings.Get("Locations_Save_NameInUse");
             return;
         }
 
@@ -1645,7 +1658,7 @@ public partial class MainViewModel : ObservableObject
         SyncLocationHomepage();
         var saved = await FlushAsync();
         await GenerateSavedLocationMapAsync(location);
-        StatusMessage = saved ? "Location saved" : "Location could not be saved";
+        StatusMessage = saved ? Strings.Get("Locations_Save_Saved") : Strings.Get("Locations_Save_Failed");
     }
 
     [RelayCommand(CanExecute = nameof(CanDeleteLocation))]
@@ -2034,7 +2047,7 @@ public partial class MainViewModel : ObservableObject
         {
             Phase = PlannerRefreshPhase.CalculatingAstronomy,
             AstronomyState = PlannerRefreshWorkState.Running,
-            StatusText = "Calculating celestial positions…"
+            StatusText = Strings.Get("Planning_Status_CalculatingPositions")
         });
 
         var observerWork = scope == PlannerRefreshScope.Observer
@@ -2069,8 +2082,8 @@ public partial class MainViewModel : ObservableObject
             {
                 Phase = partial ? PlannerRefreshPhase.Partial : PlannerRefreshPhase.Ready,
                 StatusText = partial
-                    ? "Planner ready · some environmental data unavailable"
-                    : "Planner ready"
+                    ? Strings.Get("Planner_Status_ReadyPartial")
+                    : Strings.Get("Planner_Status_Ready")
             });
             // Scheduled rather than awaited inside this try: a save failure is reported by the save
             // pipeline and must not be shown as a planner-calculation failure.
@@ -2088,7 +2101,7 @@ public partial class MainViewModel : ObservableObject
                 {
                     Phase = PlannerRefreshPhase.Error,
                     AstronomyState = PlannerRefreshWorkState.Error,
-                    StatusText = "Planner update failed: " + ex.Message
+                    StatusText = Strings.Format("Planner_Status_UpdateFailed_Format", ex.Message)
                 });
             }
             else _logger.LogDebug(ex, "Ignored failure from superseded planning refresh");
@@ -2117,7 +2130,7 @@ public partial class MainViewModel : ObservableObject
             UpdateRefresh(generation, state => state with
             {
                 CameraTerrainState = PlannerRefreshWorkState.Running,
-                StatusText = "Planner ready · calculating current view terrain…"
+                StatusText = Strings.Get("Planner_Status_CalculatingViewTerrain")
             });
             var horizon = await priorityTerrain(bearings, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
@@ -2139,7 +2152,7 @@ public partial class MainViewModel : ObservableObject
                 {
                     CameraTerrainState = PlannerRefreshWorkState.Ready,
                     StatusText = horizon.IsComplete ? EnrichmentStatus(state) :
-                        "Planner ready · refining terrain horizon…"
+                        Strings.Get("Planner_Status_RefiningHorizon")
                 });
             }
             finally { _plannerSnapshotCommitGate.Release(); }
@@ -2193,7 +2206,7 @@ public partial class MainViewModel : ObservableObject
         {
             AstronomyState = PlannerRefreshWorkState.Ready,
             Phase = PlannerRefreshPhase.UpdatingCelestialOverlays,
-            StatusText = "Updating target directions…"
+            StatusText = Strings.Get("Planner_Status_UpdatingTargets")
         });
         Snapshot = core;
         NotifySnapshotProperties();
@@ -2201,7 +2214,7 @@ public partial class MainViewModel : ObservableObject
         {
             CelestialOverlayState = PlannerRefreshWorkState.Ready,
             Phase = PlannerRefreshPhase.UpdatingCameraOverlay,
-            StatusText = "Updating camera view…"
+            StatusText = Strings.Get("Planner_Status_UpdatingCamera")
         });
         UpdateRefresh(generation, state => state with
         {
@@ -2222,7 +2235,7 @@ public partial class MainViewModel : ObservableObject
                     ? PlannerRefreshWorkState.Running : PlannerRefreshWorkState.NotRequired,
                 EnvironmentMetadataState = PlannerRefreshWorkState.Running,
                 StatusText = state.IsCoreReady ? (Settings.EnableTerrainCalculations
-                    ? "Planner ready · loading terrain…" : "Planner ready · loading environment metadata…") : state.StatusText
+                    ? Strings.Get("Planner_Status_LoadingTerrain") : Strings.Get("Planner_Status_LoadingEnvironment")) : state.StatusText
             });
             var environment = await environmentTask;
             await coreCommit;
@@ -2279,7 +2292,7 @@ public partial class MainViewModel : ObservableObject
             UpdateRefresh(generation, state => state with
             {
                 WeatherState = PlannerRefreshWorkState.Running,
-                StatusText = state.IsCoreReady ? "Planner ready · loading weather…" : state.StatusText
+                StatusText = state.IsCoreReady ? Strings.Get("Planner_Status_LoadingWeather") : state.StatusText
             });
             var weather = await weatherTask;
             await coreCommit;
@@ -2359,12 +2372,12 @@ public partial class MainViewModel : ObservableObject
         if (IsRefreshWorkLoading(state.GroundTerrainState))
             return state.IsCoreReady
                 ? state.CameraTerrainState == PlannerRefreshWorkState.Ready
-                    ? "Planner ready · refining terrain horizon…"
-                    : "Planner ready · loading terrain…"
+                    ? Strings.Get("Planner_Status_RefiningHorizon")
+                    : Strings.Get("Planner_Status_LoadingTerrain")
                 : state.StatusText;
         if (IsRefreshWorkLoading(state.WeatherState))
-            return state.IsCoreReady ? "Planner ready · loading weather…" : state.StatusText;
-        return state.IsCoreReady ? "Applying environmental visibility…" : state.StatusText;
+            return state.IsCoreReady ? Strings.Get("Planner_Status_LoadingWeather") : state.StatusText;
+        return state.IsCoreReady ? Strings.Get("Planner_Status_ApplyingVisibility") : state.StatusText;
     }
 
     private void LoadSessionIntoControls()
@@ -2556,6 +2569,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsElevationManualOverride));
         OnPropertyChanged(nameof(TerrainElevationResolutionState));
         OnPropertyChanged(nameof(ResolvedGroundElevationMetres));
+        OnPropertyChanged(nameof(GroundElevationDisplay));
         OnPropertyChanged(nameof(CanResetGroundElevation));
         OnPropertyChanged(nameof(GroundElevationSourceText));
         OnPropertyChanged(nameof(EffectiveObserverAltitudeText));
@@ -2591,31 +2605,18 @@ public partial class MainViewModel : ObservableObject
 
     private string FormatHorizonState(bool isAvailable, EnvironmentalDataState? state)
     {
-        if (CurrentTerrain is null) return "Loading";
-        if (isAvailable) return "Ready";
+        if (CurrentTerrain is null) return Strings.Get("Planner_Horizon_State_Loading");
+        if (isAvailable) return Strings.Get("Planner_Horizon_State_Ready");
         return state is EnvironmentalDataState.Error or EnvironmentalDataState.InvalidData
-            ? "Error"
-            : "Unavailable";
+            ? Strings.Get("Planner_Horizon_State_Error")
+            : Strings.Get("Planner_Horizon_State_Unavailable");
     }
 
     private string FormatObstruction(bool hasData, double? distanceMetres)
     {
         if (CurrentTerrain is null || !hasData) return "—";
-        if (!distanceMetres.HasValue) return "Clear";
-        var units = Settings.EffectiveMeasurementSystem;
-        if (units == MeasurementSystem.Metric && distanceMetres.Value < 1_000)
-        {
-            var roundedMetres = Math.Round(distanceMetres.Value / 10,
-                MidpointRounding.AwayFromZero) * 10;
-            return $"{Math.Max(10, roundedMetres):F0} m";
-        }
-        if (units != MeasurementSystem.Metric && distanceMetres.Value < 1_609.344)
-        {
-            var feet = distanceMetres.Value * 3.280839895;
-            var roundedFeet = Math.Round(feet / 50, MidpointRounding.AwayFromZero) * 50;
-            return $"{Math.Max(50, roundedFeet):F0} ft";
-        }
-        return MeasurementUnits.Visibility(distanceMetres.Value / 1_000, units).Format();
+        if (!distanceMetres.HasValue) return Strings.Get("Planner_Horizon_Obstruction_Clear");
+        return Settings.MeasurementProfile.ApproximateDistance(distanceMetres.Value).Format();
     }
 
     private static string FormatHorizonAngle(double? angleDegrees) =>
@@ -2625,14 +2626,14 @@ public partial class MainViewModel : ObservableObject
     private static string Value(double? value, string suffix) => value.HasValue ? $"{value:F0}{suffix}" : "—";
     private static string MoonPhaseName(double angle) => Angles.NormaliseDegrees(angle) switch
     {
-        < 22.5 or >= 337.5 => "New Moon",
-        < 67.5 => "Waxing crescent",
-        < 112.5 => "First quarter",
-        < 157.5 => "Waxing gibbous",
-        < 202.5 => "Full Moon",
-        < 247.5 => "Waning gibbous",
-        < 292.5 => "Last quarter",
-        _ => "Waning crescent"
+        < 22.5 or >= 337.5 => Strings.Get("Planner_Moon_Phase_New"),
+        < 67.5 => Strings.Get("Planner_Moon_Phase_WaxingCrescent"),
+        < 112.5 => Strings.Get("Planner_Moon_Phase_FirstQuarter"),
+        < 157.5 => Strings.Get("Planner_Moon_Phase_WaxingGibbous"),
+        < 202.5 => Strings.Get("Planner_Moon_Phase_Full"),
+        < 247.5 => Strings.Get("Planner_Moon_Phase_WaningGibbous"),
+        < 292.5 => Strings.Get("Planner_Moon_Phase_LastQuarter"),
+        _ => Strings.Get("Planner_Moon_Phase_WaningCrescent")
     };
 }
 

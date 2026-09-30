@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Dialogs_ClearTerrainCache_Confirm" xml:space="preserve">
+    <value>Clear terrain cache</value>
+  </data>
+  <data name="Dialogs_ClearTerrainCache_Message" xml:space="preserve">
+    <value>Cached terrain and terrain-classification data will be removed and downloaded again when needed. Saved locations and settings are not affected.</value>
+  </data>
+  <data name="Dialogs_ClearTerrainCache_Title" xml:space="preserve">
+    <value>Clear terrain cache?</value>
+  </data>
+  <data name="Dialogs_DeleteLocation_Confirm" xml:space="preserve">
+    <value>Delete</value>
+  </data>
+  <data name="Dialogs_DeleteLocation_Message_Format" xml:space="preserve">
+    <value>Delete ‘{0}’? This cannot be undone.</value>
+    <comment>{0} is the location name.</comment>
+  </data>
+  <data name="Dialogs_DeleteLocation_Title" xml:space="preserve">
+    <value>Delete saved location</value>
+  </data>
+  <data name="Dialogs_RefreshSettlement_Confirm" xml:space="preserve">
+    <value>Refresh settlement</value>
+  </data>
+  <data name="Dialogs_RefreshSettlement_Message_Format" xml:space="preserve">
+    <value>Rebuild WSF settlement layers for all {0} saved locations without redownloading base maps or road and water data?</value>
+    <comment>{0} is the number of saved locations.</comment>
+  </data>
+  <data name="Dialogs_RefreshSettlement_Title" xml:space="preserve">
+    <value>Refresh WSF settlement layers</value>
+  </data>
+  <data name="Dialogs_RegenerateMapImages_Confirm" xml:space="preserve">
+    <value>Regenerate all</value>
+  </data>
+  <data name="Dialogs_RegenerateMapImages_Message_Format" xml:space="preserve">
+    <value>Download fresh raster maps and road and water overlays for all {0} saved locations? Shared environmental tiles will be reused.</value>
+    <comment>{0} is the number of saved locations.</comment>
+  </data>
+  <data name="Dialogs_RegenerateMapImages_Title" xml:space="preserve">
+    <value>Regenerate all map images</value>
+  </data>
+  <data name="Dialogs_RemoveAtlas_Confirm" xml:space="preserve">
+    <value>Remove atlas</value>
+  </data>
+  <data name="Dialogs_RemoveAtlas_Message" xml:space="preserve">
+    <value>The installed atlas data will be deleted. The light pollution overlay will be unavailable until it is installed again, which downloads it anew.</value>
+  </data>
+  <data name="Dialogs_RemoveAtlas_Title" xml:space="preserve">
+    <value>Remove the Light Pollution Atlas?</value>
+  </data>
+  <data name="Dialogs_RemoveCamera_Confirm" xml:space="preserve">
+    <value>Remove camera</value>
+  </data>
+  <data name="Dialogs_RemoveCamera_Title" xml:space="preserve">
+    <value>Remove camera?</value>
+  </data>
+  <data name="Dialogs_RemoveCamera_Unnamed_Message" xml:space="preserve">
+    <value>This camera will be removed from your equipment.</value>
+  </data>
+  <data name="Dialogs_RemoveEquipment_Named_Message" xml:space="preserve">
+    <value>“{0}” will be removed from your equipment.</value>
+    <comment>{0} is the camera or lens name.</comment>
+  </data>
+  <data name="Dialogs_RemoveLens_Confirm" xml:space="preserve">
+    <value>Remove lens</value>
+  </data>
+  <data name="Dialogs_RemoveLens_Title" xml:space="preserve">
+    <value>Remove lens?</value>
+  </data>
+  <data name="Dialogs_RemoveLens_Unnamed_Message" xml:space="preserve">
+    <value>This lens will be removed from your equipment.</value>
+  </data>
+  <data name="Dialogs_RestoreDefaultObjects_Confirm" xml:space="preserve">
+    <value>Restore defaults</value>
+  </data>
+  <data name="Dialogs_RestoreDefaultObjects_Message" xml:space="preserve">
+    <value>Your configured celestial objects will be replaced by the Sun and the Moon.</value>
+  </data>
+  <data name="Dialogs_RestoreDefaultObjects_Title" xml:space="preserve">
+    <value>Restore default objects?</value>
+  </data>
+</root>

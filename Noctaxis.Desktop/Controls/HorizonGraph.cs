@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
@@ -77,14 +78,14 @@ public sealed class HorizonGraph : ChromeDrawingControl
         DrawIdentityMarkers(context, plot, culminations);
         if (Snapshot.Path.Samples.Count > 1)
         {
-            DrawMarker(context, Snapshot.Path.Events.Rise, "R", plot);
-            DrawMarker(context, Snapshot.Path.Events.Transit, "T", plot);
-            DrawMarker(context, Snapshot.Path.Events.Set, "S", plot);
-            DrawMarker(context, Snapshot.Session.Instant, "NOW", plot);
+            DrawMarker(context, Snapshot.Path.Events.Rise, Strings.Get("Planner_Timeline_Marker_Rise"), plot);
+            DrawMarker(context, Snapshot.Path.Events.Transit, Strings.Get("Planner_Timeline_Marker_Transit"), plot);
+            DrawMarker(context, Snapshot.Path.Events.Set, Strings.Get("Planner_Timeline_Marker_Set"), plot);
+            DrawMarker(context, Snapshot.Session.Instant, Strings.Get("Planner_Timeline_Marker_Now"), plot);
         }
 
-        context.DrawText(ChromeText("ALTITUDE  +90°"), new Point(5, 2));
-        var start = ChromeText("00:00"); var middle = ChromeText("LOCAL TIME"); var end = ChromeText("24:00");
+        context.DrawText(ChromeText(Strings.Get("Planner_Timeline_AltitudeAxis_Label")), new Point(5, 2));
+        var start = ChromeText(Strings.Get("Planner_Timeline_DayStart_Label")); var middle = ChromeText(Strings.Get("Planner_Timeline_LocalTime_Label")); var end = ChromeText(Strings.Get("Planner_Timeline_DayEnd_Label"));
         var labelY = plot.Bottom + 6;
         context.DrawText(start, new Point(plot.Left, labelY));
         context.DrawText(middle, new Point(plot.Center.X - middle.Width / 2, labelY));

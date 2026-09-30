@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Planning;
@@ -45,11 +46,11 @@ public partial class MainViewModel
         ? DerivedCameraFraming?.CameraDepth : null;
     public double TerrainFrameThreshold => Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent / 100;
     public string TerrainFrameDirection => TerrainFrameDepth?.UpperAltitude <= 0
-        ? "Ground-facing · frame below horizontal horizon" : string.Empty;
-    public string TerrainFrameStatus => !Settings.EnableTerrainCalculations ? "Terrain calculations disabled"
+        ? Strings.Get("Planner_Terrain_Frame_GroundFacing") : string.Empty;
+    public string TerrainFrameStatus => !Settings.EnableTerrainCalculations ? Strings.Get("Terrain_CalculationsDisabled")
         : TerrainFrameDepth is not null ? string.Empty
         : PlannerRefresh.GroundTerrainState is PlannerRefreshWorkState.Running or PlannerRefreshWorkState.Pending
-            ? "Resolving terrain…" : "Terrain unavailable";
+            ? Strings.Get("Terrain_Status_Resolving") : Strings.Get("Terrain_Status_Unavailable");
     public string CameraFrameDiagnostics => !ShowTerrainDebugOverlay ? string.Empty :
         CameraFramingVisibility?.EffectiveTerrainObstructions.MinBy(s => Math.Abs(Angles.NormaliseSignedDegrees(s.BearingDegrees - TerrainDebugBearing))) is { } sample
         ? $"Camera pitch: {CameraPitchDegrees:0.0}°\nVertical FoV: {CurrentSnapshot?.FieldOfView.VerticalDegrees:0.0}°\n" +

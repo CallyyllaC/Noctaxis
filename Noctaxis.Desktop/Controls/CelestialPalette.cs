@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia;
 using Avalonia.Media;
 using Noctaxis.Core.Domain;
@@ -48,8 +49,8 @@ internal static class CelestialPalette
     /// <summary>Compact line-end label: "Sun", "Moon" or the catalogue identifier.</summary>
     public static string ShortLabel(AstralTarget target)
     {
-        if (target.IsSun) return "Sun";
-        if (target.IsMoon) return "Moon";
+        if (target.IsSun) return Strings.Get("Planner_Targets_Sun_ShortLabel");
+        if (target.IsMoon) return Strings.Get("Planner_Targets_Moon_ShortLabel");
         var label = string.IsNullOrWhiteSpace(target.PrimaryIdentifier) ? target.DisplayName : target.PrimaryIdentifier;
         return label.Length <= 10 ? label : label[..9] + "…";
     }

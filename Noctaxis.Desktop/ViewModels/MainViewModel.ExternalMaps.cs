@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Noctaxis.Core.Domain;
@@ -23,6 +24,6 @@ public partial class MainViewModel
     private void OpenInMaps()
     {
         if (_externalMaps.TryOpen(Latitude, Longitude, Settings.ExternalMapProvider, out var error)) return;
-        StatusMessage = $"Could not open Maps: {error}";
+        StatusMessage = Strings.Format("Planner_Location_OpenMapsFailed_Format", error);
     }
 }

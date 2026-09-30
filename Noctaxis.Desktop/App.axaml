@@ -159,6 +159,39 @@
       <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
+    <!-- Application navigation (Locations / Planner / Settings): lightweight text navigation, not a row of
+         contained tabs. An inactive page is plain text on the page background; the selected page is named by
+         accent colour, weight and the Fluent selection pipe beneath it, so selection never rests on colour
+         alone and no item is drawn as a filled, bordered box. The row stays a comfortable touch target: its
+         height and padding are hit area, not decoration. -->
+    <Style Selector="TabControl.appNavigation">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem">
+      <Setter Property="FontSize" Value="{DynamicResource TextBody}" />
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="14,7" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource ButtonHover}" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem:selected">
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem:selected /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="TabControl.appNavigation > TabItem:selected:pointerover /template/ Border#PART_LayoutRoot">
+      <Setter Property="Background" Value="{DynamicResource ButtonHover}" />
+    </Style>
     <!-- Settings category navigation: a vertical rail beside the selected category. The rail scrolls on its
          own, takes at most about a third of the width (names wrap within it rather than squeezing the
          content), and each category's content scrolls independently. -->
@@ -206,6 +239,12 @@
     <Style Selector="Expander">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
       <Setter Property="Padding" Value="12" />
+      <!-- A header may be longer in another language or at a large text size: it wraps, never clips. -->
+      <Setter Property="HeaderTemplate">
+        <DataTemplate>
+          <TextBlock Text="{Binding}" TextWrapping="Wrap"/>
+        </DataTemplate>
+      </Setter>
     </Style>
     <Style Selector="Border.card">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
@@ -217,7 +256,8 @@
       <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
-      <Setter Property="Padding" Value="18,16" />
+      <!-- Room for the slightly larger type inside; the panel keeps its proportions rather than growing. -->
+      <Setter Property="Padding" Value="22,19" />
     </Style>
     <Style Selector="Border.emptyLocationPanel">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
@@ -228,7 +268,10 @@
     </Style>
     <Style Selector="Border.noctaxisDialogSurface">
       <Setter Property="Background" Value="{DynamicResource SurfaceBackground}" />
-      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
+      <!-- A dialog sits above the page, so its edge is the stronger of the two border roles: enough to read
+           as a separate surface without a loud frame. Elevation is left to the window the dialog lives in,
+           which is where it is drawn consistently across platforms. -->
+      <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="12" />
       <Setter Property="ClipToBounds" Value="True" />

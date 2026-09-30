@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Terrain_Cache_DeleteFailed_Format" xml:space="preserve">
+    <value>{0} terrain cache file(s) could not be deleted and remain on disk.</value>
+    <comment>{0} is the number of files.</comment>
+  </data>
+  <data name="Terrain_CalculationsDisabled" xml:space="preserve">
+    <value>Terrain calculations disabled</value>
+  </data>
+  <data name="Terrain_GroundSource_DisabledFallback" xml:space="preserve">
+    <value>Terrain disabled: 0 m MSL fallback</value>
+  </data>
+  <data name="Terrain_GroundSource_ManualOverride" xml:space="preserve">
+    <value>Manual ground-elevation override</value>
+  </data>
+  <data name="Terrain_Status_ElevationUnavailable" xml:space="preserve">
+    <value>Terrain elevation unavailable</value>
+  </data>
+  <data name="Terrain_Status_Horizon_Format" xml:space="preserve">
+    <value>{0} terrain horizon</value>
+    <comment>{0} is the terrain source identifier.</comment>
+  </data>
+  <data name="Terrain_Status_HorizonLoading" xml:space="preserve">
+    <value>Environmental horizon loading</value>
+  </data>
+  <data name="Terrain_Status_Refining" xml:space="preserve">
+    <value>Current camera terrain ready; full horizon refining</value>
+  </data>
+  <data name="Terrain_Status_Resolving" xml:space="preserve">
+    <value>Resolving terrain…</value>
+  </data>
+  <data name="Terrain_Status_ResolvingProfile" xml:space="preserve">
+    <value>Resolving terrain profile</value>
+  </data>
+  <data name="Terrain_Status_Unavailable" xml:space="preserve">
+    <value>Terrain unavailable</value>
+  </data>
+</root>

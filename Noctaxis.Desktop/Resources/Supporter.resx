@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Supporter_AwooSupporterLicence_Description" xml:space="preserve">
+    <value>An Awoo supporter licence unlocks the supporter themes.</value>
+  </data>
+  <data name="Supporter_KoFi_OpenFailed" xml:space="preserve">
+    <value>Could not open Ko-fi in the default browser.</value>
+  </data>
+  <data name="Supporter_KoFi_OpenFailed_Format" xml:space="preserve">
+    <value>Could not open Ko-fi: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Supporter_Licence_Add_Button" xml:space="preserve">
+    <value>Add licence</value>
+  </data>
+  <data name="Supporter_Licence_DevelopmentOverride" xml:space="preserve">
+    <value>Supporter licence disabled by development override.</value>
+  </data>
+  <data name="Supporter_Licence_Failure_Malformed" xml:space="preserve">
+    <value>This licence code is not recognised.</value>
+  </data>
+  <data name="Supporter_Licence_Failure_NotSupporter" xml:space="preserve">
+    <value>This licence is not an Awoo supporter licence.</value>
+  </data>
+  <data name="Supporter_Licence_Failure_UnknownKey" xml:space="preserve">
+    <value>This licence was signed with an unknown Awoo key. Updating Noctaxis may be required.</value>
+  </data>
+  <data name="Supporter_Licence_Failure_UnsupportedVersion" xml:space="preserve">
+    <value>This licence uses a newer format that this version of Noctaxis does not support.</value>
+  </data>
+  <data name="Supporter_Licence_Failure_Unverified" xml:space="preserve">
+    <value>This licence could not be verified.</value>
+  </data>
+  <data name="Supporter_Licence_InvalidDetail_Format" xml:space="preserve">
+    <value>{0} Replace it with a valid licence to unlock the supporter themes.</value>
+    <comment>{0} is the sentence saying why the stored licence is invalid.</comment>
+  </data>
+  <data name="Supporter_Licence_NoLicence_Detail" xml:space="preserve">
+    <value>Add a licence key to unlock the supporter themes.</value>
+  </data>
+  <data name="Supporter_Licence_Rejected_Unchanged_Format" xml:space="preserve">
+    <value>{0} Your current licence has not been changed.</value>
+    <comment>{0} is the sentence saying why the entered licence was rejected.</comment>
+  </data>
+  <data name="Supporter_Licence_Replace_Button" xml:space="preserve">
+    <value>Replace licence</value>
+  </data>
+  <data name="Supporter_Licence_Status_Invalid" xml:space="preserve">
+    <value>Invalid licence</value>
+  </data>
+  <data name="Supporter_Licence_Status_None" xml:space="preserve">
+    <value>No licence installed</value>
+  </data>
+  <data name="Supporter_Licence_Status_Valid" xml:space="preserve">
+    <value>Valid licence</value>
+  </data>
+  <data name="Supporter_Licence_ValidDetail" xml:space="preserve">
+    <value>Awoo supporter licence.</value>
+  </data>
+  <data name="Supporter_Licence_ValidDetail_Issued_Format" xml:space="preserve">
+    <value>Awoo supporter licence, issued {0:d MMMM yyyy}.</value>
+    <comment>{0} is the issue date.</comment>
+  </data>
+  <data name="Supporter_LicenceKey_AccessibleName" xml:space="preserve">
+    <value>Licence key</value>
+  </data>
+  <data name="Supporter_LicenceKey_Label" xml:space="preserve">
+    <value>Licence key</value>
+  </data>
+  <data name="Supporter_ReplaceLicence_Button" xml:space="preserve">
+    <value>Replace licence</value>
+  </data>
+  <data name="Supporter_SupporterLicenceStatus_AccessibleName" xml:space="preserve">
+    <value>Supporter licence status</value>
+  </data>
+  <data name="Supporter_SupportKoFi_Button" xml:space="preserve">
+    <value>Support on Ko-fi</value>
+  </data>
+  <data name="Supporter_Tab" xml:space="preserve">
+    <value>Supporter</value>
+  </data>
+  <data name="Supporter_Title" xml:space="preserve">
+    <value>Supporter</value>
+  </data>
+</root>

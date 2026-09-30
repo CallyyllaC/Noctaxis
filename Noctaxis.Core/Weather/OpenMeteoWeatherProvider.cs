@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -143,7 +144,7 @@ public sealed class OpenMeteoWeatherProvider(
                 request.CacheDistanceKilometres, out var cached))
         {
             logger.LogInformation("Weather cache hit within {DistanceKm} km", request.CacheDistanceKilometres);
-            return new WeatherResult(DataState.Ready, cached, "Cached Open-Meteo forecast");
+            return new WeatherResult(DataState.Ready, cached, Strings.Get("Weather_Status_Cached"));
         }
 
         var variables = OpenMeteoVariables.For(request.EnabledFields);
@@ -157,7 +158,7 @@ public sealed class OpenMeteoWeatherProvider(
             logger.LogInformation("Reusing the downloaded Open-Meteo forecast within {DistanceKm} km",
                 request.CacheDistanceKilometres);
             cache.Store(request.Location, reused);
-            return new WeatherResult(DataState.Ready, reused, "Cached Open-Meteo forecast");
+            return new WeatherResult(DataState.Ready, reused, Strings.Get("Weather_Status_Cached"));
         }
 
         logger.LogInformation(request.ForceRefresh
@@ -170,26 +171,26 @@ public sealed class OpenMeteoWeatherProvider(
             using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                return new WeatherResult(DataState.Error, null, "Open-Meteo rate limit reached. Try again shortly.");
+                return new WeatherResult(DataState.Error, null, Strings.Get("Weather_Error_RateLimited"));
             if (!response.IsSuccessStatusCode)
-                return new WeatherResult(DataState.Error, null, $"Open-Meteo returned HTTP {(int)response.StatusCode}.");
+                return new WeatherResult(DataState.Error, null, Strings.Format("Weather_Error_Http_Format", (int)response.StatusCode));
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<OpenMeteoResponse>(stream, JsonOptions, cancellationToken)
                 .ConfigureAwait(false);
             var retrievedAt = clock.GetCurrentInstant();
-            var conditions = OpenMeteoMapper.Map(dto ?? throw new JsonException("Open-Meteo returned an empty response."),
+            var conditions = OpenMeteoMapper.Map(dto ?? throw new JsonException(Strings.Get("Weather_Error_EmptyResponse")),
                 request.ApproximateTime, retrievedAt);
             cache.Store(request.Location, conditions);
             // Retained only once the response mapped successfully, so nothing unusable is reused.
             _forecasts.Store(request.Location, variablesKey, dto.Hourly!, retrievedAt);
-            return new WeatherResult(DataState.Ready, conditions, "Open-Meteo forecast");
+            return new WeatherResult(DataState.Ready, conditions, Strings.Get("Weather_Status_Forecast"));
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or FormatException or OperationCanceledException)
         {
             logger.LogWarning(ex, "Open-Meteo request failed");
-            return new WeatherResult(DataState.Error, null, "Weather unavailable: " + ex.Message);
+            return new WeatherResult(DataState.Error, null, Strings.Format("Weather_Error_Unavailable_Format", ex.Message));
         }
     }
 
@@ -240,12 +241,12 @@ public static class OpenMeteoMapper
 {
     public static WeatherConditions Map(OpenMeteoResponse response, Instant selectedTime, Instant retrievedAt)
     {
-        var hourly = response.Hourly ?? throw new JsonException("Open-Meteo response has no hourly data.");
+        var hourly = response.Hourly ?? throw new JsonException(Strings.Get("Weather_Error_NoHourlyData"));
         if (hourly.Time is null || hourly.Time.Length == 0)
-            throw new JsonException("Open-Meteo response has no forecast times.");
+            throw new JsonException(Strings.Get("Weather_Error_NoForecastTimes"));
         return TryMap(hourly, selectedTime, retrievedAt, out var conditions)
             ? conditions
-            : throw new JsonException("The selected time is outside the available Open-Meteo forecast range.");
+            : throw new JsonException(Strings.Get("Weather_Error_OutsideForecastRange"));
     }
 
     /// <summary>
@@ -284,17 +285,20 @@ public static class OpenMeteoMapper
 
     private static string Summary(double? value) => value.HasValue ? (int)value.Value switch
     {
-        0 => "Clear sky", 1 => "Mainly clear", 2 => "Partly cloudy", 3 => "Overcast",
-        45 or 48 => "Fog", >= 51 and <= 57 => "Drizzle", >= 61 and <= 67 => "Rain",
-        >= 71 and <= 77 => "Snow", >= 80 and <= 82 => "Rain showers",
-        85 or 86 => "Snow showers", >= 95 and <= 99 => "Thunderstorm", _ => "Unknown conditions"
-    } : "No summary";
+        0 => Strings.Get("Weather_Summary_ClearSky"), 1 => Strings.Get("Weather_Summary_MainlyClear"),
+        2 => Strings.Get("Weather_Summary_PartlyCloudy"), 3 => Strings.Get("Weather_Summary_Overcast"),
+        45 or 48 => Strings.Get("Weather_Summary_Fog"), >= 51 and <= 57 => Strings.Get("Weather_Summary_Drizzle"),
+        >= 61 and <= 67 => Strings.Get("Weather_Summary_Rain"), >= 71 and <= 77 => Strings.Get("Weather_Summary_Snow"),
+        >= 80 and <= 82 => Strings.Get("Weather_Summary_RainShowers"), 85 or 86 => Strings.Get("Weather_Summary_SnowShowers"),
+        >= 95 and <= 99 => Strings.Get("Weather_Summary_Thunderstorm"), _ => Strings.Get("Weather_Summary_Unknown")
+    } : Strings.Get("Weather_Summary_None");
 
     private static string? PrecipitationType(double? value) => value.HasValue ? (int)value.Value switch
     {
-        >= 51 and <= 57 => "Drizzle", >= 61 and <= 67 => "Rain", >= 71 and <= 77 => "Snow",
-        >= 80 and <= 82 => "Rain showers", 85 or 86 => "Snow showers",
-        >= 95 and <= 99 => "Thunderstorm", _ => "None"
+        >= 51 and <= 57 => Strings.Get("Weather_Summary_Drizzle"), >= 61 and <= 67 => Strings.Get("Weather_Summary_Rain"),
+        >= 71 and <= 77 => Strings.Get("Weather_Summary_Snow"), >= 80 and <= 82 => Strings.Get("Weather_Summary_RainShowers"),
+        85 or 86 => Strings.Get("Weather_Summary_SnowShowers"),
+        >= 95 and <= 99 => Strings.Get("Weather_Summary_Thunderstorm"), _ => Strings.Get("Weather_Precipitation_None")
     } : null;
 }
 
@@ -326,5 +330,5 @@ public sealed class OpenMeteoHourly
 public sealed class OfflineWeatherProvider : IWeatherProvider
 {
     public Task<WeatherResult> GetWeatherAsync(WeatherRequest request, CancellationToken cancellationToken) =>
-        Task.FromResult(new WeatherResult(DataState.Error, null, "Weather provider is not available."));
+        Task.FromResult(new WeatherResult(DataState.Error, null, Strings.Get("Weather_Error_ProviderUnavailable")));
 }

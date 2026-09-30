@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,10 +21,10 @@ public partial class MainViewModel
     public static Uri KoFiUri { get; } = new("https://ko-fi.com/callyyllac");
     [ObservableProperty] private string _supporterLicenceInput = string.Empty;
     [ObservableProperty] private string _supporterLicenceStatus = NoLicenceDetail;
+    private static string NoLicenceDetail => Strings.Get("Supporter_Licence_NoLicence_Detail");
     [ObservableProperty] private string _supporterLicenceInputError = string.Empty;
     [ObservableProperty] private bool _isEditingSupporterLicence;
 
-    private const string NoLicenceDetail = "Add a licence key to unlock the supporter themes.";
 
     public bool HasAwooSupporterEntitlement { get; private set; }
     public SupporterLicenceState SupporterLicenceState { get; private set; }
@@ -32,9 +33,9 @@ public partial class MainViewModel
     /// <summary>The state in words, so it never depends on the tick or cross colour.</summary>
     public string SupporterLicenceStateLabel => SupporterLicenceState switch
     {
-        SupporterLicenceState.Valid => "Valid licence",
-        SupporterLicenceState.Invalid => "Invalid licence",
-        _ => "No licence installed"
+        SupporterLicenceState.Valid => Strings.Get("Supporter_Licence_Status_Valid"),
+        SupporterLicenceState.Invalid => Strings.Get("Supporter_Licence_Status_Invalid"),
+        _ => Strings.Get("Supporter_Licence_Status_None")
     };
 
     /// <summary>A supplementary mark beside the label; empty when there is no licence.</summary>
@@ -53,7 +54,7 @@ public partial class MainViewModel
     public bool IsSupporterLicenceEditorVisible => SupporterLicenceState != SupporterLicenceState.Valid || IsEditingSupporterLicence;
     public bool CanStartSupporterLicenceReplacement => SupporterLicenceState == SupporterLicenceState.Valid && !IsEditingSupporterLicence;
     public bool CanCancelSupporterLicenceReplacement => SupporterLicenceState == SupporterLicenceState.Valid && IsEditingSupporterLicence;
-    public string SupporterLicenceSubmitLabel => IsSupporterLicenceStored ? "Replace licence" : "Add licence";
+    public string SupporterLicenceSubmitLabel => Strings.Get(IsSupporterLicenceStored ? "Supporter_Licence_Replace_Button" : "Supporter_Licence_Add_Button");
     public bool HasSupporterLicenceInputError => !string.IsNullOrEmpty(SupporterLicenceInputError);
 
     partial void OnIsEditingSupporterLicenceChanged(bool value) => RaiseSupporterLicencePresentation();
@@ -81,10 +82,10 @@ public partial class MainViewModel
             : SupporterLicenceState.Invalid;
         _themeService?.SetSupporterEntitlement(HasAwooSupporterEntitlement);
         SupporterLicenceStatus = forcedUnlicensed && valid
-            ? "Supporter licence disabled by development override."
+            ? Strings.Get("Supporter_Licence_DevelopmentOverride")
             : result is null ? NoLicenceDetail
             : valid ? ValidDetail(result)
-            : FriendlyFailure(result) + " Replace it with a valid licence to unlock the supporter themes.";
+            : Strings.Format("Supporter_Licence_InvalidDetail_Format", FriendlyFailure(result));
         OnPropertyChanged(nameof(HasAwooSupporterEntitlement));
         RaiseSupporterLicencePresentation();
         // Replacing the picker items can echo selection changes through its two-way binding.
@@ -115,16 +116,16 @@ public partial class MainViewModel
 
     // Only the licence type and issue date are shown: the key id and signature are internal.
     private static string ValidDetail(SupporterLicenceResult result) => result.IssuedAt is { } issued
-        ? $"Awoo supporter licence, issued {issued.ToString("d MMMM yyyy", CultureInfo.CurrentCulture)}."
-        : "Awoo supporter licence.";
+        ? Strings.Format("Supporter_Licence_ValidDetail_Issued_Format", issued)
+        : Strings.Get("Supporter_Licence_ValidDetail");
 
     private static string FriendlyFailure(SupporterLicenceResult result) => result.Status switch
     {
-        SupporterLicenceVerificationStatus.Valid => "This licence is not an Awoo supporter licence.",
-        SupporterLicenceVerificationStatus.UnsupportedVersion => "This licence uses a newer format that this version of Noctaxis does not support.",
-        SupporterLicenceVerificationStatus.UnknownKey => "This licence was signed with an unknown Awoo key. Updating Noctaxis may be required.",
-        SupporterLicenceVerificationStatus.Malformed => "This licence code is not recognised.",
-        _ => "This licence could not be verified."
+        SupporterLicenceVerificationStatus.Valid => Strings.Get("Supporter_Licence_Failure_NotSupporter"),
+        SupporterLicenceVerificationStatus.UnsupportedVersion => Strings.Get("Supporter_Licence_Failure_UnsupportedVersion"),
+        SupporterLicenceVerificationStatus.UnknownKey => Strings.Get("Supporter_Licence_Failure_UnknownKey"),
+        SupporterLicenceVerificationStatus.Malformed => Strings.Get("Supporter_Licence_Failure_Malformed"),
+        _ => Strings.Get("Supporter_Licence_Failure_Unverified")
     };
 
     /// <summary>Adds or replaces the licence. The candidate is verified first; a rejected one leaves the stored licence untouched.</summary>
@@ -135,9 +136,9 @@ public partial class MainViewModel
         var result = _supporterLicenceVerifier.Verify(candidate);
         if (!result.IsAwooSupporter)
         {
-            SupporterLicenceInputError = FriendlyFailure(result) + (IsSupporterLicenceStored
-                ? " Your current licence has not been changed."
-                : string.Empty);
+            SupporterLicenceInputError = IsSupporterLicenceStored
+                ? Strings.Format("Supporter_Licence_Rejected_Unchanged_Format", FriendlyFailure(result))
+                : FriendlyFailure(result);
             return;
         }
 
@@ -171,7 +172,7 @@ public partial class MainViewModel
     {
         if (_externalUriLauncher.TryOpen(KoFiUri, out var error)) return;
         StatusMessage = string.IsNullOrWhiteSpace(error)
-            ? "Could not open Ko-fi in the default browser."
-            : $"Could not open Ko-fi: {error}";
+            ? Strings.Get("Supporter_KoFi_OpenFailed")
+            : Strings.Format("Supporter_KoFi_OpenFailed_Format", error);
     }
 }

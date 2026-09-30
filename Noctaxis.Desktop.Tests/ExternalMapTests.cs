@@ -51,7 +51,7 @@ public sealed class ExternalMapTests
     [Fact]
     public void PlannerAndSettingsMarkupWireOneActionAndProviderDropdown()
     {
-        var document = System.Xml.Linq.XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var action = Assert.Single(document.Descendants(), e => e.Name.LocalName == "Button" && e.Attribute("Content")?.Value == "Open in Maps");
         Assert.Equal("{Binding OpenInMapsCommand}", action.Attribute("Command")?.Value);
         Assert.Contains(action.Ancestors(), e => e.Attribute("Header")?.Value == "Planner");

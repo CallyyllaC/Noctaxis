@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Locations_AddLocation_AccessibleName" xml:space="preserve">
+    <value>Add location</value>
+  </data>
+  <data name="Locations_AddLocation_Label" xml:space="preserve">
+    <value>Add location</value>
+  </data>
+  <data name="Locations_Card_AddFavourite_AccessibleName" xml:space="preserve">
+    <value>Add to favourites</value>
+  </data>
+  <data name="Locations_Card_Eyebrow_Favourite" xml:space="preserve">
+    <value>FAVOURITE LOCATION</value>
+  </data>
+  <data name="Locations_Card_Eyebrow_Saved" xml:space="preserve">
+    <value>SAVED LOCATION</value>
+  </data>
+  <data name="Locations_Card_Favourite_Label" xml:space="preserve">
+    <value>Favourite</value>
+  </data>
+  <data name="Locations_Card_LastUsed_Date_Format" xml:space="preserve">
+    <value>Used {0:dd MMM yyyy}</value>
+    <comment>{0} is the local date.</comment>
+  </data>
+  <data name="Locations_Card_LastUsed_Days_Format" xml:space="preserve">
+    <value>Used {0} days ago</value>
+    <comment>{0} is a whole number of days (1-13). English uses &quot;days&quot; for every count.</comment>
+  </data>
+  <data name="Locations_Card_LastUsed_Hours_Format" xml:space="preserve">
+    <value>Used {0} hr ago</value>
+    <comment>{0} is a whole number of hours (1-23).</comment>
+  </data>
+  <data name="Locations_Card_LastUsed_JustNow" xml:space="preserve">
+    <value>Used just now</value>
+  </data>
+  <data name="Locations_Card_LastUsed_Minutes_Format" xml:space="preserve">
+    <value>Used {0} min ago</value>
+    <comment>{0} is a whole number of minutes (2-59).</comment>
+  </data>
+  <data name="Locations_Card_Open_AccessibleName" xml:space="preserve">
+    <value>{0}. Open in Planner</value>
+    <comment>{0} is the location name.</comment>
+  </data>
+  <data name="Locations_Card_OpenCurrent_AccessibleName" xml:space="preserve">
+    <value>{0}, current Planner location. Open in Planner</value>
+    <comment>{0} is the location name.</comment>
+  </data>
+  <data name="Locations_Card_OpenFavourite_AccessibleName" xml:space="preserve">
+    <value>{0}, favourite. Open in Planner</value>
+    <comment>{0} is the location name.</comment>
+  </data>
+  <data name="Locations_Card_OpenFavouriteCurrent_AccessibleName" xml:space="preserve">
+    <value>{0}, favourite, current Planner location. Open in Planner</value>
+    <comment>{0} is the location name.</comment>
+  </data>
+  <data name="Locations_Card_RemoveFavourite_AccessibleName" xml:space="preserve">
+    <value>Remove from favourites</value>
+  </data>
+  <data name="Locations_Card_Semantic_Available" xml:space="preserve">
+    <value>Semantic overlay available</value>
+  </data>
+  <data name="Locations_Card_Semantic_Retained" xml:space="preserve">
+    <value>Previous semantic overlay retained.</value>
+  </data>
+  <data name="Locations_Card_Semantic_Retained_Format" xml:space="preserve">
+    <value>Previous semantic overlay retained: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Locations_Card_Semantic_StatusUnavailable" xml:space="preserve">
+    <value>Semantic overlay status unavailable</value>
+  </data>
+  <data name="Locations_Card_Semantic_Unavailable" xml:space="preserve">
+    <value>Semantic overlay unavailable.</value>
+  </data>
+  <data name="Locations_Card_Semantic_Unavailable_Format" xml:space="preserve">
+    <value>Semantic overlay unavailable: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Locations_Card_Settlement_Available_Format" xml:space="preserve">
+    <value>WSF settlement data available ({0:N0} sampled cells)</value>
+    <comment>{0} is the number of sampled cells.</comment>
+  </data>
+  <data name="Locations_Card_Settlement_Empty" xml:space="preserve">
+    <value>Valid WSF coverage contains no settlement in this map area.</value>
+  </data>
+  <data name="Locations_Card_Settlement_InvalidRaster" xml:space="preserve">
+    <value>WSF returned data that failed scientific raster validation; the map remains usable.</value>
+  </data>
+  <data name="Locations_Card_Settlement_Partial" xml:space="preserve">
+    <value>WSF settlement data has partial coverage.</value>
+  </data>
+  <data name="Locations_Card_Settlement_SourceUnavailable" xml:space="preserve">
+    <value>The WSF source is currently unreachable; the map remains usable without settlement light.</value>
+  </data>
+  <data name="Locations_Card_Settlement_StatusUnavailable" xml:space="preserve">
+    <value>Settlement-density status unavailable</value>
+  </data>
+  <data name="Locations_Card_Settlement_TileAbsent" xml:space="preserve">
+    <value>The WSF service reports no coverage tile for this map area.</value>
+  </data>
+  <data name="Locations_Card_Settlement_Unavailable" xml:space="preserve">
+    <value>WSF settlement data unavailable; the map remains usable without settlement light.</value>
+  </data>
+  <data name="Locations_Card_Unfavourite_Label" xml:space="preserve">
+    <value>Unfavourite</value>
+  </data>
+  <data name="Locations_CurrentLocation_Label" xml:space="preserve">
+    <value>Current location</value>
+  </data>
+  <data name="Locations_CurrentPlannerLocation_Label" xml:space="preserve">
+    <value>CURRENT PLANNER LOCATION</value>
+  </data>
+  <data name="Locations_DefaultName_Format" xml:space="preserve">
+    <value>Location {0}</value>
+    <comment>Suggested name for a new saved location; {0} is its number.</comment>
+  </data>
+  <data name="Locations_DeleteLocation_MenuItem" xml:space="preserve">
+    <value>Delete location</value>
+  </data>
+  <data name="Locations_Device_NotResolved" xml:space="preserve">
+    <value>Device location could not be resolved. The current planning location was not changed.</value>
+  </data>
+  <data name="Locations_Device_Selected" xml:space="preserve">
+    <value>Device location selected.</value>
+  </data>
+  <data name="Locations_Device_Unavailable" xml:space="preserve">
+    <value>Device location is unavailable.</value>
+  </data>
+  <data name="Locations_Edit_AddLocation_Button" xml:space="preserve">
+    <value>Add location</value>
+  </data>
+  <data name="Locations_Edit_Coordinates_Label" xml:space="preserve">
+    <value>Coordinates</value>
+  </data>
+  <data name="Locations_Edit_DescriptionOptional_Label" xml:space="preserve">
+    <value>Description (optional)</value>
+  </data>
+  <data name="Locations_Edit_AddLocation_Title" xml:space="preserve">
+    <value>Add location</value>
+    <comment>Window title when a new location is being saved.</comment>
+  </data>
+  <data name="Locations_Edit_AddLocation_Label" xml:space="preserve">
+    <value>Add location</value>
+    <comment>Heading inside the dialog when a new location is being saved.</comment>
+  </data>
+  <data name="Locations_Edit_LocationName_Label" xml:space="preserve">
+    <value>Location name</value>
+  </data>
+  <data name="Locations_Edit_NameRequired" xml:space="preserve">
+    <value>Location name is required.</value>
+  </data>
+  <data name="Locations_Edit_SaveChanges_Button" xml:space="preserve">
+    <value>Save changes</value>
+  </data>
+  <data name="Locations_EditLocation_MenuItem" xml:space="preserve">
+    <value>Edit location</value>
+  </data>
+  <data name="Locations_FavouritesKeptFirst_Description" xml:space="preserve">
+    <value> · favourites are kept first</value>
+  </data>
+  <data name="Locations_KeepPlacesWorth_Description" xml:space="preserve">
+    <value>Keep the places worth returning to close at hand.</value>
+  </data>
+  <data name="Locations_Label" xml:space="preserve">
+    <value>Locations</value>
+  </data>
+  <data name="Locations_MoreLocationActions_AccessibleName" xml:space="preserve">
+    <value>More location actions</value>
+  </data>
+  <data name="Locations_NoSavedLocationsYet_Label" xml:space="preserve">
+    <value>No saved locations yet</value>
+  </data>
+  <data name="Locations_RefreshSettlementImagery_MenuItem" xml:space="preserve">
+    <value>Refresh settlement imagery</value>
+  </data>
+  <data name="Locations_RegenerateMapImage_MenuItem" xml:space="preserve">
+    <value>Regenerate map image</value>
+  </data>
+  <data name="Locations_Save_Failed" xml:space="preserve">
+    <value>Location could not be saved</value>
+  </data>
+  <data name="Locations_Save_NameInUse" xml:space="preserve">
+    <value>A saved location already uses that name.</value>
+  </data>
+  <data name="Locations_Save_NameRequired" xml:space="preserve">
+    <value>A location name is required.</value>
+  </data>
+  <data name="Locations_Save_Saved" xml:space="preserve">
+    <value>Location saved</value>
+  </data>
+  <data name="Locations_Save_Updated" xml:space="preserve">
+    <value>Location updated</value>
+  </data>
+  <data name="Locations_SaveCurrentLocation_Button" xml:space="preserve">
+    <value>Save current location</value>
+  </data>
+  <data name="Locations_SaveCurrentPlanner_Description" xml:space="preserve">
+    <value>Save the current Planner pin to create your first location card.</value>
+  </data>
+  <data name="Locations_SaveCurrentPlannerPin_Label" xml:space="preserve">
+    <value>Save the current Planner pin</value>
+  </data>
+  <data name="Locations_SavedLocations_Label" xml:space="preserve">
+    <value>Saved locations</value>
+  </data>
+  <data name="Locations_SavingLocationUses_Description" xml:space="preserve">
+    <value>Saving a location uses the active Planner pin.</value>
+  </data>
+  <data name="Locations_Search_NoMatches" xml:space="preserve">
+    <value>No matching locations found.</value>
+  </data>
+  <data name="Locations_Search_PlaceTownCityPostcode_Placeholder" xml:space="preserve">
+    <value>Place, town, city, postcode, region or country</value>
+  </data>
+  <data name="Locations_Search_SearchPlace_Label" xml:space="preserve">
+    <value>Search for a place</value>
+  </data>
+  <data name="Locations_Search_SearchPlace_Title" xml:space="preserve">
+    <value>Search for a place</value>
+  </data>
+  <data name="Locations_Search_SearchPlaceTown_Description" xml:space="preserve">
+    <value>Search by place, town, city, postcode, region or country.</value>
+  </data>
+  <data name="Locations_Search_SelectResultOpen_Description" xml:space="preserve">
+    <value>Select a result to open it as the temporary Custom location.</value>
+  </data>
+  <data name="Locations_SearchPlace_Button" xml:space="preserve">
+    <value>Search for a place</value>
+  </data>
+  <data name="Locations_Sort_DateAdded" xml:space="preserve">
+    <value>Date added</value>
+  </data>
+  <data name="Locations_Sort_Name" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="Locations_Sort_RecentlyUsed" xml:space="preserve">
+    <value>Recently used</value>
+  </data>
+  <data name="Locations_SortSavedLocations_AccessibleName" xml:space="preserve">
+    <value>Sort saved locations</value>
+  </data>
+  <data name="Locations_Sort_Label" xml:space="preserve">
+    <value>Sort</value>
+    <comment>Label beside the saved-location sort list. How favourites are grouped is stated in the summary beside it.</comment>
+  </data>
+  <data name="Locations_Summary_Many_Format" xml:space="preserve">
+    <value>{0} saved locations</value>
+    <comment>{0} is the number of saved locations, never 1.</comment>
+  </data>
+  <data name="Locations_Summary_One" xml:space="preserve">
+    <value>1 saved location</value>
+  </data>
+  <data name="Locations_UseDeviceLocation_Button" xml:space="preserve">
+    <value>Use device location</value>
+  </data>
+  <data name="Locations_Edit_EditLocation_Label" xml:space="preserve">
+    <value>Edit location</value>
+    <comment>Heading inside the dialog when an existing location is being changed.</comment>
+  </data>
+  <data name="Locations_Edit_EditLocation_Title" xml:space="preserve">
+    <value>Edit location</value>
+    <comment>Window title when an existing location is being changed.</comment>
+  </data>
+</root>

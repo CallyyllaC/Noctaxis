@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -12,9 +13,9 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
     private NoctaxisDialogWindow? _activeDialog;
     public Window? Owner { get; set; }
     public Task<bool> ConfirmClearTerrainCacheAsync(CancellationToken cancellationToken = default) =>
-        ShowOwnedDialogAsync(() => new ConfirmationDialog("Clear terrain cache?",
-            "Cached terrain and terrain-classification data will be removed and downloaded again when needed. Saved locations and settings are not affected.",
-            "Clear terrain cache"), false, cancellationToken);
+        ShowOwnedDialogAsync(() => new ConfirmationDialog(Strings.Get("Dialogs_ClearTerrainCache_Title"),
+            Strings.Get("Dialogs_ClearTerrainCache_Message"),
+            Strings.Get("Dialogs_ClearTerrainCache_Confirm")), false, cancellationToken);
 
     public async Task<LocationSearchResult?> ShowLocationSearchAsync(CancellationToken cancellationToken = default)
     {
@@ -32,26 +33,26 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
     public async Task<bool> ConfirmDeleteSavedLocationAsync(SavedLocation location, CancellationToken cancellationToken = default)
     {
         return await ShowOwnedDialogAsync(() => new ConfirmationDialog(
-            "Delete saved location",
-            $"Delete ‘{location.Name}’? This cannot be undone.",
-            "Delete"), false, cancellationToken);
+            Strings.Get("Dialogs_DeleteLocation_Title"),
+            Strings.Format("Dialogs_DeleteLocation_Message_Format", location.Name),
+            Strings.Get("Dialogs_DeleteLocation_Confirm")), false, cancellationToken);
     }
 
     public async Task<bool> ConfirmRefreshSavedLocationThumbnailsAsync(int locationCount, CancellationToken cancellationToken = default)
     {
         return await ShowOwnedDialogAsync(() => new ConfirmationDialog(
-            "Regenerate all map images",
-            $"Download fresh raster maps and road and water overlays for all {locationCount} saved locations? Shared environmental tiles will be reused.",
-            "Regenerate all"), false, cancellationToken);
+            Strings.Get("Dialogs_RegenerateMapImages_Title"),
+            Strings.Format("Dialogs_RegenerateMapImages_Message_Format", locationCount),
+            Strings.Get("Dialogs_RegenerateMapImages_Confirm")), false, cancellationToken);
     }
 
     public async Task<bool> ConfirmRefreshSavedLocationSettlementCachesAsync(int locationCount,
         CancellationToken cancellationToken = default)
     {
         return await ShowOwnedDialogAsync(() => new ConfirmationDialog(
-            "Refresh WSF settlement layers",
-            $"Rebuild WSF settlement layers for all {locationCount} saved locations without redownloading base maps or road and water data?",
-            "Refresh settlement"), false, cancellationToken);
+            Strings.Get("Dialogs_RefreshSettlement_Title"),
+            Strings.Format("Dialogs_RefreshSettlement_Message_Format", locationCount),
+            Strings.Get("Dialogs_RefreshSettlement_Confirm")), false, cancellationToken);
     }
 
     public Task<bool> ConfirmDestructiveAsync(DestructiveConfirmation request, CancellationToken cancellationToken = default) =>

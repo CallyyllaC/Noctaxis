@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>14.0</LangVersion>
     <Deterministic>true</Deterministic>
+    <!-- The language of the text in the .resx files: British English, the only language shipped in v1.
+         A translation is a satellite file beside each, e.g. Settings.fr.resx (see docs/localisation.md). -->
+    <NeutralLanguage>en-GB</NeutralLanguage>
   </PropertyGroup>
 
   <!--

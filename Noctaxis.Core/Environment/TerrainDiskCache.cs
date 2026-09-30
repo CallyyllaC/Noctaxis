@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Persistence;
@@ -171,7 +172,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
                     var failed = _entries.Keys.ToArray().Count(path => !TryDelete(path, eviction: false));
                     // Undeletable files stay counted in Usage; the caller must learn the clear was partial.
                     if (failed > 0)
-                        throw new IOException($"{failed} terrain cache file(s) could not be deleted and remain on disk.");
+                        throw new IOException(Strings.Format("Terrain_Cache_DeleteFailed_Format", failed));
                     _clears++;
                 }
             }).ConfigureAwait(false);

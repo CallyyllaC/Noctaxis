@@ -18,7 +18,7 @@ public sealed partial class MainViewModelTests
     [Fact]
     public void SupporterCategoryHoldsTheLicenceControlsUnderItsTitle()
     {
-        var document = XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var supporter = document.Descendants().Single(element => element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Supporter");
         var root = supporter.Descendants().Single(element => element.Name.LocalName == "StackPanel" && element.Attribute("Classes")?.Value == "settingsCategory");
         var title = root.Elements().First();
@@ -38,7 +38,7 @@ public sealed partial class MainViewModelTests
     [CoversSettingsInput("OpenKoFiCommand")]
     public void KoFiButtonIsEnabledAndTargetsExactUri()
     {
-        var document = XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var button = Assert.Single(document.Descendants(), element => element.Name.LocalName == "Button" && element.Attribute("Content")?.Value == "Support on Ko-fi");
         Assert.Null(button.Attribute("IsEnabled"));
         Assert.Equal("{Binding OpenKoFiCommand}", button.Attribute("Command")?.Value);

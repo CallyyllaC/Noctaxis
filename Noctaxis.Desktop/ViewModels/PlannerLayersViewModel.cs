@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Noctaxis.Desktop.Mapping;
 
@@ -22,7 +23,7 @@ public sealed class PlannerLayersViewModel : ObservableObject
         try { await CommitAsync(); _persistenceError = null; }
         // Only expected save failures are recoverable here; anything else is a defect and must surface.
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        { _persistenceError = "Layer preferences could not be saved. Reopen Layers and try again."; }
+        { _persistenceError = Strings.Get("Planner_Layers_SaveFailed"); }
         OnPropertyChanged(nameof(PersistenceError));
         OnPropertyChanged(nameof(HasPersistenceError));
     }

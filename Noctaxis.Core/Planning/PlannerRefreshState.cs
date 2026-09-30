@@ -1,3 +1,5 @@
+using Noctaxis.Core.Localisation;
+
 namespace Noctaxis.Core.Planning;
 
 public enum PlannerRefreshScope
@@ -76,14 +78,14 @@ public sealed record PlannerRefreshState(
         PlannerRefreshWorkState.Pending, PlannerRefreshWorkState.Pending,
         PlannerRefreshWorkState.Pending, PlannerRefreshWorkState.Pending,
         PlannerRefreshWorkState.Pending, PlannerRefreshWorkState.Pending,
-        "Observer placed · starting Planner refresh…", PlannerRefreshWorkState.Pending);
+        Strings.Get("Planning_Status_ObserverPlaced"), PlannerRefreshWorkState.Pending);
 
     public static PlannerRefreshState BeginAstronomy(long generation) => new(generation,
         PlannerRefreshScope.Astronomy, PlannerRefreshPhase.CalculatingAstronomy,
         PlannerRefreshWorkState.Pending, PlannerRefreshWorkState.Pending,
         PlannerRefreshWorkState.Pending, PlannerRefreshWorkState.Pending,
         PlannerRefreshWorkState.NotRequired, PlannerRefreshWorkState.NotRequired,
-        "Calculating celestial positions…", PlannerRefreshWorkState.NotRequired);
+        Strings.Get("Planning_Status_CalculatingPositions"), PlannerRefreshWorkState.NotRequired);
 
     public bool IsRefreshing => Phase is not (PlannerRefreshPhase.Idle or PlannerRefreshPhase.Ready or
         PlannerRefreshPhase.Partial or PlannerRefreshPhase.Error);

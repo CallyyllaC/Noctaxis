@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Weather_Error_EmptyResponse" xml:space="preserve">
+    <value>Open-Meteo returned an empty response.</value>
+  </data>
+  <data name="Weather_Error_Http_Format" xml:space="preserve">
+    <value>Open-Meteo returned HTTP {0}.</value>
+    <comment>{0} is the HTTP status code.</comment>
+  </data>
+  <data name="Weather_Error_NoForecastTimes" xml:space="preserve">
+    <value>Open-Meteo response has no forecast times.</value>
+  </data>
+  <data name="Weather_Error_NoHourlyData" xml:space="preserve">
+    <value>Open-Meteo response has no hourly data.</value>
+  </data>
+  <data name="Weather_Error_OutsideForecastRange" xml:space="preserve">
+    <value>The selected time is outside the available Open-Meteo forecast range.</value>
+  </data>
+  <data name="Weather_Error_ProviderUnavailable" xml:space="preserve">
+    <value>Weather provider is not available.</value>
+  </data>
+  <data name="Weather_Error_RateLimited" xml:space="preserve">
+    <value>Open-Meteo rate limit reached. Try again shortly.</value>
+  </data>
+  <data name="Weather_Error_Unavailable_Format" xml:space="preserve">
+    <value>Weather unavailable: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Weather_Loading" xml:space="preserve">
+    <value>Loading weather…</value>
+  </data>
+  <data name="Weather_Precipitation_None" xml:space="preserve">
+    <value>None</value>
+  </data>
+  <data name="Weather_Status_Cached" xml:space="preserve">
+    <value>Cached Open-Meteo forecast</value>
+  </data>
+  <data name="Weather_Status_Forecast" xml:space="preserve">
+    <value>Open-Meteo forecast</value>
+  </data>
+  <data name="Weather_Summary_ClearSky" xml:space="preserve">
+    <value>Clear sky</value>
+  </data>
+  <data name="Weather_Summary_Drizzle" xml:space="preserve">
+    <value>Drizzle</value>
+  </data>
+  <data name="Weather_Summary_Fog" xml:space="preserve">
+    <value>Fog</value>
+  </data>
+  <data name="Weather_Summary_MainlyClear" xml:space="preserve">
+    <value>Mainly clear</value>
+  </data>
+  <data name="Weather_Summary_None" xml:space="preserve">
+    <value>No summary</value>
+  </data>
+  <data name="Weather_Summary_Overcast" xml:space="preserve">
+    <value>Overcast</value>
+  </data>
+  <data name="Weather_Summary_PartlyCloudy" xml:space="preserve">
+    <value>Partly cloudy</value>
+  </data>
+  <data name="Weather_Summary_Rain" xml:space="preserve">
+    <value>Rain</value>
+  </data>
+  <data name="Weather_Summary_RainShowers" xml:space="preserve">
+    <value>Rain showers</value>
+  </data>
+  <data name="Weather_Summary_Snow" xml:space="preserve">
+    <value>Snow</value>
+  </data>
+  <data name="Weather_Summary_SnowShowers" xml:space="preserve">
+    <value>Snow showers</value>
+  </data>
+  <data name="Weather_Summary_Thunderstorm" xml:space="preserve">
+    <value>Thunderstorm</value>
+  </data>
+  <data name="Weather_Summary_Unknown" xml:space="preserve">
+    <value>Unknown conditions</value>
+  </data>
+</root>

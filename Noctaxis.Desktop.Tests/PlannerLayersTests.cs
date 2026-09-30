@@ -19,7 +19,7 @@ public sealed class PlannerLayersTests
     [Fact]
     public void SettingsKeepPaletteAndDataManagementWhilePlannerOwnsLayerControls()
     {
-        var document = System.Xml.Linq.XDocument.Load(TestPaths.MainWindowMarkup);
+        var document = TestMarkup.LoadMainWindow();
         var data = document.Descendants().Single(x => x.Name.LocalName == "TabItem" && (string?)x.Attribute("Header") == "Data");
         // The colour map is a display preference, beside the other Planner map settings; the atlas is data.
         var map = document.Descendants().Single(x => x.Name.LocalName == "TabItem" && (string?)x.Attribute("Header") == "Planner map");

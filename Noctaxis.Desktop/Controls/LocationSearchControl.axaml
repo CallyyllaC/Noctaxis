@@ -1,10 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:Noctaxis.Desktop.Localisation"
              xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
              x:Class="Noctaxis.Desktop.Controls.LocationSearchControl"
              x:CompileBindings="False">
   <StackPanel Spacing="7">
-    <TextBox Text="{Binding Query}" PlaceholderText="Place, town, city, postcode, region or country"/>
+    <!-- Wrapping lets a long placeholder (another language, large text) show in full instead of being cut off. -->
+    <TextBox Text="{Binding Query}" TextWrapping="Wrap" PlaceholderText="{loc:Text Locations_Search_PlaceTownCityPostcode_Placeholder}"/>
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsSearching}"/>
     <controls:StatusText Kind="Error" Text="{Binding ErrorMessage}"/>
     <ItemsControl ItemsSource="{Binding Results}">

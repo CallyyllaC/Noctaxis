@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using NodaTime;
 using System.Text.Json.Serialization;
 using Noctaxis.Core.Measurements;
@@ -189,12 +190,12 @@ public sealed record CameraProfile(
 
     [JsonIgnore]
     public string? ValidationMessage =>
-        string.IsNullOrWhiteSpace(Id) ? "Camera identifier is required." :
-        string.IsNullOrWhiteSpace(DisplayName) ? "Camera name is required." :
+        string.IsNullOrWhiteSpace(Id) ? Strings.Get("Equipment_Camera_IdRequired") :
+        string.IsNullOrWhiteSpace(DisplayName) ? Strings.Get("Equipment_Camera_NameRequired") :
         !double.IsFinite(SensorWidthMillimetres) || SensorWidthMillimetres <= 0 ?
-            "Sensor width must be greater than zero." :
+            Strings.Get("Equipment_Camera_SensorWidthInvalid") :
         !double.IsFinite(SensorHeightMillimetres) || SensorHeightMillimetres <= 0 ?
-            "Sensor height must be greater than zero." : null;
+            Strings.Get("Equipment_Camera_SensorHeightInvalid") : null;
 }
 
 public sealed record LensProfile(
@@ -214,14 +215,14 @@ public sealed record LensProfile(
 
     [JsonIgnore]
     public string? ValidationMessage =>
-        string.IsNullOrWhiteSpace(Id) ? "Lens identifier is required." :
-        string.IsNullOrWhiteSpace(DisplayName) ? "Lens name is required." :
+        string.IsNullOrWhiteSpace(Id) ? Strings.Get("Equipment_Lens_IdRequired") :
+        string.IsNullOrWhiteSpace(DisplayName) ? Strings.Get("Equipment_Lens_NameRequired") :
         !double.IsFinite(MinimumFocalLengthMillimetres) || MinimumFocalLengthMillimetres <= 0 ?
-            "Minimum focal length must be greater than zero." :
+            Strings.Get("Equipment_Lens_MinimumFocalLengthInvalid") :
         !double.IsFinite(MaximumFocalLengthMillimetres) || MaximumFocalLengthMillimetres <= 0 ?
-            "Maximum focal length must be greater than zero." :
+            Strings.Get("Equipment_Lens_MaximumFocalLengthInvalid") :
         MinimumFocalLengthMillimetres > MaximumFocalLengthMillimetres ?
-            "Minimum focal length cannot exceed maximum focal length." : null;
+            Strings.Get("Equipment_Lens_FocalLengthOrderInvalid") : null;
 
     public double ClampFocalLength(double focalLengthMillimetres)
     {
@@ -256,19 +257,19 @@ public sealed record EquipmentSettings(
         if (lenses.Length == 0)
         {
             var focalLength = PositiveOrDefault(legacy.FocalLengthMillimetres, 24);
-            lenses = [new LensProfile(MigratedLensId, $"{focalLength:0.#} mm lens", focalLength, focalLength)];
+            lenses = [new LensProfile(MigratedLensId, Strings.Format("Equipment_Lens_Name_Migrated_Format", focalLength), focalLength, focalLength)];
         }
         return new EquipmentSettings(cameras, lenses);
     }
 
     private static string CameraName(LensConfiguration legacy) => legacy.Preset switch
     {
-        SensorPreset.FullFrame => "Full Frame camera",
-        SensorPreset.ApsCCanon => "Canon APS-C camera",
-        SensorPreset.ApsC => "APS-C camera",
-        SensorPreset.MicroFourThirds => "Micro Four Thirds camera",
-        SensorPreset.OneInch => "1-inch camera",
-        _ => "Custom camera"
+        SensorPreset.FullFrame => Strings.Get("Equipment_Camera_Name_FullFrame"),
+        SensorPreset.ApsCCanon => Strings.Get("Equipment_Camera_Name_CanonApsC"),
+        SensorPreset.ApsC => Strings.Get("Equipment_Camera_Name_ApsC"),
+        SensorPreset.MicroFourThirds => Strings.Get("Equipment_Camera_Name_MicroFourThirds"),
+        SensorPreset.OneInch => Strings.Get("Equipment_Camera_Name_OneInch"),
+        _ => Strings.Get("Equipment_Camera_Name_Custom")
     };
 
     private static double PositiveOrDefault(double value, double fallback) =>
@@ -381,6 +382,18 @@ public sealed record FramingVisibilityAssessment(
     IReadOnlyList<FramingTerrainObstructionSample>? TerrainObstructions = null,
     CameraTerrainDepth? CameraDepth = null)
 {
+    /// <summary>
+    /// <see cref="Status"/> for display. The assessment is computed once and holds SI values; only
+    /// the weather-visibility wording contains a distance, which is shown in the profile's unit.
+    /// </summary>
+    public string StatusFor(MeasurementProfile profile) =>
+        !IsTargetTerrainObstructed && WeatherVisibilityDistanceMetres is double metres
+            ? WeatherVisibilityStatus(metres, profile)
+            : Status;
+
+    public static string WeatherVisibilityStatus(double metres, MeasurementProfile profile) =>
+        Strings.Format("Planning_Framing_WeatherVisibility_Format", profile.LongDistance.Of(metres / 1_000).Format());
+
     [JsonIgnore]
     public IReadOnlyList<FramingTerrainObstructionSample> EffectiveTerrainObstructions =>
         TerrainObstructions ?? [];
@@ -522,10 +535,10 @@ public sealed record TerrainHorizonProfile(
     public long? GenerationId { get; init; }
     public static TerrainHorizonProfile Disabled(GeoCoordinate observer, Instant instant,
         double cameraHeight, double? manualGround = null) => new(observer, [], false,
-            "Terrain calculations disabled", instant, ObserverHeightAboveGroundMetres: cameraHeight,
+            Strings.Get("Terrain_CalculationsDisabled"), instant, ObserverHeightAboveGroundMetres: cameraHeight,
             ChosenObserverGroundElevationMetres: manualGround ?? 0,
             ObserverAbsoluteElevationMetres: (manualGround ?? 0) + AppSettings.NormaliseCameraHeight(cameraHeight),
-            ObserverDatumMessage: manualGround.HasValue ? "Manual ground-elevation override" : "Terrain disabled: 0 m MSL fallback",
+            ObserverDatumMessage: Strings.Get(manualGround.HasValue ? "Terrain_GroundSource_ManualOverride" : "Terrain_GroundSource_DisabledFallback"),
             TerrainCalculationsEnabled: false);
     public bool HasTerrainCoverage => HasDemCoverage;
     public Noctaxis.Core.Environment.EnvironmentalValue<double>? GroundElevationAtObserver =>
@@ -762,7 +775,8 @@ public static class CelestialVisibilityPolicy
 public sealed record CelestialObjectPlan(TargetPosition Position, AstralPath Path);
 
 public sealed record AppSettings(
-    string Units = "Metric",
+    // A measurement-system identifier (see MeasurementUnits): "Metric", "UK" (UK Mixed) or "Imperial".
+    string Units = MeasurementUnits.DefaultId,
     string SelectedTimeZoneId = "system",
     WeatherSettings? Weather = null,
     int TimeSnapMinutes = 5,
@@ -778,8 +792,13 @@ public sealed record AppSettings(
       string? AwooSupporterLicenceCode = null,
     ExternalMapProvider ExternalMapProvider = ExternalMapProvider.OpenStreetMap,
     LightPollutionPreferences? LightPollution = null,
-    TerrainReliefPreferences? TerrainRelief = null)
+    TerrainReliefPreferences? TerrainRelief = null,
+    // A culture identifier (see AppLanguages). It is the one language preference: text, formats and map names.
+    string Language = AppLanguages.DefaultId)
 {
+    [JsonIgnore]
+    public string EffectiveLanguage => AppLanguages.Normalise(Language);
+
     public const string UseSystemTimeZoneId = "system";
     [JsonIgnore]
     public long EffectiveTerrainCacheLimitBytes => Math.Clamp(TerrainCacheLimitBytes, 0, 1024L * 1024 * 1024 * 1024);
@@ -804,10 +823,22 @@ public sealed record AppSettings(
         (Equipment ?? new EquipmentSettings()).EnsureUsable(legacy);
 
     public static double NormaliseCameraHeight(double value) =>
-        Math.Clamp(double.IsFinite(value) ? value : DefaultCameraHeightAboveGroundMetres, 0, 100);
+        Math.Clamp(double.IsFinite(value) ? value : DefaultCameraHeightAboveGroundMetres,
+            MinimumCameraHeightAboveGroundMetres, MaximumCameraHeightAboveGroundMetres);
+
+    /// <summary>
+    /// The camera-height limits. They are defined in metres and nowhere else: a limit shown in
+    /// another unit is this value converted, never a rule of its own.
+    /// </summary>
+    public const double MinimumCameraHeightAboveGroundMetres = 0;
+    public const double MaximumCameraHeightAboveGroundMetres = 100;
 
     [JsonIgnore]
     public MeasurementSystem EffectiveMeasurementSystem => MeasurementUnits.Parse(Units);
+
+    /// <summary>The units every displayed physical quantity uses. An explicit choice: it follows neither the language nor the regional culture.</summary>
+    [JsonIgnore]
+    public MeasurementProfile MeasurementProfile => MeasurementProfile.For(Units);
 
     [JsonExtensionData]
     public IDictionary<string, System.Text.Json.JsonElement>? LegacyData { get; init; }

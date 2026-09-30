@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Noctaxis.Core.Domain;
@@ -85,7 +86,7 @@ public partial class LensProfileEditorViewModel : ObservableObject
         MaximumFocalLengthMillimetres, EmptyToNull(Manufacturer), EmptyToNull(Model));
     public bool IsValid => Profile.IsValid;
     public string? ValidationMessage => Profile.ValidationMessage;
-    public string TypeText => Profile.IsValid ? Profile.IsPrime ? "Prime lens" : "Zoom lens" : string.Empty;
+    public string TypeText => Profile.IsValid ? Strings.Get(Profile.IsPrime ? "Settings_Equipment_PrimeLens" : "Settings_Equipment_ZoomLens") : string.Empty;
 
     /// <summary>Asks, then removes this profile if confirmed (see MainViewModel).</summary>
     [RelayCommand]

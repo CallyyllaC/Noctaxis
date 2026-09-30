@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Export_Card_AltitudePanel_Title" xml:space="preserve">
+    <value>Daily altitude / terrain</value>
+  </data>
+  <data name="Export_Card_AzimuthAltitude_Format" xml:space="preserve">
+    <value>Azimuth  {0:F1}°     Altitude  {1:+0.0;-0.0;0.0}°</value>
+    <comment>{0} azimuth and {1} altitude in degrees.</comment>
+  </data>
+  <data name="Export_Card_BearingPanel_Title" xml:space="preserve">
+    <value>Bearing / field of view</value>
+  </data>
+  <data name="Export_Card_Camera_Heading" xml:space="preserve">
+    <value>CAMERA</value>
+  </data>
+  <data name="Export_Card_DateAndTarget_Format" xml:space="preserve">
+    <value>{0:ddd, dd MMM yyyy  HH:mm}  ·  {1}</value>
+    <comment>{0} is the local date and time, {1} the target name.</comment>
+  </data>
+  <data name="Export_Card_EstimateNote" xml:space="preserve">
+    <value>Terrain crossings are sampled estimates. Weather may differ from conditions on site.</value>
+  </data>
+  <data name="Export_Card_FieldOfView_Format" xml:space="preserve">
+    <value>FOV  H {0:F1}°  V {1:F1}°  D {2:F1}°</value>
+    <comment>Horizontal, vertical and diagonal field of view in degrees.</comment>
+  </data>
+  <data name="Export_Card_Lens_Format" xml:space="preserve">
+    <value>{0} · {1:F0} mm · {2}</value>
+    <comment>{0} sensor preset, {1} focal length in millimetres, {2} orientation.</comment>
+  </data>
+  <data name="Export_Card_North" xml:space="preserve">
+    <value>N</value>
+  </data>
+  <data name="Export_Card_RiseTerrainClear_Format" xml:space="preserve">
+    <value>Rise {0}   Terrain clear {1}</value>
+    <comment>Times.</comment>
+  </data>
+  <data name="Export_Card_SchematicNote" xml:space="preserve">
+    <value>Map panel is a bearing/FOV schematic; not ground framing.</value>
+  </data>
+  <data name="Export_Card_Target_Heading" xml:space="preserve">
+    <value>TARGET</value>
+  </data>
+  <data name="Export_Card_Title" xml:space="preserve">
+    <value>NOCTAXIS  ·  SCOUTING CARD</value>
+  </data>
+  <data name="Export_Card_TransitSet_Format" xml:space="preserve">
+    <value>Transit {0}   Set {1}</value>
+    <comment>Times.</comment>
+  </data>
+  <data name="Export_Card_Weather_Heading" xml:space="preserve">
+    <value>WEATHER  ·  OPEN-METEO</value>
+  </data>
+  <data name="Export_Card_WeatherDetail_Format" xml:space="preserve">
+    <value>{0} · humidity {1} · wind {2} gust {3}</value>
+    <comment>{0} temperature, {1} humidity, {2} wind speed, {3} gust speed.</comment>
+  </data>
+  <data name="Export_Card_WeatherSummary_Format" xml:space="preserve">
+    <value>{0} · cloud {1} · precipitation {2}</value>
+    <comment>{0} summary, {1} cloud cover, {2} precipitation probability.</comment>
+  </data>
+  <data name="Export_Orientation_Landscape" xml:space="preserve">
+    <value>Landscape</value>
+  </data>
+  <data name="Export_Orientation_Portrait" xml:space="preserve">
+    <value>Portrait</value>
+  </data>
+</root>

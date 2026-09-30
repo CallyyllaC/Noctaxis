@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Chrome;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 using Noctaxis.Core.Domain;
 using Noctaxis.Desktop.Views;
 
@@ -12,7 +13,7 @@ public sealed class WindowPolicyTests
     [Fact]
     public void TerrainDebugOverlay_IsOptionalBoundAndCopyable()
     {
-        var markup = File.ReadAllText(TestPaths.MainWindowMarkup);
+        var markup = TestMarkup.ReadMainWindow();
         Assert.DoesNotContain("Terrain cast angular detail", markup);
         Assert.DoesNotContain("SettingsTerrainCastAngularDetailDegrees", markup);
         Assert.Contains("Content=\"Enable terrain diagnostics\"", markup);
@@ -109,17 +110,28 @@ public sealed class WindowPolicyTests
         Assert.False(elevation.ShowButtonSpinner);
     }
 
+    /// <summary>
+    /// The dialog says which of the two things it is doing, in all three places at once. An Add flow
+    /// titled "Edit location" tells the user they are about to change something that exists.
+    /// </summary>
     [AvaloniaFact]
-    public void LocationEditor_UsesNeutralTitleAndModeSpecificPrimaryAction()
+    public void LocationEditor_NamesItsModeInTheTitleHeadingAndPrimaryAction()
     {
         var location = new SavedLocation(Guid.NewGuid(), "Ridge", new GeoCoordinate(51, -2), "UTC");
 
         var create = new SavedLocationEditDialog(location, isCreateMode: true);
         var edit = new SavedLocationEditDialog(location);
+        string Heading(SavedLocationEditDialog dialog) => dialog.FindControl<TextBlock>("HeadingText")!.Text!;
 
-        Assert.Equal("Edit location", create.Title);
-        Assert.Equal("Edit location", edit.Title);
-        Assert.Equal("Add location", create.PrimaryActionLabel);
-        Assert.Equal("Save changes", edit.PrimaryActionLabel);
+        Assert.Equal(("Add location", "Add location", "Add location"), (create.Title, Heading(create), create.PrimaryActionLabel));
+        Assert.Equal(("Edit location", "Edit location", "Save changes"), (edit.Title, Heading(edit), edit.PrimaryActionLabel));
+
+        // The coordinates come from the Planner pin: shown, selectable, never an editable-looking box.
+        foreach (var dialog in new[] { create, edit })
+        {
+            var coordinates = dialog.FindControl<SelectableTextBlock>("CoordinatesText")!;
+            Assert.Equal("51.00000°, -2.00000°", coordinates.Text);
+            Assert.DoesNotContain(dialog.GetVisualDescendants().OfType<TextBox>(), box => box.IsReadOnly);
+        }
     }
 }

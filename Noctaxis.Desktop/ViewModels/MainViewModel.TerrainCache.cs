@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -9,7 +10,7 @@ public partial class MainViewModel
 {
     private readonly TerrainDiskCache? _terrainDiskCache;
     private int _cacheUsageQueued;
-    [ObservableProperty] private string _terrainCacheUsageText = "Not loaded";
+    [ObservableProperty] private string _terrainCacheUsageText = Strings.Get("Settings_Data_TerrainCache_NotLoaded");
     [ObservableProperty] private string _terrainCacheStatus = string.Empty;
     [ObservableProperty] private bool _isClearingTerrainCache;
 
@@ -27,7 +28,8 @@ public partial class MainViewModel
     {
         if (_terrainDiskCache is not { } cache) return;
         var usage = cache.Usage;
-        TerrainCacheUsageText = $"{usage.Bytes / (1024d * 1024):N1} MiB / {usage.LimitBytes / (1024d * 1024 * 1024):0.##} GiB · {usage.Entries:N0} files";
+        TerrainCacheUsageText = Strings.Format("Settings_Data_TerrainCache_Usage_Format",
+            usage.Bytes / (1024d * 1024), usage.LimitBytes / (1024d * 1024 * 1024), usage.Entries);
     }
 
     [RelayCommand]
@@ -41,7 +43,7 @@ public partial class MainViewModel
             _terrainDebugMapCancellation?.Cancel();
             await _terrainDiskCache.ClearAsync();
             UpdateTerrainCacheUsage();
-            TerrainCacheStatus = "Terrain cache cleared. Data will be downloaded again when needed.";
+            TerrainCacheStatus = Strings.Get("Settings_Data_TerrainCache_Cleared");
             if (Snapshot is not null || SelectedPageIndex == 1)
             {
                 ScheduleObserverRefresh(0);
@@ -50,7 +52,7 @@ public partial class MainViewModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            TerrainCacheStatus = $"Terrain cache could not be fully cleared: {ex.Message}";
+            TerrainCacheStatus = Strings.Format("Settings_Data_TerrainCache_ClearFailed_Format", ex.Message);
         }
         finally { IsClearingTerrainCache = false; UpdateTerrainCacheUsage(); }
     }

@@ -359,7 +359,7 @@ public sealed class TerrainLivePresentationTests
         Assert.Equal(TerrainFrameView.DepthColour(100), TerrainFrameView.NearBrush.Color);
         Assert.Equal(TerrainFrameView.DepthColour(500000), TerrainFrameView.FarBrush.Color);
         Assert.Equal(TerrainFrameView.DepthColour(0), TerrainFrameView.SkyBrush.Color);
-        var source = File.ReadAllText(TestPaths.MainWindowMarkup);
+        var source = TestMarkup.ReadMainWindow();
         Assert.Contains("x:Static controls:TerrainFrameView.NearBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.FarBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.SkyBrush", source);

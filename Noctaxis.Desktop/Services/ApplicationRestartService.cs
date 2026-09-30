@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.ComponentModel;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,7 @@ public interface IApplicationRestartService
 /// <summary>Used where no application lifetime exists (tests, design time).</summary>
 public sealed class UnavailableApplicationRestartService : IApplicationRestartService
 {
-    public ApplicationRestartResult Restart() => ApplicationRestartResult.Failed("restart is not available here");
+    public ApplicationRestartResult Restart() => ApplicationRestartResult.Failed(Strings.Get("Settings_Restart_Unavailable"));
 }
 
 /// <summary>
@@ -59,7 +60,7 @@ public sealed class ApplicationRestartService(
         try
         {
             using var process = start(info);
-            if (process is null) return ApplicationRestartResult.Failed("the new process did not start");
+            if (process is null) return ApplicationRestartResult.Failed(Strings.Get("Settings_Restart_ProcessNotStarted"));
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or IOException or UnauthorizedAccessException)
         {

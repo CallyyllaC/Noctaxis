@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Noctaxis.Core.Domain;
@@ -42,28 +43,29 @@ public sealed class ScoutingCardExporter(ITimeZoneResolver timeZones, IClock clo
         using var accent = new SKPaint { Color = SKColor.Parse(snapshot.Position.Target.IsSun ? "#F3B34C" : snapshot.Position.Target.IsMoon ? "#79B8FF" : "#B790FF"), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 4 };
 
         var local = timeZones.InZone(snapshot.Session.Instant, snapshot.Session.TimeZoneId);
-        Draw(canvas, "NOCTAXIS  ·  SCOUTING CARD", 64, 78, title);
+        Draw(canvas, Strings.Get("Export_Card_Title"), 64, 78, title);
         Draw(canvas, context.LocationName, 64, 132, heading);
         Draw(canvas, $"{snapshot.Session.Observer.Latitude:F5}°, {snapshot.Session.Observer.Longitude:F5}°  ·  {snapshot.Session.TimeZoneId}", 64, 170, muted);
-        Draw(canvas, $"{local:ddd, dd MMM yyyy  HH:mm}  ·  {snapshot.Position.Target.DisplayName}", 64, 222, body);
-        Draw(canvas, "TARGET", 64, 285, heading);
-        Draw(canvas, $"Azimuth  {snapshot.Position.Horizontal.AzimuthDegrees:F1}°     Altitude  {snapshot.Position.Horizontal.AltitudeDegrees:+0.0;-0.0;0.0}°", 64, 330, body);
-        Draw(canvas, $"Rise {Format(snapshot.Position.Events.Rise, snapshot.Session.TimeZoneId)}   Terrain clear {Format(snapshot.TerrainCrossings.ClearsTerrain, snapshot.Session.TimeZoneId)}", 64, 370, body);
-        Draw(canvas, $"Transit {Format(snapshot.Position.Events.Transit, snapshot.Session.TimeZoneId)}   Set {Format(snapshot.Position.Events.Set, snapshot.Session.TimeZoneId)}", 64, 410, body);
+        Draw(canvas, Strings.Format("Export_Card_DateAndTarget_Format", local, snapshot.Position.Target.DisplayName), 64, 222, body);
+        Draw(canvas, Strings.Get("Export_Card_Target_Heading"), 64, 285, heading);
+        Draw(canvas, Strings.Format("Export_Card_AzimuthAltitude_Format", snapshot.Position.Horizontal.AzimuthDegrees, snapshot.Position.Horizontal.AltitudeDegrees), 64, 330, body);
+        Draw(canvas, Strings.Format("Export_Card_RiseTerrainClear_Format", Format(snapshot.Position.Events.Rise, snapshot.Session.TimeZoneId), Format(snapshot.TerrainCrossings.ClearsTerrain, snapshot.Session.TimeZoneId)), 64, 370, body);
+        Draw(canvas, Strings.Format("Export_Card_TransitSet_Format", Format(snapshot.Position.Events.Transit, snapshot.Session.TimeZoneId), Format(snapshot.Position.Events.Set, snapshot.Session.TimeZoneId)), 64, 410, body);
         DrawBearingSchematic(canvas, snapshot, 64, 455, 440, 420, accent, body, muted);
         DrawHorizon(canvas, snapshot, 548, 455, 468, 420, accent, muted);
-        Draw(canvas, "CAMERA", 64, 930, heading);
-        Draw(canvas, $"{snapshot.Session.Lens.Preset} · {snapshot.Session.Lens.FocalLengthMillimetres:F0} mm · {snapshot.Session.Lens.Orientation}", 64, 974, body);
-        Draw(canvas, $"FOV  H {snapshot.FieldOfView.HorizontalDegrees:F1}°  V {snapshot.FieldOfView.VerticalDegrees:F1}°  D {snapshot.FieldOfView.DiagonalDegrees:F1}°", 64, 1014, body);
-        Draw(canvas, "WEATHER  ·  OPEN-METEO", 64, 1076, heading);
+        Draw(canvas, Strings.Get("Export_Card_Camera_Heading"), 64, 930, heading);
+        Draw(canvas, Strings.Format("Export_Card_Lens_Format", snapshot.Session.Lens.Preset, snapshot.Session.Lens.FocalLengthMillimetres,
+            Strings.Get(snapshot.Session.Lens.Orientation == CameraOrientation.Portrait ? "Export_Orientation_Portrait" : "Export_Orientation_Landscape")), 64, 974, body);
+        Draw(canvas, Strings.Format("Export_Card_FieldOfView_Format", snapshot.FieldOfView.HorizontalDegrees, snapshot.FieldOfView.VerticalDegrees, snapshot.FieldOfView.DiagonalDegrees), 64, 1014, body);
+        Draw(canvas, Strings.Get("Export_Card_Weather_Heading"), 64, 1076, heading);
         var weather = snapshot.Weather.Conditions;
         var measurementSystem = MeasurementUnits.Parse(context.Units);
-        Draw(canvas, weather is null ? snapshot.Weather.Message : $"{weather.Summary} · cloud {Value(weather.CloudCoverPercent, "%")} · precipitation {Value(weather.PrecipitationProbabilityPercent, "%")}", 64, 1120, body);
+        Draw(canvas, weather is null ? snapshot.Weather.Message : Strings.Format("Export_Card_WeatherSummary_Format", weather.Summary, Value(weather.CloudCoverPercent, "%"), Value(weather.PrecipitationProbabilityPercent, "%")), 64, 1120, body);
         if (weather is not null)
-            Draw(canvas, $"{MeasurementUnits.FormatTemperature(weather.TemperatureCelsius, measurementSystem)} · humidity {Value(weather.HumidityPercent, "%")} · wind {MeasurementUnits.FormatWindSpeed(weather.WindSpeedMetresPerSecond, measurementSystem)} gust {MeasurementUnits.FormatWindSpeed(weather.WindGustMetresPerSecond, measurementSystem)}", 64, 1160, body);
-        Draw(canvas, "Map panel is a bearing/FOV schematic; not ground framing.", 64, 1290, muted);
+            Draw(canvas, Strings.Format("Export_Card_WeatherDetail_Format", MeasurementUnits.FormatTemperature(weather.TemperatureCelsius, measurementSystem), Value(weather.HumidityPercent, "%"), MeasurementUnits.FormatWindSpeed(weather.WindSpeedMetresPerSecond, measurementSystem), MeasurementUnits.FormatWindSpeed(weather.WindGustMetresPerSecond, measurementSystem)), 64, 1160, body);
+        Draw(canvas, Strings.Get("Export_Card_SchematicNote"), 64, 1290, muted);
         Draw(canvas, MapProvider.Attribution, 64, 1324, muted);
-        Draw(canvas, "Terrain crossings are sampled estimates. Weather may differ from conditions on site.", 64, 1360, muted);
+        Draw(canvas, Strings.Get("Export_Card_EstimateNote"), 64, 1360, muted);
 
         using var skiaImage = SKImage.FromBitmap(bitmap);
         using var encoded = skiaImage.Encode(SKEncodedImageFormat.Png, 100);
@@ -85,7 +87,8 @@ public sealed class ScoutingCardExporter(ITimeZoneResolver timeZones, IClock clo
             context.LocationName,
             s.Session.Observer,
             s.Session.Instant.ToDateTimeOffset(),
-            timeZones.InZone(s.Session.Instant, s.Session.TimeZoneId).ToString("yyyy-MM-dd'T'HH:mm:ss z", null),
+            // Machine-readable metadata: never formatted with the user's culture.
+            timeZones.InZone(s.Session.Instant, s.Session.TimeZoneId).ToString("yyyy-MM-dd'T'HH:mm:ss z", System.Globalization.CultureInfo.InvariantCulture),
             s.Session.TimeZoneId,
             s.Position.Target,
             s.Session.EffectiveVisibleObjects,
@@ -109,7 +112,7 @@ public sealed class ScoutingCardExporter(ITimeZoneResolver timeZones, IClock clo
         canvas.DrawRoundRect(new SKRect(x, y, x + width, y + height), 16, 16, panel);
         var cx = x + width / 2; var cy = y + height / 2 + 12; var radius = Math.Min(width, height) * .36f;
         using var grid = new SKPaint { Color = SKColor.Parse("#354052"), StrokeWidth = 2, Style = SKPaintStyle.Stroke, IsAntialias = true };
-        canvas.DrawCircle(cx, cy, radius, grid); Draw(canvas, "N", cx - 8, cy - radius - 14, body);
+        canvas.DrawCircle(cx, cy, radius, grid); Draw(canvas, Strings.Get("Export_Card_North"), cx - 8, cy - radius - 14, body);
         var bearing = s.Position.Horizontal.AzimuthDegrees * Angles.DegreesToRadians;
         var half = s.FieldOfView.HorizontalDegrees / 2 * Angles.DegreesToRadians;
         using var wedge = new SKPath(); wedge.MoveTo(cx, cy);
@@ -117,7 +120,7 @@ public sealed class ScoutingCardExporter(ITimeZoneResolver timeZones, IClock clo
         wedge.LineTo(cx + radius * (float)Math.Sin(bearing + half), cy - radius * (float)Math.Cos(bearing + half)); wedge.Close();
         using var fill = new SKPaint { Color = accent.Color.WithAlpha(45), IsAntialias = true };
         canvas.DrawPath(wedge, fill); canvas.DrawLine(cx, cy, cx + radius * (float)Math.Sin(bearing), cy - radius * (float)Math.Cos(bearing), accent);
-        Draw(canvas, "Bearing / field of view", x + 20, y + 34, muted);
+        Draw(canvas, Strings.Get("Export_Card_BearingPanel_Title"), x + 20, y + 34, muted);
     }
 
     private static void DrawHorizon(SKCanvas canvas, PlanningSnapshot s, float x, float y, float width, float height, SKPaint accent, TextStyle muted)
@@ -131,7 +134,7 @@ public sealed class ScoutingCardExporter(ITimeZoneResolver timeZones, IClock clo
             canvas.DrawLine(x + (i - 1) * width / (s.Path.Samples.Count - 1), Y(s.Terrain.AltitudeAt(s.Path.Samples[i - 1].Horizontal.AzimuthDegrees)), x + i * width / (s.Path.Samples.Count - 1), Y(s.Terrain.AltitudeAt(s.Path.Samples[i].Horizontal.AzimuthDegrees)), terrainPaint);
         for (var i = 1; i < s.Path.Samples.Count; i++)
             canvas.DrawLine(x + (i - 1) * width / (s.Path.Samples.Count - 1), Y(s.Path.Samples[i - 1].Horizontal.AltitudeDegrees), x + i * width / (s.Path.Samples.Count - 1), Y(s.Path.Samples[i].Horizontal.AltitudeDegrees), pathPaint);
-        Draw(canvas, "Daily altitude / terrain", x + 20, y + 34, muted);
+        Draw(canvas, Strings.Get("Export_Card_AltitudePanel_Title"), x + 20, y + 34, muted);
     }
 
     private string Format(Instant? instant, string zone) => instant is null ? "—" : timeZones.InZone(instant.Value, zone).ToString("HH:mm", null);

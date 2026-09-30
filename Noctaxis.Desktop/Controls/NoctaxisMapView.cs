@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Noctaxis.Desktop.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -135,12 +136,12 @@ public class NoctaxisMapView : UserControl
         _composition = composition;
         var map = _composition.Map;
         _mapControl = new MapControl { Map = map };
-        var setPinMenuItem = new MenuItem { Header = "Set planning pin here" };
+        var setPinMenuItem = new MenuItem { Header = Strings.Get("Planner_Map_SetPinHere_MenuItem") };
         setPinMenuItem.Click += (_, _) =>
         {
             if (_contextCoordinate is { } coordinate) CommitExplicitCoordinate(coordinate);
         };
-        var savePinMenuItem = new MenuItem { Header = "Save current pin location" };
+        var savePinMenuItem = new MenuItem { Header = Strings.Get("Planner_Map_SaveCurrentPin_MenuItem") };
         savePinMenuItem.Click += (_, _) => SaveCurrentPinRequested?.Invoke(this, EventArgs.Empty);
         _mapControl.ContextMenu = new ContextMenu { ItemsSource = new object[] { setPinMenuItem, savePinMenuItem } };
         // Capture the coordinate before Avalonia transfers input to the context menu. ContextRequested
@@ -182,6 +183,8 @@ public class NoctaxisMapView : UserControl
             Bind(property, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(token)));
         Bind(TerrainReliefStrengthProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.TerrainReliefStrength));
         ApplyBasemapStyle();
+        // Place names follow the application language: there is no separate map-language setting.
+        _composition.ApplyLabelLanguage(AppLanguages.Current);
         Content = new Grid { Children = { _mapControl, _overlay, attribution } };
 
         _composition.Runtime.SetActive("camera-framing", ShowCameraOverlay);
@@ -212,6 +215,8 @@ public class NoctaxisMapView : UserControl
             _attached = true;
             _lightPollution?.Attach();
             _composition.Runtime.AttributionChanged += RefreshAttribution;
+            AppLanguages.CurrentChanged += ApplyLabelLanguage;
+            ApplyLabelLanguage(AppLanguages.Current);
             RefreshAttribution();
             _viewportRedraw.Attach();
             map.Navigator.ViewportChanged += UpdateGroundScale;
@@ -227,6 +232,7 @@ public class NoctaxisMapView : UserControl
             _attached = false;
             _lightPollution?.Detach();
             _composition.Runtime.AttributionChanged -= RefreshAttribution;
+            AppLanguages.CurrentChanged -= ApplyLabelLanguage;
             _viewportRedraw.Detach();
             _renderTimer.Stop();
             _lastViewportSignature = null;
@@ -331,6 +337,13 @@ public class NoctaxisMapView : UserControl
     }
 
     private static SkiaSharp.SKColor ToSkia(Color colour) => new(colour.R, colour.G, colour.B, colour.A);
+
+    // Raised by whichever thread changed the language; the map is only touched on the UI thread.
+    private void ApplyLabelLanguage(string language)
+    {
+        if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(() => ApplyLabelLanguage(language)); return; }
+        if (_composition.ApplyLabelLanguage(language)) _mapControl.RefreshGraphics();
+    }
 
     private void ApplyBasemapStyle()
     {

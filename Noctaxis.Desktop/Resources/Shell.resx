@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Shell_Close_Tooltip" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Shell_CloseWindow_AccessibleName" xml:space="preserve">
+    <value>Close window</value>
+  </data>
+  <data name="Shell_Locations_Tab" xml:space="preserve">
+    <value>Locations</value>
+  </data>
+  <data name="Shell_Maximize_Tooltip" xml:space="preserve">
+    <value>Maximize</value>
+  </data>
+  <data name="Shell_MaximizeRestoreWindow_AccessibleName" xml:space="preserve">
+    <value>Maximize or restore window</value>
+  </data>
+  <data name="Shell_Minimize_Tooltip" xml:space="preserve">
+    <value>Minimize</value>
+  </data>
+  <data name="Shell_MinimizeWindow_AccessibleName" xml:space="preserve">
+    <value>Minimize window</value>
+  </data>
+  <data name="Shell_NoctaxisLogo_AccessibleName" xml:space="preserve">
+    <value>Noctaxis logo</value>
+  </data>
+  <data name="Shell_Notice_SaveFailed_Format" xml:space="preserve">
+    <value>Your settings and locations could not be saved: {0} Noctaxis will try again when something changes.</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Shell_Notice_SettingNotApplied_Format" xml:space="preserve">
+    <value>A settings change could not be applied: {0}</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Shell_Planner_Tab" xml:space="preserve">
+    <value>Planner</value>
+  </data>
+  <data name="Shell_Settings_Tab" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="Shell_Status_StartFailed_Format" xml:space="preserve">
+    <value>Noctaxis could not start: {0}</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Shell_Status_Starting" xml:space="preserve">
+    <value>Starting Noctaxis…</value>
+  </data>
+  <data name="Shell_Tagline_Label" xml:space="preserve">
+    <value>Astral photography planner</value>
+  </data>
+  <data name="Shell_Window_Title" xml:space="preserve">
+    <value>Noctaxis — Astral photography planner</value>
+  </data>
+</root>

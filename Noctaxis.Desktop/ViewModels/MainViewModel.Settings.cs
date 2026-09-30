@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Runtime.CompilerServices;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -8,6 +9,9 @@ using Noctaxis.Core.Measurements;
 using Noctaxis.Desktop.Services;
 
 namespace Noctaxis.Desktop.ViewModels;
+
+/// <summary>A language the application can run in: its culture identifier and its displayed name.</summary>
+public sealed record LanguageOption(string Id, string Label);
 
 /// <summary>When a changed setting is applied to the running application.</summary>
 public enum SettingCommit
@@ -61,12 +65,19 @@ public partial class MainViewModel
             var previous = _settings;
             if (Equals(previous, value)) return;
             _settings = value;
-            foreach (var definition in _settingDefinitions)
+            // While the units change, a control may momentarily hold a number in the old unit against a
+            // limit in the new one and write its corrected value back. That is not an edit.
+            _changingMeasurementProfile = previous.EffectiveMeasurementSystem != value.EffectiveMeasurementSystem;
+            try
             {
-                if (Equals(definition.Read(previous), definition.Read(value))) continue;
-                if (!_deferredSettings.ContainsKey(definition.Property)) OnPropertyChanged(definition.Property);
-                foreach (var dependent in definition.AlsoNotify) OnPropertyChanged(dependent);
+                foreach (var definition in _settingDefinitions)
+                {
+                    if (Equals(definition.Read(previous), definition.Read(value))) continue;
+                    if (!_deferredSettings.ContainsKey(definition.Property)) OnPropertyChanged(definition.Property);
+                    foreach (var dependent in definition.AlsoNotify) OnPropertyChanged(dependent);
+                }
             }
+            finally { _changingMeasurementProfile = false; }
             NotifyPendingRestart();
         }
     }
@@ -79,34 +90,61 @@ public partial class MainViewModel
 
     private static List<SettingDefinition> CreateSettingDefinitions() =>
     [
-        new(nameof(SettingsUnits), "Measurement system", s => MeasurementUnits.NormaliseId(s.Units),
-            AlsoNotify: [nameof(WeatherDetails), nameof(ConfiguredWeatherDetails)]),
-        new(nameof(SettingsExternalMapProvider), "External map provider", s => s.ExternalMapProvider),
-        new(nameof(SettingsTimeZoneId), "Time zone", s => s.SelectedTimeZoneId),
-        new(nameof(SettingsTimeSnapMinutes), "Time slider snap interval", s => s.TimeSnapMinutes),
-        new(nameof(SettingsCameraHeightAboveGroundMetres), "Camera height", s => s.EffectiveCameraHeightAboveGroundMetres),
-        new(nameof(SettingsWeatherCacheDistance), "Forecast reuse distance", s => s.EffectiveWeather.CacheDistanceKilometres),
-        new(nameof(SettingsTerrainCacheLimitGiB), "Maximum terrain cache size", s => s.EffectiveTerrainCacheLimitBytes),
-        new(nameof(SettingsLightPollutionColorMap), "Light pollution colour map",
+        new(nameof(SettingsLanguage), Strings.Get("Settings_Name_Language"), s => s.EffectiveLanguage),
+        // Everything that shows a physical quantity is drawn again in the new units.
+        new(nameof(SettingsUnits), Strings.Get("Settings_Name_MeasurementSystem"), s => MeasurementUnits.NormaliseId(s.Units),
+            AlsoNotify: [nameof(Measurements), nameof(WeatherDetails), nameof(ConfiguredWeatherDetails), nameof(GroundObstructionText),
+                nameof(FramingVisibilityStatus), nameof(GroundElevationDisplay), nameof(GroundElevationUnitText),
+                nameof(GroundElevationSourceText), nameof(TerrainDatumText), nameof(EffectiveObserverAltitudeText),
+                // The limit before the value, so the control ends on the value in the new unit.
+                nameof(CameraHeightMaximum), nameof(SettingsCameraHeightAboveGround), nameof(CameraHeightLabel),
+                nameof(CameraHeightAccessibleName), nameof(SettingsWeatherCacheDistanceDisplay), nameof(WeatherCacheDistanceLabel),
+                nameof(WeatherCacheDistanceAccessibleName)]),
+        new(nameof(SettingsExternalMapProvider), Strings.Get("Settings_Name_ExternalMapProvider"), s => s.ExternalMapProvider),
+        new(nameof(SettingsTimeZoneId), Strings.Get("Settings_Name_TimeZone"), s => s.SelectedTimeZoneId),
+        new(nameof(SettingsTimeSnapMinutes), Strings.Get("Settings_Name_TimeSnapInterval"), s => s.TimeSnapMinutes),
+        new(nameof(SettingsCameraHeightAboveGroundMetres), Strings.Get("Settings_Name_CameraHeight"), s => s.EffectiveCameraHeightAboveGroundMetres,
+            AlsoNotify: [nameof(SettingsCameraHeightAboveGround)]),
+        new(nameof(SettingsWeatherCacheDistance), Strings.Get("Settings_Name_ForecastReuseDistance"), s => s.EffectiveWeather.CacheDistanceKilometres,
+            AlsoNotify: [nameof(SettingsWeatherCacheDistanceDisplay)]),
+        new(nameof(SettingsTerrainCacheLimitGiB), Strings.Get("Settings_Name_TerrainCacheSize"), s => s.EffectiveTerrainCacheLimitBytes),
+        new(nameof(SettingsLightPollutionColorMap), Strings.Get("Settings_Name_LightPollutionColourMap"),
             s => Mapping.LightPollutionColorMaps.Resolve(s.LightPollution?.PaletteId).Id,
             AlsoNotify: [nameof(LightPollutionColorMapDescription), nameof(LightPollutionColourVisionAdvice),
                 nameof(HasLightPollutionColourVisionAdvice), nameof(LightPollutionMapPreferences)]),
-        new(nameof(SettingsEnableTerrainCalculations), "Terrain calculations", s => s.EnableTerrainCalculations),
-        new(nameof(SettingsMinimumTerrainFrameCoveragePercent), "Minimum terrain frame coverage",
+        new(nameof(SettingsEnableTerrainCalculations), Strings.Get("Settings_Name_TerrainCalculations"), s => s.EnableTerrainCalculations),
+        new(nameof(SettingsMinimumTerrainFrameCoveragePercent), Strings.Get("Settings_Name_MinimumTerrainFrameCoverage"),
             s => s.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent),
-        new(nameof(SettingsTerrainMinimapContext), "Terrain minimap context", s => s.EffectiveTerrainMinimapContext),
-        new(nameof(SettingsCameraFramingOverlayVisible), "Camera framing on map", s => s.EffectiveCameraFraming.IsOverlayVisible),
-        new(nameof(SettingsShowFramingVisibilityLimits), "Weather and terrain visibility limits",
+        new(nameof(SettingsTerrainMinimapContext), Strings.Get("Settings_Name_TerrainMinimapContext"), s => s.EffectiveTerrainMinimapContext),
+        new(nameof(SettingsCameraFramingOverlayVisible), Strings.Get("Settings_Name_CameraFramingOnMap"), s => s.EffectiveCameraFraming.IsOverlayVisible),
+        new(nameof(SettingsShowFramingVisibilityLimits), Strings.Get("Settings_Name_VisibilityLimits"),
             s => s.EffectiveCameraFraming.ShowVisibilityLimits),
-        new(nameof(SettingsFramingShadingOpacityPercent), "Camera overlay opacity", s => s.EffectiveCameraFraming.ShadingOpacityPercent),
-        new(nameof(SettingsTerrainTintStrengthPercent), "Terrain tint strength", s => s.EffectiveCameraFraming.TerrainTintStrengthPercent),
-        new(nameof(SettingsTerrainObstructionColour), "Terrain obstruction colour", s => s.EffectiveCameraFraming.TerrainObstructionColour,
+        new(nameof(SettingsFramingShadingOpacityPercent), Strings.Get("Settings_Name_CameraOverlayOpacity"), s => s.EffectiveCameraFraming.ShadingOpacityPercent),
+        new(nameof(SettingsTerrainTintStrengthPercent), Strings.Get("Settings_Name_TerrainTintStrength"), s => s.EffectiveCameraFraming.TerrainTintStrengthPercent),
+        new(nameof(SettingsTerrainObstructionColour), Strings.Get("Settings_Name_TerrainObstructionColour"), s => s.EffectiveCameraFraming.TerrainObstructionColour,
             AlsoNotify: [nameof(SettingsTerrainObstructionColourHex)]),
-        new(nameof(SettingsFramingLineThickness), "Boundary line thickness", s => s.EffectiveCameraFraming.LineThickness),
-        new(nameof(SettingsTerrainDebugOverlay), "Terrain diagnostics", s => s.TerrainDebugOverlay),
+        new(nameof(SettingsFramingLineThickness), Strings.Get("Settings_Name_BoundaryLineThickness"), s => s.EffectiveCameraFraming.LineThickness),
+        new(nameof(SettingsTerrainDebugOverlay), Strings.Get("Settings_Name_TerrainDiagnostics"), s => s.TerrainDebugOverlay),
     ];
 
     // ---- The settings, each a view of Settings --------------------------------------------------
+
+    /// <summary>
+    /// The languages Noctaxis ships, each with its name from the resources. The identifier is what is
+    /// saved; the name is only what is shown.
+    /// </summary>
+    public IReadOnlyList<LanguageOption> LanguageOptions { get; } = AppLanguages.SupportedIds
+        .Select(id => new LanguageOption(id, Strings.Get("Settings_Language_Name_" + id.Replace('-', '_')))).ToArray();
+
+    /// <summary>
+    /// The application language: text, number and date formats, and the language preferred for place
+    /// names on the map. There is no separate setting for any of those.
+    /// </summary>
+    public LanguageOption? SettingsLanguage
+    {
+        get => LanguageOptions.FirstOrDefault(option => option.Id == Settings.EffectiveLanguage) ?? LanguageOptions[0];
+        set { if (value is not null) ChangeSetting(s => s with { Language = AppLanguages.Normalise(value.Id) }); }
+    }
 
     public string SettingsUnits
     {
@@ -139,6 +177,59 @@ public partial class MainViewModel
         set => ChangeSetting(s => s with { CameraHeightAboveGroundMetres = AppSettings.NormaliseCameraHeight(value) },
             SettingCommit.Deferred, value);
     }
+
+    // ---- Quantities edited in the measurement profile's units ----------------------------------------
+    // The setting is stored in SI (the two properties around this block). The controls edit it in
+    // the unit the profile gives that quantity, to one decimal place, and name that unit.
+
+    /// <summary>The measurement system as the map and drawing controls take it.</summary>
+    public MeasurementSystem Measurements => Settings.EffectiveMeasurementSystem;
+
+    private bool _changingMeasurementProfile;
+
+    /// <summary>Camera height above ground in the profile's height unit.</summary>
+    public double SettingsCameraHeightAboveGround
+    {
+        get => Math.Round(Settings.MeasurementProfile.Height.FromBase(SettingsCameraHeightAboveGroundMetres), 1);
+        set
+        {
+            if (_changingMeasurementProfile || !double.IsFinite(value) || value == SettingsCameraHeightAboveGround) return;
+            // The rule is the SI one: whatever was typed is converted, then held within the limits in metres.
+            SettingsCameraHeightAboveGroundMetres = AppSettings.NormaliseCameraHeight(Settings.MeasurementProfile.Height.ToBase(value));
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    /// The largest camera height the control accepts: <see cref="AppSettings.MaximumCameraHeightAboveGroundMetres"/>
+    /// in the profile's height unit, rounded up to the control's one decimal place so that the limit
+    /// itself can be shown and typed. It is a convenience for the control, not the rule; the setter
+    /// holds every value to the limit in metres.
+    /// </summary>
+    public double CameraHeightMaximum =>
+        Math.Ceiling(Settings.MeasurementProfile.Height.FromBase(AppSettings.MaximumCameraHeightAboveGroundMetres) * 10 - 1e-9) / 10;
+
+    public string CameraHeightLabel =>
+        Strings.Format("Settings_Equipment_CameraHeightAboveGround_Label_Format", Settings.MeasurementProfile.Height.Symbol);
+    public string CameraHeightAccessibleName =>
+        Strings.Format("Settings_Equipment_CameraHeightAboveGround_AccessibleName_Format", Settings.MeasurementProfile.Height.Name);
+
+    /// <summary>Forecast reuse distance in the profile's long-distance unit.</summary>
+    public double SettingsWeatherCacheDistanceDisplay
+    {
+        get => Math.Round(Settings.MeasurementProfile.LongDistance.FromBase(SettingsWeatherCacheDistance), 1);
+        set
+        {
+            if (_changingMeasurementProfile || !double.IsFinite(value) || value == SettingsWeatherCacheDistanceDisplay) return;
+            SettingsWeatherCacheDistance = Math.Clamp(Settings.MeasurementProfile.LongDistance.ToBase(value), 0, 100);
+            OnPropertyChanged();
+        }
+    }
+
+    public string WeatherCacheDistanceLabel =>
+        Strings.Format("Settings_Weather_ForecastReuseDistance_Label_Format", Settings.MeasurementProfile.LongDistance.Symbol);
+    public string WeatherCacheDistanceAccessibleName =>
+        Strings.Format("Settings_Weather_ForecastReuseDistance_AccessibleName_Format", Settings.MeasurementProfile.LongDistance.Name);
 
     public double SettingsWeatherCacheDistance
     {
@@ -312,7 +403,7 @@ public partial class MainViewModel
         catch (Exception ex)
         {
             _logger.LogError(ex, "A settings change could not be applied");
-            ShowOperationalNotice("A settings change could not be applied: " + ex.Message);
+            ShowOperationalNotice(Strings.Format("Shell_Notice_SettingNotApplied_Format", ex.Message));
         }
         finally { lock (_settingsApplications) _settingsApplications.Remove(application); }
     }
@@ -383,7 +474,7 @@ public partial class MainViewModel
     public bool HasPendingRestart => PendingRestartSettings.Count > 0;
 
     public string PendingRestartSummary => HasPendingRestart
-        ? "Waiting for restart: " + string.Join(", ", PendingRestartSettings) + "."
+        ? Strings.Format("Settings_Restart_Pending_Format", string.Join(", ", PendingRestartSettings))
         : string.Empty;
 
     [ObservableProperty] private string? _restartStatus;
@@ -417,14 +508,14 @@ public partial class MainViewModel
         await CommitPendingSettingsAsync();
         if (!await FlushAsync())
         {
-            RestartStatus = "Noctaxis was not restarted because your settings could not be saved.";
+            RestartStatus = Strings.Get("Settings_Restart_NotSaved");
             IsRestarting = false;
             return;
         }
         var result = _restartService.Restart();
         if (result.Succeeded) return;
         _logger.LogWarning("Noctaxis could not restart itself: {Failure}", result.Failure);
-        RestartStatus = $"Noctaxis could not restart itself ({result.Failure}). Your changes are saved; close and reopen Noctaxis to apply them.";
+        RestartStatus = Strings.Format("Settings_Restart_Failed_Format", result.Failure);
         IsRestarting = false;
     }
 }

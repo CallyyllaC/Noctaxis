@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform.Storage;
@@ -85,10 +86,10 @@ public partial class MainWindow : Window
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "Export Noctaxis scouting card",
+            Title = Strings.Get("Planner_Export_SaveDialog_Title"),
             SuggestedFileName = "noctaxis-scouting-card.png",
             DefaultExtension = "png",
-            FileTypeChoices = [new FilePickerFileType("PNG image") { Patterns = ["*.png"] }]
+            FileTypeChoices = [new FilePickerFileType(Strings.Get("Planner_Export_SaveDialog_PngFileType")) { Patterns = ["*.png"] }]
         });
         if (file is null) return;
         try

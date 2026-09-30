@@ -1,26 +1,32 @@
 <views:NoctaxisDialogWindow xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:Noctaxis.Desktop.Localisation"
         xmlns:views="clr-namespace:Noctaxis.Desktop.Views"
         xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
         x:Class="Noctaxis.Desktop.Views.SavedLocationEditDialog"
         x:CompileBindings="False"
-        Title="Edit location" Width="520" Height="390" MinWidth="420" MinHeight="340">
+        Title="{loc:Text Locations_Edit_EditLocation_Title}" Width="520" Height="390" MinWidth="420" MinHeight="340">
   <Border Classes="noctaxisDialogSurface">
   <Grid RowDefinitions="*,Auto" Margin="22" RowSpacing="16">
     <ScrollViewer><StackPanel Spacing="9">
-      <TextBlock TextWrapping="Wrap" Text="Edit location" FontSize="{DynamicResource TextNumeric}" FontWeight="SemiBold"/>
-      <TextBlock TextWrapping="Wrap" Text="Location name" Classes="fieldLabel"/>
+      <!-- Heading and title are set from the dialog's mode, so an Add flow never says "Edit location". -->
+      <TextBlock x:Name="HeadingText" TextWrapping="Wrap" Text="{loc:Text Locations_Edit_EditLocation_Label}" FontSize="{DynamicResource TextNumeric}" FontWeight="SemiBold"/>
+      <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_Edit_LocationName_Label}" Classes="fieldLabel"/>
       <TextBox Text="{Binding Name}"/>
-      <TextBlock TextWrapping="Wrap" Text="Description (optional)" Classes="fieldLabel"/>
+      <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_Edit_DescriptionOptional_Label}" Classes="fieldLabel"/>
       <TextBox Text="{Binding Description}" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap"/>
-      <TextBlock TextWrapping="Wrap" Text="Coordinates" Classes="fieldLabel"/>
-      <TextBox Text="{Binding Coordinates}" IsReadOnly="True"/>
+      <TextBlock TextWrapping="Wrap" Text="{loc:Text Locations_Edit_Coordinates_Label}" Classes="fieldLabel"/>
+      <!-- The coordinates come from the Planner pin and are not edited here: shown as plain text on the
+           dialog surface rather than in a box that looks like the editable fields above it. -->
+      <SelectableTextBlock x:Name="CoordinatesText" Text="{Binding Coordinates}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource SecondaryText}" Padding="0,2"
+                           AutomationProperties.Name="{loc:Text Locations_Edit_Coordinates_Label}"/>
       <controls:StatusText Kind="Error" Text="{Binding ValidationMessage}"/>
     </StackPanel></ScrollViewer>
-    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-      <Button Content="Cancel" Click="CancelClick" IsCancel="True" MinWidth="90"/>
-      <Button x:Name="PrimaryButton" Content="Save changes" Click="SaveClick" IsDefault="True" MinWidth="90"/>
-    </StackPanel>
+    <WrapPanel Grid.Row="1" HorizontalAlignment="Right" ItemSpacing="8" LineSpacing="8">
+      <Button Content="{loc:Text Common_Cancel_Button}" Click="CancelClick" IsCancel="True" MinWidth="90"/>
+      <Button x:Name="PrimaryButton" Content="{loc:Text Locations_Edit_SaveChanges_Button}" Click="SaveClick" IsDefault="True" MinWidth="90"/>
+    </WrapPanel>
   </Grid>
   </Border>
 </views:NoctaxisDialogWindow>

@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Noctaxis.Core.Astronomy;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Catalogues;
@@ -134,11 +135,11 @@ public sealed class PlanningService(
         foreach (var target in targets)
             objectPlans.Add(new CelestialObjectPlan(positions[target.Id], await pathTasks[target.Id].ConfigureAwait(false)));
         var pendingHorizon = session.EnableTerrainCalculations
-            ? new TerrainHorizonProfile(session.Observer, [], false, "Environmental horizon loading", session.Instant)
+            ? new TerrainHorizonProfile(session.Observer, [], false, Strings.Get("Terrain_Status_HorizonLoading"), session.Instant)
             : TerrainHorizonProfile.Disabled(session.Observer, session.Instant, 0,
                 session.EffectiveObserverElevation.ManualGroundElevationOverrideAslMetres);
         return new PlanningSnapshot(session, position, path, lenses.Calculate(session.Lens), pendingHorizon,
-            new TerrainCrossings(null, null), new WeatherResult(DataState.Loading, null, "Loading weather…"),
+            new TerrainCrossings(null, null), new WeatherResult(DataState.Loading, null, Strings.Get("Weather_Loading")),
             new AstronomyContext(sun, moon), objectPlans);
     }
 

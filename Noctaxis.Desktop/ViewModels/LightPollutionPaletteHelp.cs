@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using Noctaxis.Desktop.Mapping;
 
 namespace Noctaxis.Desktop.ViewModels;
@@ -9,11 +10,11 @@ internal static class LightPollutionPaletteHelp
             .Select(LightPollutionColorMaps.Resolve).ToArray());
     public static string Description(string? id) => id switch
     {
-        "turbo" => "Vivid colours with strong visual separation. Best for quickly spotting darker and brighter regions. Not colour-vision safe: with red–green or blue–yellow colour-vision deficiencies some levels look alike.",
-        "viridis" => "Balanced colours designed for clear quantitative comparison.",
-        "inferno" => "High-contrast purple, red and yellow palette with a heat-like appearance.",
-        "magma" => "Softer purple, magenta and warm-yellow dark-to-light palette.",
-        "cividis" => "Blue-to-yellow palette designed to remain useful for many users with colour-vision deficiencies.",
-        _ => "Neutral black-to-white representation."
+        "turbo" => Strings.Get("Settings_PlannerMap_Palette_Turbo_Description"),
+        "viridis" => Strings.Get("Settings_PlannerMap_Palette_Viridis_Description"),
+        "inferno" => Strings.Get("Settings_PlannerMap_Palette_Inferno_Description"),
+        "magma" => Strings.Get("Settings_PlannerMap_Palette_Magma_Description"),
+        "cividis" => Strings.Get("Settings_PlannerMap_Palette_Cividis_Description"),
+        _ => Strings.Get("Settings_PlannerMap_Palette_Grayscale_Description")
     };
 }

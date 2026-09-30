@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Noctaxis.Core.Domain;
@@ -18,11 +19,11 @@ public partial class MainViewModel
     /// colour-vision mode active the user is offered Cividis; their choice is never changed for them.
     /// </summary>
     public string LightPollutionColourVisionAdvice => SelectedColourVisionValue != ColourVisionMode.None && SettingsLightPollutionColorMap?.Id == "turbo"
-        ? "Turbo is not colour-vision safe with the selected colour vision mode. Cividis or Grayscale keep every level distinguishable." : string.Empty;
+        ? Strings.Get("Settings_PlannerMap_Palette_TurboAdvice") : string.Empty;
     public bool HasLightPollutionColourVisionAdvice => LightPollutionColourVisionAdvice.Length > 0;
     [RelayCommand]
     private void UseColourVisionSafeLightPollutionPalette() => SettingsLightPollutionColorMap = Mapping.LightPollutionColorMaps.Resolve("cividis");
-    [ObservableProperty] private string _lightPollutionStatus = "Not installed";
+    [ObservableProperty] private string _lightPollutionStatus = Strings.Get("Settings_Data_LightPollution_NotInstalled");
     [ObservableProperty] private string _lightPollutionProgress = "";
     [ObservableProperty] private bool _isManagingLightPollution;
     public bool CanManageLightPollution => !IsManagingLightPollution && LightPollutionInstallation is not null;
@@ -55,7 +56,7 @@ public partial class MainViewModel
             _lightPollutionNotificationsAttached = true;
         }
         await Task.Run(() => LightPollutionInstallation.DetectAsync());
-        LightPollutionStatus = LightPollutionInstallation.ReadError ?? (LightPollutionInstallation.IsAvailable ? "Installed" : "Not installed");
+        LightPollutionStatus = InstallationStatus(LightPollutionInstallation);
         OnPropertyChanged(nameof(LightPollutionMapPreferences));
     }
     [RelayCommand]
@@ -65,20 +66,20 @@ public partial class MainViewModel
         IsManagingLightPollution = true;
         _lightPollutionCancellation = new();
         var installCancellation = _lightPollutionCancellation;
-        LightPollutionStatus = "Installing…";
+        LightPollutionStatus = Strings.Get("Settings_Data_LightPollution_Installing");
         LightPollutionProgress = "";
         var progress = new Progress<LorenzInstallProgress>(p =>
         {
             if (ReferenceEquals(_lightPollutionCancellation, installCancellation))
-                LightPollutionProgress = $"{p.CompletedTiles:N0} / {p.TotalTiles:N0} files · {p.DownloadedBytes / 1048576d:F1} MiB downloaded";
+                LightPollutionProgress = Strings.Format("Settings_Data_LightPollution_Progress_Format", p.CompletedTiles, p.TotalTiles, p.DownloadedBytes / 1048576d);
         });
         try
         {
             await Task.Run(() => LightPollutionInstallation!.InstallAsync(progress, _lightPollutionCancellation.Token));
-            LightPollutionStatus = "Installed";
+            LightPollutionStatus = Strings.Get("Settings_Data_LightPollution_Installed");
         }
-        catch (OperationCanceledException) { LightPollutionStatus = LightPollutionInstallation!.IsAvailable ? "Cancelled · previous installation retained" : "Installation cancelled"; }
-        catch (Exception ex) { LightPollutionStatus = $"Installation error: {ex.Message}"; }
+        catch (OperationCanceledException) { LightPollutionStatus = Strings.Get(LightPollutionInstallation!.IsAvailable ? "Settings_Data_LightPollution_CancelledRetained" : "Settings_Data_LightPollution_Cancelled"); }
+        catch (Exception ex) { LightPollutionStatus = Strings.Format("Settings_Data_LightPollution_InstallError_Format", ex.Message); }
         finally { _lightPollutionCancellation.Dispose(); _lightPollutionCancellation = null; IsManagingLightPollution = false; }
     }
     [RelayCommand] private void CancelLightPollutionInstall() => _lightPollutionCancellation?.Cancel();
@@ -86,27 +87,30 @@ public partial class MainViewModel
     private async Task RemoveLightPollution()
     {
         if (!CanManageLightPollution) return;
-        if (!await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation("Remove the Light Pollution Atlas?",
-                "The installed atlas data will be deleted. The light pollution overlay will be unavailable until it is installed again, which downloads it anew.",
-                "Remove atlas")))
+        if (!await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation(Strings.Get("Dialogs_RemoveAtlas_Title"),
+                Strings.Get("Dialogs_RemoveAtlas_Message"),
+                Strings.Get("Dialogs_RemoveAtlas_Confirm"))))
             return;
         IsManagingLightPollution = true;
-        try { await Task.Run(() => LightPollutionInstallation!.RemoveAsync()); LightPollutionStatus = "Not installed"; LightPollutionProgress = ""; }
-        catch (Exception ex) { LightPollutionStatus = $"Removal error: {ex.Message}"; }
+        try { await Task.Run(() => LightPollutionInstallation!.RemoveAsync()); LightPollutionStatus = Strings.Get("Settings_Data_LightPollution_NotInstalled"); LightPollutionProgress = ""; }
+        catch (Exception ex) { LightPollutionStatus = Strings.Format("Settings_Data_LightPollution_RemoveError_Format", ex.Message); }
         finally { IsManagingLightPollution = false; }
     }
     [RelayCommand]
     private void OpenLightPollutionSource()
     {
-        if (!_externalUriLauncher.TryOpen(new(LorenzAtlas.InformationUrl), out var error)) LightPollutionStatus = $"Could not open source: {error}";
+        if (!_externalUriLauncher.TryOpen(new(LorenzAtlas.InformationUrl), out var error)) LightPollutionStatus = Strings.Format("Settings_Data_LightPollution_OpenSourceFailed_Format", error);
     }
+
+    private static string InstallationStatus(LorenzInstallation installation) => installation.ReadError
+        ?? Strings.Get(installation.IsAvailable ? "Settings_Data_LightPollution_Installed" : "Settings_Data_LightPollution_NotInstalled");
     private void LightPollutionDataChanged(object? sender, EventArgs args)
     {
         var generation = _lightPollutionNotificationGeneration;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             if (_lightPollutionNotificationsAttached && generation == _lightPollutionNotificationGeneration && !IsManagingLightPollution)
-                LightPollutionStatus = LightPollutionInstallation!.ReadError ?? (LightPollutionInstallation.IsAvailable ? "Installed" : "Not installed");
+                LightPollutionStatus = InstallationStatus(LightPollutionInstallation!);
         });
     }
     public void CancelEnvironmentalInstall()

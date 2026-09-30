@@ -9,7 +9,7 @@ Revert. The Settings page has no copy of the settings of its own. Every control 
 | Category | Settings | Actions |
 | --- | --- | --- |
 | Appearance | Theme, Mode (System/Dark/Light), Colour vision mode, Text size | — |
-| General | Measurement system, Planning time zone, Time slider snap interval, Open locations in (external map) | — |
+| General | Language, Measurement system, Planning time zone, Time slider snap interval, Open locations in (external map) | — |
 | Equipment | Camera height above ground, Cameras, Lenses | Add/remove camera or lens |
 | Planner map | Terrain calculations, Minimum terrain frame coverage, Terrain minimap context, Camera framing on map, Visibility limits, Overlay opacity, Terrain tint strength, Terrain obstruction colour, Boundary line thickness, Light pollution colour map | Use Cividis |
 | Weather | Forecast reuse distance, Weather values (requested, shown and exported) | — |
@@ -77,11 +77,12 @@ editing pauses (`SettingCommit.Deferred`, 700 ms); **Release** means applied whe
 | --- | --- | --- | --- | --- |
 | Theme / Mode / Colour vision | `Appearance` | Noctaxis, Dark, None | Now | Theme resources are republished live |
 | Text size | `Appearance.TextScale` | 100% | Release (`CommitSlider`) | Relayouts the whole window, which would move the slider under the pointer mid-drag. Keyboard and automation steps commit at once |
-| Measurement system | `Units` | Metric | Now | Formatting only |
+| Language | `Language` (a culture identifier) | `en-GB` | Now | One choice in v1. Text and map place names only: number and date formats follow the operating system, and units follow Measurement system. See docs/localisation.md |
+| Measurement system | `Units`: `Metric`, `UK` (shown as UK Mixed) or `Imperial` | UK Mixed | Now | Three choices: Metric, UK Mixed, Imperial. Display only: values stay stored in SI. Independent of Language and of the regional format. A missing or unrecognised saved value loads as UK Mixed; a saved `Metric` or `Imperial` is kept. The units of each quantity are tabulated in docs/localisation.md |
 | Planning time zone | `SelectedTimeZoneId` | system | Now | Recomputes astronomy for the current plan |
 | Time slider snap | `TimeSnapMinutes` | 5 | Now | Read when scrubbing |
 | External map | `ExternalMapProvider` | OpenStreetMap | Now | Read when opening a map |
-| Camera height | `CameraHeightAboveGroundMetres` | 1.7 m | Pause | Re-resolves the observer and recalculates terrain |
+| Camera height | `CameraHeightAboveGroundMetres` | 1.7 m | Pause | Re-resolves the observer and recalculates terrain. Limits are 0–100 m; the control shows them converted (0–328.1 ft under Imperial) but every value is held to 100 m. Always stored in metres |
 | Cameras, lenses | `Equipment` | Migrated from the session lens | Pause, once all profiles are valid | Typing names would otherwise save every keystroke. Invalid drafts are shown with a message and never saved |
 | Terrain calculations | `EnableTerrainCalculations` | On | Now | A toggle; cancels and restarts terrain work once |
 | Minimum terrain coverage | `CameraFraming.MinimumTerrainFrameCoveragePercent` | 5% | Now | Recomputes cached framing only |
@@ -91,7 +92,7 @@ editing pauses (`SettingCommit.Deferred`, 700 ms); **Release** means applied whe
 | Terrain tint strength | `CameraFraming.TerrainTintStrengthPercent` | 40% | Now (live while dragging) | Drawing only |
 | Terrain obstruction colour | `CameraFraming.TerrainObstructionColour` | #9A6F9E | Now (live) | Drawing only |
 | Light-pollution colour map | `LightPollution.PaletteId` | grayscale | Now | Overlay re-render only |
-| Forecast reuse distance | `Weather.CacheDistanceKilometres` | 5 km | Pause | Refreshes the forecast over the network |
+| Forecast reuse distance | `Weather.CacheDistanceKilometres` | 5 km | Pause | Refreshes the forecast over the network. Edited in kilometres (Metric) or miles (UK Mixed, Imperial); always stored in kilometres |
 | Weather values | `Weather.EnabledFields` | All | Pause | Part of the forecast request: newly enabled values are fetched in one refresh |
 | Celestial objects | `CelestialObjects` | Sun, Moon | Now | List edits |
 | Terrain cache size | `TerrainCacheLimitBytes` | 2 GiB (minimum 0.25) | Pause | A lower limit deletes the cached files furthest from saved locations |

@@ -108,14 +108,16 @@ public sealed partial class MainViewModelTests
 
             window.SelectSettingsCategory("General");
             var units = window.FindControl<WrapPanel>("MeasurementChoices")!;
-            Assert.Equal(MeasurementUnits.Options, Radios(units).Select(r => (string)r.Content!));
-            foreach (var radio in Radios(units))
+            // Metric, UK Mixed, Imperial: the names are resource text, the saved identifiers are not.
+            Assert.Equal(new[] { "Metric", "UK Mixed", "Imperial" }, Radios(units).Select(r => (string)r.Content!));
+            Assert.Equal(new[] { "Metric", "UK", "Imperial" }, MeasurementUnits.Options);
+            foreach (var (radio, id) in Radios(units).Zip(MeasurementUnits.Options))
             {
                 radio.IsChecked = true; Dispatcher.UIThread.RunJobs();
                 Assert.Single(Radios(units), r => r.IsChecked == true);
-                Assert.Equal(radio.Content, vm.SettingsUnits);
+                Assert.Equal(id, vm.SettingsUnits);
                 await vm.SettleSettingsAsync();
-                Assert.Equal(radio.Content, store.State.Settings.Units); // Saved automatically.
+                Assert.Equal(id, store.State.Settings.Units); // Saved automatically.
             }
             foreach (var scale in new[] { 100d, 200 })
             {
@@ -125,7 +127,7 @@ public sealed partial class MainViewModelTests
             }
             Assert.Same(session, vm.Session);
             Assert.Equal(calls, (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes));
-            Assert.Equal("UK", store.State.Settings.Units);
+            Assert.Equal("Imperial", store.State.Settings.Units);
         }
         finally { window.Close(); service.Apply(new()); }
     }

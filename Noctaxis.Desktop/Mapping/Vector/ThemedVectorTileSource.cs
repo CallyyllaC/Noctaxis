@@ -31,7 +31,9 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
     private readonly Dictionary<(int, int, int), Task<VectorTile?>> _decoded = [];
     private readonly LinkedList<(int, int, int)> _recency = [];
     private BasemapStyle _style;
+    private string _labelLanguage = Noctaxis.Core.Localisation.AppLanguages.DefaultId;
     private long _styleVersion;
+    private long _labelVersion;
     private long _renders;
     private long _decodes;
 
@@ -67,32 +69,56 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
         }
     }
 
+    /// <summary>The language place names are preferred in; see <see cref="BasemapLabelNames"/>.</summary>
+    public string LabelLanguage { get { lock (_gate) return _labelLanguage; } }
+    public long LabelVersion => Interlocked.Read(ref _labelVersion);
+
+    /// <summary>
+    /// Adopts a label language. Returns false when it is the language already in use. Only tiles
+    /// that draw names are affected; the vector data holds every language and is kept.
+    /// </summary>
+    public bool SetLabelLanguage(string language)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(language);
+        lock (_gate)
+        {
+            if (string.Equals(_labelLanguage, language, StringComparison.Ordinal)) return false;
+            _labelLanguage = language;
+            Interlocked.Increment(ref _labelVersion);
+            return true;
+        }
+    }
+
     public async Task<byte[]?> GetTileAsync(TileInfo tileInfo) => (await RenderAsync(tileInfo).ConfigureAwait(false)).Bytes;
 
     /// <summary>
-    /// Renders one pass of a tile and reports the style version it was drawn with. Every pass is
-    /// drawn from the same decoded vector tile, so splitting the basemap never fetches or decodes twice.
+    /// Renders one pass of a tile and reports the style and label versions it was drawn with. Every
+    /// pass is drawn from the same decoded vector tile, so splitting the basemap never fetches or
+    /// decodes twice.
     /// </summary>
-    internal async Task<(byte[]? Bytes, long StyleVersion)> RenderAsync(TileInfo tileInfo,
+    internal async Task<(byte[]? Bytes, long StyleVersion, long LabelVersion)> RenderAsync(TileInfo tileInfo,
         BasemapPass pass = BasemapPass.Full)
     {
         var index = tileInfo.Index;
-        if (index.Level < 0 || index.Level > MaximumDisplayZoom) return (null, StyleVersion);
+        if (index.Level < 0 || index.Level > MaximumDisplayZoom) return (null, StyleVersion, LabelVersion);
         var request = new BasemapTileRequest(index.Level, index.Col, index.Row);
         var tile = await GetDecodedAsync(request.SourceZoom, request.SourceColumn, request.SourceRow)
             .ConfigureAwait(false);
-        if (tile is null) return (null, StyleVersion);
+        if (tile is null) return (null, StyleVersion, LabelVersion);
         return await Task.Run(() =>
         {
             while (true)
             {
                 BasemapStyle style;
-                long version;
-                lock (_gate) { style = _style; version = _styleVersion; }
-                var bytes = _renderer.RenderPng(tile, request, style, pass);
+                string language;
+                long version, labels;
+                lock (_gate) { style = _style; version = _styleVersion; language = _labelLanguage; labels = _labelVersion; }
+                var bytes = _renderer.RenderPng(tile, request, style, pass, language);
                 Interlocked.Increment(ref _renders);
-                // A theme change during the render would leave this tile in the old style: draw it again.
-                if (version == StyleVersion) return ((byte[]?)bytes, version);
+                // A theme change during the render would leave this tile in the old style, and a
+                // language change would leave its names in the old language: draw it again.
+                if (version == StyleVersion && (pass == BasemapPass.Geography || labels == LabelVersion))
+                    return ((byte[]?)bytes, version, labels);
             }
         }).ConfigureAwait(false);
     }

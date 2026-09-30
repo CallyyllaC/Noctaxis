@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
@@ -642,8 +643,8 @@ public sealed class HorizonService : IHorizonService
             var groundCoverage = Volatile.Read(ref _terrainCoverage) != 0;
             var groundSource = _observerTerrain.SourceId;
             var status = isComplete
-                ? groundCoverage ? $"{groundSource} terrain horizon" : "Terrain elevation unavailable"
-                : "Current camera terrain ready; full horizon refining";
+                ? groundCoverage ? Strings.Format("Terrain_Status_Horizon_Format", groundSource) : Strings.Get("Terrain_Status_ElevationUnavailable")
+                : Strings.Get("Terrain_Status_Refining");
             var snapshot = _samples.ToArray();
             modelTimer.Stop();
             _timings.AddModelConstruction(modelTimer.Elapsed.TotalMilliseconds);

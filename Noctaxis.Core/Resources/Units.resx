@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Units_Celsius" xml:space="preserve">
+    <value>°C</value>
+  </data>
+  <data name="Units_Celsius_Name" xml:space="preserve">
+    <value>degrees Celsius</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Fahrenheit" xml:space="preserve">
+    <value>°F</value>
+  </data>
+  <data name="Units_Fahrenheit_Name" xml:space="preserve">
+    <value>degrees Fahrenheit</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Feet" xml:space="preserve">
+    <value>ft</value>
+  </data>
+  <data name="Units_Feet_Name" xml:space="preserve">
+    <value>feet</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Hectopascals" xml:space="preserve">
+    <value>hPa</value>
+  </data>
+  <data name="Units_Hectopascals_Name" xml:space="preserve">
+    <value>hectopascals</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Inches" xml:space="preserve">
+    <value>in</value>
+  </data>
+  <data name="Units_Inches_Name" xml:space="preserve">
+    <value>inches</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_InchesOfMercury" xml:space="preserve">
+    <value>inHg</value>
+  </data>
+  <data name="Units_InchesOfMercury_Name" xml:space="preserve">
+    <value>inches of mercury</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Kilometres" xml:space="preserve">
+    <value>km</value>
+  </data>
+  <data name="Units_Kilometres_Name" xml:space="preserve">
+    <value>kilometres</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_KilometresPerHour" xml:space="preserve">
+    <value>km/h</value>
+  </data>
+  <data name="Units_KilometresPerHour_Name" xml:space="preserve">
+    <value>kilometres per hour</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Metres" xml:space="preserve">
+    <value>m</value>
+  </data>
+  <data name="Units_Metres_Name" xml:space="preserve">
+    <value>metres</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Miles" xml:space="preserve">
+    <value>mi</value>
+  </data>
+  <data name="Units_Miles_Name" xml:space="preserve">
+    <value>miles</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_MilesPerHour" xml:space="preserve">
+    <value>mph</value>
+  </data>
+  <data name="Units_MilesPerHour_Name" xml:space="preserve">
+    <value>miles per hour</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Millimetres" xml:space="preserve">
+    <value>mm</value>
+  </data>
+  <data name="Units_Millimetres_Name" xml:space="preserve">
+    <value>millimetres</value>
+    <comment>The unit in words, used where a symbol would not be read out well: "Camera height above ground in metres".</comment>
+  </data>
+  <data name="Units_Value_Format" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>{0} is the number, already formatted for the culture; {1} is the unit symbol.</comment>
+  </data>
+</root>

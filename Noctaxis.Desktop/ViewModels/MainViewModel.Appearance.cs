@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Noctaxis.Core.Domain;
 using Noctaxis.Desktop.Themes;
@@ -6,7 +7,16 @@ namespace Noctaxis.Desktop.ViewModels;
 
 public sealed record AppearanceOption(string Id, string Label, bool IsSupporter, bool IsAvailable)
 {
-    public string AvailabilityLabel => IsSupporter ? (IsAvailable ? "Supporter" : "Locked · Supporter") : string.Empty;
+    public string AvailabilityLabel => IsSupporter
+        ? Strings.Get(IsAvailable ? "Settings_Appearance_Theme_Supporter" : "Settings_Appearance_Theme_LockedSupporter") : string.Empty;
+
+    /// <summary>
+    /// A theme's name: its translatable name where it has one (key
+    /// <c>Settings_Appearance_ThemeName_&lt;id with . and - as _&gt;</c>), otherwise the name it is defined
+    /// with, which is a proper name ("Noctaxis", "Foxfire") and stays as it is.
+    /// </summary>
+    public static string ThemeName(string id, string definedName) =>
+        Strings.TryGet("Settings_Appearance_ThemeName_" + id.Replace('.', '_').Replace('-', '_'), out var name) ? name : definedName;
 }
 public sealed record ColourVisionOption(ColourVisionMode Mode, string Label);
 
@@ -16,11 +26,11 @@ public partial class MainViewModel
     private ThemeService? _themeService;
     public void AttachThemeService(ThemeService service) { _themeService = service; LoadAppearance(); }
     public IReadOnlyList<AppearanceOption> ThemeOptions =>
-        AppearanceCatalogue.Themes.Select(t => new AppearanceOption(t.Id, t.DisplayName, t.IsSupporter, AppearanceCatalogue.IsAvailable(t))).ToArray();
+        AppearanceCatalogue.Themes.Select(t => new AppearanceOption(t.Id, AppearanceOption.ThemeName(t.Id, t.DisplayName), t.IsSupporter, AppearanceCatalogue.IsAvailable(t))).ToArray();
     private ThemeCatalogue AppearanceCatalogue => _themeService?.Catalogue ?? new ThemeCatalogue();
     public IReadOnlyList<ColourVisionOption> ColourVisionOptions { get; } =
-    [new(ColourVisionMode.None, "None"), new(ColourVisionMode.Protanopia, "Protanopia"),
-     new(ColourVisionMode.Deuteranopia, "Deuteranopia"), new(ColourVisionMode.Tritanopia, "Tritanopia")];
+    [new(ColourVisionMode.None, Strings.Get("Settings_Appearance_None_Option")), new(ColourVisionMode.Protanopia, Strings.Get("Settings_Appearance_Protanopia_Option")),
+     new(ColourVisionMode.Deuteranopia, Strings.Get("Settings_Appearance_Deuteranopia_Option")), new(ColourVisionMode.Tritanopia, Strings.Get("Settings_Appearance_Tritanopia_Option"))];
     public IReadOnlyList<AppearanceMode> AppearanceModeOptions { get; } = Enum.GetValues<AppearanceMode>();
     [ObservableProperty] private AppearanceMode _selectedAppearanceMode;
     [ObservableProperty] private AppearanceOption? _selectedTheme;

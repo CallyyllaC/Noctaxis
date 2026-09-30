@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -41,7 +42,7 @@ public partial class CelestialObjectItemViewModel : ObservableObject
     public bool CanRemove => !Target.IsSun && !Target.IsMoon;
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private bool _isPrimary;
-    public string PrimaryLabel => IsPrimary ? "Primary" : "Set primary";
+    public string PrimaryLabel => IsPrimary ? Strings.Get("Planner_Targets_Primary_Label") : Strings.Get("Planner_Targets_SetPrimary_Button");
 
     public void SetVisibilitySilently(bool value)
     {
@@ -67,10 +68,10 @@ public partial class CelestialSearchViewModel : ObservableObject
     public CelestialSearchViewModel(ITargetSearchService search, ITargetCatalogue catalogue)
     {
         _search = search;
-        ObjectTypes = [new ObjectTypeOption("All object types", null),
+        ObjectTypes = [new ObjectTypeOption(Strings.Get("Settings_Celestial_Filter_AllObjectTypes"), null),
             .. catalogue.ObjectTypes.Select(type => new ObjectTypeOption(FormatType(type), type))];
-        Constellations = ["All constellations", .. catalogue.Constellations];
-        DesignationFamilies = ["All designations", .. catalogue.DesignationFamilies];
+        Constellations = [Strings.Get("Settings_Celestial_Filter_AllConstellations"), .. catalogue.Constellations];
+        DesignationFamilies = [Strings.Get("Settings_Celestial_Filter_AllDesignations"), .. catalogue.DesignationFamilies];
         _selectedObjectType = ObjectTypes[0];
         _selectedConstellation = Constellations[0];
         _selectedDesignationFamily = DesignationFamilies[0];
@@ -93,7 +94,7 @@ public partial class CelestialSearchViewModel : ObservableObject
                                     SelectedDesignationFamily != DesignationFamilies[0];
     public bool HasResults => Results.Count > 0;
     public bool ShowEmptyState => !IsSearching && !HasResults && (Query.Trim().Length >= 2 || HasActiveFilters);
-    public string EmptyStateMessage => "No celestial objects match the current search and filters.";
+    public string EmptyStateMessage => Strings.Get("Settings_Celestial_NoMatches");
 
     partial void OnQueryChanged(string value) { NotifyResultState(); if (!_suppressSearch) QueueSearch(); }
     partial void OnSelectedObjectTypeChanged(ObjectTypeOption value) => FilterChanged();

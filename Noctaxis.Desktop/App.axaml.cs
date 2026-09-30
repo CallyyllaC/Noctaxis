@@ -14,6 +14,7 @@ using Noctaxis.Core.Environment;
 using Noctaxis.Core.Time;
 using Noctaxis.Core.Weather;
 using Noctaxis.Core.Locations;
+using Noctaxis.Core.Localisation;
 using Noctaxis.Desktop.ViewModels;
 using Noctaxis.Desktop.Views;
 using NodaTime;
@@ -39,8 +40,15 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            // The language comes first: every window and view model resolves its text as it is built.
+            AppLanguages.Apply(AppLanguages.ReadSaved(JsonUserDataStore.StateFilePath(new PlatformUserDataPathProvider())));
             _services = ConfigureServices();
             var viewModel = _services.GetRequiredService<MainViewModel>();
+            // The saved language is the one source of truth; the process follows it when it changes.
+            viewModel.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MainViewModel.SettingsLanguage)) AppLanguages.Apply(viewModel.Settings.EffectiveLanguage);
+            };
             viewModel.AttachThemeService(Themes!);
             var dialogs = _services.GetRequiredService<DesktopDialogService>();
             desktop.MainWindow = new MainWindow(viewModel, dialogs);

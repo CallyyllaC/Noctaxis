@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Globalization;
 using System.Net;
 using System.Text.Json;
@@ -42,7 +43,7 @@ public sealed class OpenMeteoLocationSearchProvider(
             var uri = $"search?name={Uri.EscapeDataString(query)}&count=8&language={CultureInfo.CurrentUICulture.TwoLetterISOLanguageName}&format=json";
             using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                throw new HttpRequestException("Location search rate limit reached.");
+                throw new HttpRequestException(Strings.Get("Places_Search_RateLimited"));
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<OpenMeteoGeocodingResponse>(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -142,7 +143,7 @@ public sealed class NominatimReverseGeocodingProvider(
             _lastRequestUtc = DateTimeOffset.UtcNow;
             if (response.StatusCode == HttpStatusCode.NotFound) return Cache(coordinate, null);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                throw new HttpRequestException("Reverse-geocoding rate limit reached.");
+                throw new HttpRequestException(Strings.Get("Places_ReverseGeocoding_RateLimited"));
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<NominatimReverseResponse>(stream,
@@ -230,10 +231,10 @@ public sealed class PlatformDeviceLocationProvider : IDeviceLocationProvider, ID
     {
         cancellationToken.ThrowIfCancellationRequested();
         var reason = OperatingSystem.IsLinux()
-            ? "Device location is unavailable because no supported GeoClue service is configured."
+            ? Strings.Get("Places_Device_UnavailableLinux")
             : OperatingSystem.IsWindows()
-                ? "Device location is unavailable in this desktop build."
-                : "Device location is not supported on this platform.";
+                ? Strings.Get("Places_Device_UnavailableWindows")
+                : Strings.Get("Places_Device_Unsupported");
         return Task.FromResult(new DeviceLocationAvailability(DeviceLocationAvailabilityState.Unsupported, reason));
     }
 
@@ -243,7 +244,7 @@ public sealed class PlatformDeviceLocationProvider : IDeviceLocationProvider, ID
 public sealed class UnavailableDeviceLocationProvider : IDeviceLocationProvider, IDeviceLocationAvailabilityService
 {
     public Task<DeviceLocationAvailability> GetAvailabilityAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(new DeviceLocationAvailability(DeviceLocationAvailabilityState.Unsupported, "Device location is unavailable."));
+        Task.FromResult(new DeviceLocationAvailability(DeviceLocationAvailabilityState.Unsupported, Strings.Get("Places_Device_Unavailable")));
     public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => Task.FromResult<LocationResolution?>(null);
 }
 
@@ -279,7 +280,7 @@ public sealed class LocationResolver(IDeviceLocationProvider deviceLocation, ILo
         }
         catch (ArgumentException) { }
         return Task.FromResult(new LocationResolution(GlobalFallback, LocationResolutionSource.ApplicationFallback,
-            IsApproximate: true, DisplayName: "Global map"));
+            IsApproximate: true, DisplayName: Strings.Get("Places_GlobalMap_Name")));
     }
 
     public async Task<LocationResolution> ResolveDeviceOrFallbackAsync(GeoCoordinate? lastCustomCoordinate, CancellationToken cancellationToken)

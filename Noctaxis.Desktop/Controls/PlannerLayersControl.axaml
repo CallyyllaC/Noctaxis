@@ -1,12 +1,13 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:Noctaxis.Desktop.Localisation"
              xmlns:vm="using:Noctaxis.Desktop.ViewModels"
              x:Class="Noctaxis.Desktop.Controls.PlannerLayersControl"
              x:DataType="vm:PlannerLayersViewModel">
-  <Button Name="LayersButton" Classes="mapChrome" Content="Layers ▾"
-          AutomationProperties.Name="Map layers"
-          AutomationProperties.HelpText="Choose the map layers shown in the Planner."
-          ToolTip.Tip="Choose the map layers shown in the Planner.">
+  <Button Name="LayersButton" Classes="mapChrome" Content="{loc:Text Planner_Layers_Button}"
+          AutomationProperties.Name="{loc:Text Planner_Layers_MapLayers_AccessibleName}"
+          AutomationProperties.HelpText="{loc:Text Planner_Layers_ChooseMapLayers_HelpText}"
+          ToolTip.Tip="{loc:Text Planner_Layers_ChooseMapLayers_HelpText}">
     <Button.Flyout>
       <Flyout Placement="BottomEdgeAlignedRight" Closed="CommitEdit">
         <Flyout.FlyoutPresenterTheme>
@@ -18,42 +19,42 @@
         </Flyout.FlyoutPresenterTheme>
         <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Width="280" Spacing="8">
-            <TextBlock Text="Map layers" Classes="section"/>
-            <TextBlock Text="Overlays" Foreground="{DynamicResource SecondaryText}"/>
-            <CheckBox Name="TerrainReliefToggle" Content="Terrain relief"
+            <TextBlock Text="{loc:Text Planner_Layers_MapLayers_Heading}" Classes="section"/>
+            <TextBlock Text="{loc:Text Planner_Layers_Overlays_Label}" Foreground="{DynamicResource SecondaryText}"/>
+            <CheckBox Name="TerrainReliefToggle" Content="{loc:Text Planner_Layers_TerrainRelief_Option}"
                       FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
-                      AutomationProperties.HelpText="Shade hills and valleys so the shape of the land shows on the map."
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_ShadeHillsValleys_HelpText}"
                       IsChecked="{Binding ShowTerrainRelief, Mode=TwoWay}"
-                      ToolTip.Tip="Shade hills and valleys so the shape of the land shows on the map."/>
+                      ToolTip.Tip="{loc:Text Planner_Layers_ShadeHillsValleys_HelpText}"/>
             <StackPanel Name="TerrainReliefOpacityControls" IsVisible="{Binding ShowTerrainRelief}" Spacing="4">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="Opacity"/>
-                <TextBlock Grid.Column="1" Text="{Binding TerrainReliefOpacityPercent, StringFormat='{}{0:F0}%'}"/>
+                <TextBlock Text="{loc:Text Planner_Layers_Opacity_Label}"/>
+                <TextBlock Grid.Column="1" Text="{Binding TerrainReliefOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
               </Grid>
               <Slider Name="TerrainReliefOpacitySlider" Minimum="0" Maximum="100"
                       Value="{Binding TerrainReliefOpacityPercent, Mode=TwoWay}"
-                      AutomationProperties.Name="Terrain relief opacity"
-                      AutomationProperties.HelpText="Adjust how strongly hills and valleys are shaded."
-                      ToolTip.Tip="Adjust how strongly hills and valleys are shaded."/>
-              <TextBlock Text="Not shown over satellite imagery, which already shows the terrain."
+                      AutomationProperties.Name="{loc:Text Planner_Layers_TerrainReliefOpacity_AccessibleName}"
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStrongly_HelpText}"
+                      ToolTip.Tip="{loc:Text Planner_Layers_AdjustHowStrongly_HelpText}"/>
+              <TextBlock Text="{loc:Text Planner_Layers_ShownOverSatellite_Description}"
                          IsVisible="{Binding IsTerrainReliefOverImagery}" TextWrapping="Wrap"
                          Foreground="{DynamicResource SecondaryText}"/>
             </StackPanel>
-            <CheckBox Name="LightPollutionToggle" Content="Light Pollution"
+            <CheckBox Name="LightPollutionToggle" Content="{loc:Text Planner_Layers_LightPollution_Option}"
                       FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
-                      AutomationProperties.HelpText="Show modelled artificial zenith sky brightness on the map."
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_ShowModelledArtificial_HelpText}"
                       IsChecked="{Binding ShowLightPollution, Mode=TwoWay}"
-                      ToolTip.Tip="Show modelled artificial zenith sky brightness on the map."/>
+                      ToolTip.Tip="{loc:Text Planner_Layers_ShowModelledArtificial_HelpText}"/>
             <StackPanel Name="OpacityControls" IsVisible="{Binding ShowLightPollution}" Spacing="4">
               <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="Opacity"/>
-                <TextBlock Grid.Column="1" Text="{Binding LightPollutionOpacityPercent, StringFormat='{}{0:F0}%'}"/>
+                <TextBlock Text="{loc:Text Planner_Layers_Opacity_Label}"/>
+                <TextBlock Grid.Column="1" Text="{Binding LightPollutionOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
               </Grid>
               <Slider Name="OpacitySlider" Minimum="0" Maximum="100"
                       Value="{Binding LightPollutionOpacityPercent, Mode=TwoWay}"
-                      AutomationProperties.Name="Light Pollution opacity"
-                      AutomationProperties.HelpText="Adjust how strongly the Light Pollution overlay covers the base map."
-                      ToolTip.Tip="Adjust how strongly the Light Pollution overlay covers the base map."/>
+                      AutomationProperties.Name="{loc:Text Planner_Layers_LightPollutionOpacity_AccessibleName}"
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStronglyLight_HelpText}"
+                      ToolTip.Tip="{loc:Text Planner_Layers_AdjustHowStronglyLight_HelpText}"/>
             </StackPanel>
             <TextBlock Text="{Binding PersistenceError}" IsVisible="{Binding HasPersistenceError}"
                        TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>

@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Net;
 using System.Text.Json;
 using Noctaxis.Core.Persistence;
@@ -52,7 +53,7 @@ public sealed class LorenzInstallation(IUserDataPathProvider paths, HttpClient h
             try
             {
                 _current = valid;
-                ReadError = valid is null && File.Exists(Path.Combine(_root, "current")) ? "Installation incomplete · repair or reinstall" : null;
+                ReadError = valid is null && File.Exists(Path.Combine(_root, "current")) ? Strings.Get("Data_LightPollution_Incomplete") : null;
                 Generation++; Changed?.Invoke(this, EventArgs.Empty);
             }
             finally { DataGate.Release(); }
@@ -176,7 +177,7 @@ public sealed class LorenzInstallation(IUserDataPathProvider paths, HttpClient h
     // Called by a reader holding DataGate. A broken installed file is an error, not zero brightness.
     internal void InvalidateRead()
     {
-        _current = null; ReadError = "Local atlas data could not be read · repair or reinstall";
+        _current = null; ReadError = Strings.Get("Data_LightPollution_Unreadable");
         Generation++; Changed?.Invoke(this, EventArgs.Empty);
     }
 

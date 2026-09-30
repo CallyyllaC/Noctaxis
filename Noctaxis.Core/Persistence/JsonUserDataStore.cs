@@ -48,13 +48,16 @@ public sealed class JsonUserDataStore : IUserDataStore
         _logger = logger;
         _now = now ?? (() => SystemClock.Instance.GetCurrentInstant());
         StorageDirectory = paths.GetApplicationDataDirectory();
-        _filePath = Path.Combine(StorageDirectory, "state.json");
+        _filePath = StateFilePath(paths);
         _options = new JsonSerializerOptions { WriteIndented = true, PropertyNameCaseInsensitive = true };
         _options.Converters.Add(new ExternalMapProviderJsonConverter());
         _options.Converters.Add(new JsonStringEnumConverter());
     }
 
     public string StorageDirectory { get; }
+
+    /// <summary>Where the state is stored, for the one value read before the store exists: the language.</summary>
+    public static string StateFilePath(IUserDataPathProvider paths) => Path.Combine(paths.GetApplicationDataDirectory(), "state.json");
 
     public async Task<PersistedState> LoadAsync(CancellationToken cancellationToken)
     {
@@ -100,7 +103,7 @@ public sealed class JsonUserDataStore : IUserDataStore
     {
         try
         {
-            if (File.Exists(_filePath)) File.Move(_filePath, _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"), true);
+            if (File.Exists(_filePath)) File.Move(_filePath, _filePath + ".corrupt-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss", System.Globalization.CultureInfo.InvariantCulture), true);
         }
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }

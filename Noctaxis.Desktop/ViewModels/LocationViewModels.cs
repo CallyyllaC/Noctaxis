@@ -1,3 +1,4 @@
+using Noctaxis.Core.Localisation;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -51,7 +52,7 @@ public partial class SavedLocationEditorViewModel : ObservableObject
     public SavedLocationEdit? ValidateAndCreateResult()
     {
         var name = Name.Trim();
-        if (name.Length == 0) { ValidationMessage = "Location name is required."; return null; }
+        if (name.Length == 0) { ValidationMessage = Strings.Get("Locations_Edit_NameRequired"); return null; }
         ValidationMessage = null;
         return new SavedLocationEdit(name, string.IsNullOrWhiteSpace(Description) ? null : Description.Trim());
     }
@@ -95,7 +96,7 @@ public partial class LocationSearchViewModel(ILocationSearchProvider provider, I
             var results = await provider.SearchAsync(query, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             foreach (var result in results) Results.Add(result);
-            if (results.Count == 0) ErrorMessage = "No matching locations found.";
+            if (results.Count == 0) ErrorMessage = Strings.Get("Locations_Search_NoMatches");
         }
         catch (OperationCanceledException) { logger.LogDebug("Obsolete location search cancelled"); }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
@@ -145,12 +146,17 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     public bool HasUserDescription => !string.IsNullOrWhiteSpace(Location.Notes);
     /// <summary>State badges are shown as text and icons, so current and favourite never rest on colour.</summary>
     public bool HasStateBadges => IsFavourite || IsSelected;
-    public string Eyebrow => IsFavourite ? "FAVOURITE LOCATION" : "SAVED LOCATION";
+    public string Eyebrow => IsFavourite ? Strings.Get("Locations_Card_Eyebrow_Favourite") : Strings.Get("Locations_Card_Eyebrow_Saved");
     /// <summary>The card's open action, named with its state for assistive technology.</summary>
-    public string OpenAccessibleName => string.Join(", ", new[] { Name, IsFavourite ? "favourite" : null, IsSelected ? "current Planner location" : null }
-        .Where(part => part is not null)) + ". Open in Planner";
+    public string OpenAccessibleName => Strings.Format((IsFavourite, IsSelected) switch
+    {
+        (true, true) => "Locations_Card_OpenFavouriteCurrent_AccessibleName",
+        (true, false) => "Locations_Card_OpenFavourite_AccessibleName",
+        (false, true) => "Locations_Card_OpenCurrent_AccessibleName",
+        _ => "Locations_Card_Open_AccessibleName"
+    }, Name);
     public bool IsNotFavourite => !IsFavourite;
-    public string FavouriteAccessibleName => IsFavourite ? "Remove from favourites" : "Add to favourites";
+    public string FavouriteAccessibleName => IsFavourite ? Strings.Get("Locations_Card_RemoveFavourite_AccessibleName") : Strings.Get("Locations_Card_AddFavourite_AccessibleName");
     public string? LastUsedText => FormatLastUsed(Location.LastUsedUtc, _now());
     public bool HasLastUsed => LastUsedText is not null;
     [ObservableProperty] private bool _isFavourite;
@@ -161,22 +167,22 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     [ObservableProperty] private bool _isMapThumbnailLoading;
     [ObservableProperty] private SavedLocationThumbnailMetadata? _thumbnailMetadata;
     [ObservableProperty] private SavedLocationThumbnailResult? _lastThumbnailResult;
-    public string FavouriteLabel => IsFavourite ? "Unfavourite" : "Favourite";
+    public string FavouriteLabel => IsFavourite ? Strings.Get("Locations_Card_Unfavourite_Label") : Strings.Get("Locations_Card_Favourite_Label");
     public bool HasSemanticWarning => ThumbnailMetadata?.FeatureFetchStatus is
         nameof(MapFeatureFetchStatus.Unavailable) or nameof(MapFeatureFetchStatus.CachedPrevious);
     public string SemanticStatusSummary
     {
         get
         {
-            if (ThumbnailMetadata is null) return "Semantic overlay status unavailable";
+            if (ThumbnailMetadata is null) return Strings.Get("Locations_Card_Semantic_StatusUnavailable");
             var reason = ThumbnailMetadata.FeatureFailureReason;
             return ThumbnailMetadata.FeatureFetchStatus switch
             {
                 nameof(MapFeatureFetchStatus.CachedPrevious) =>
-                    "Previous semantic overlay retained" + (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}"),
+                    string.IsNullOrWhiteSpace(reason) ? Strings.Get("Locations_Card_Semantic_Retained") : Strings.Format("Locations_Card_Semantic_Retained_Format", reason),
                 nameof(MapFeatureFetchStatus.Unavailable) =>
-                    "Semantic overlay unavailable" + (string.IsNullOrWhiteSpace(reason) ? "." : $": {reason}"),
-                _ => "Semantic overlay available"
+                    string.IsNullOrWhiteSpace(reason) ? Strings.Get("Locations_Card_Semantic_Unavailable") : Strings.Format("Locations_Card_Semantic_Unavailable_Format", reason),
+                _ => Strings.Get("Locations_Card_Semantic_Available")
             };
         }
     }
@@ -188,22 +194,22 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     {
         get
         {
-            if (ThumbnailMetadata is null) return "Settlement-density status unavailable";
+            if (ThumbnailMetadata is null) return Strings.Get("Locations_Card_Settlement_StatusUnavailable");
             return ThumbnailMetadata.SettlementStatus switch
             {
                 nameof(EnvironmentalDataState.Available) or nameof(EnvironmentalDataState.Cached) =>
-                    $"WSF settlement data available ({ThumbnailMetadata.SettlementCellCount ?? 0:N0} sampled cells)",
+                    Strings.Format("Locations_Card_Settlement_Available_Format", ThumbnailMetadata.SettlementCellCount ?? 0),
                 nameof(EnvironmentalDataState.Empty) =>
-                    "Valid WSF coverage contains no settlement in this map area.",
-                nameof(EnvironmentalDataState.Partial) => "WSF settlement data has partial coverage.",
+                    Strings.Get("Locations_Card_Settlement_Empty"),
+                nameof(EnvironmentalDataState.Partial) => Strings.Get("Locations_Card_Settlement_Partial"),
                 nameof(EnvironmentalDataState.TileAbsent) =>
-                    "The WSF service reports no coverage tile for this map area.",
+                    Strings.Get("Locations_Card_Settlement_TileAbsent"),
                 nameof(EnvironmentalDataState.InvalidRaster) =>
-                    "WSF returned data that failed scientific raster validation; the map remains usable.",
+                    Strings.Get("Locations_Card_Settlement_InvalidRaster"),
                 nameof(EnvironmentalDataState.SourceUnavailable) =>
-                    "The WSF source is currently unreachable; the map remains usable without settlement light.",
+                    Strings.Get("Locations_Card_Settlement_SourceUnavailable"),
                 _ => string.IsNullOrWhiteSpace(ThumbnailMetadata.SettlementStatusMessage)
-                    ? "WSF settlement data unavailable; the map remains usable without settlement light."
+                    ? Strings.Get("Locations_Card_Settlement_Unavailable")
                     : ThumbnailMetadata.SettlementStatusMessage
             };
         }
@@ -340,11 +346,11 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
         if (!value.HasValue) return null;
         var elapsed = now - value.Value;
         if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
-        if (elapsed < TimeSpan.FromMinutes(2)) return "Used just now";
-        if (elapsed < TimeSpan.FromHours(1)) return $"Used {(int)elapsed.TotalMinutes} min ago";
-        if (elapsed < TimeSpan.FromHours(24)) return $"Used {(int)elapsed.TotalHours} hr ago";
-        if (elapsed < TimeSpan.FromDays(14)) return $"Used {(int)elapsed.TotalDays} days ago";
-        return $"Used {value.Value.ToLocalTime():dd MMM yyyy}";
+        if (elapsed < TimeSpan.FromMinutes(2)) return Strings.Get("Locations_Card_LastUsed_JustNow");
+        if (elapsed < TimeSpan.FromHours(1)) return Strings.Format("Locations_Card_LastUsed_Minutes_Format", (int)elapsed.TotalMinutes);
+        if (elapsed < TimeSpan.FromHours(24)) return Strings.Format("Locations_Card_LastUsed_Hours_Format", (int)elapsed.TotalHours);
+        if (elapsed < TimeSpan.FromDays(14)) return Strings.Format("Locations_Card_LastUsed_Days_Format", (int)elapsed.TotalDays);
+        return Strings.Format("Locations_Card_LastUsed_Date_Format", value.Value.ToLocalTime());
     }
 }
 
@@ -387,13 +393,13 @@ public partial class LocationsViewModel : ObservableObject
     public ObservableCollection<ILocationGridItem> GridItems { get; } = [];
     public IReadOnlyList<LocationSortOption> SortOptions { get; } =
     [
-        new(LocationSortMode.RecentlyUsed, "Recently used"),
-        new(LocationSortMode.Name, "Name"),
-        new(LocationSortMode.DateAdded, "Date added")
+        new(LocationSortMode.RecentlyUsed, Strings.Get("Locations_Sort_RecentlyUsed")),
+        new(LocationSortMode.Name, Strings.Get("Locations_Sort_Name")),
+        new(LocationSortMode.DateAdded, Strings.Get("Locations_Sort_DateAdded"))
     ];
     public bool HasSavedLocations => Saved.Count > 0;
     public bool IsFirstRun => Saved.Count == 0;
-    public string SavedSummary => Saved.Count == 1 ? "1 saved location" : $"{Saved.Count} saved locations";
+    public string SavedSummary => Saved.Count == 1 ? Strings.Get("Locations_Summary_One") : Strings.Format("Locations_Summary_Many_Format", Saved.Count);
     [ObservableProperty] private LocationSortOption _selectedSortOption;
     [ObservableProperty] private string? _resolutionMessage;
     [ObservableProperty] private bool _canUseDeviceLocation;
@@ -431,7 +437,7 @@ public partial class LocationsViewModel : ObservableObject
     {
         var availability = await _deviceAvailability.GetAvailabilityAsync(cancellationToken);
         CanUseDeviceLocation = availability.CanRequest;
-        DeviceLocationUnavailableReason = availability.CanRequest ? null : availability.Reason ?? "Device location is unavailable.";
+        DeviceLocationUnavailableReason = availability.CanRequest ? null : availability.Reason ?? Strings.Get("Locations_Device_Unavailable");
         UseDeviceLocationCommand.NotifyCanExecuteChanged();
     }
 
@@ -441,11 +447,11 @@ public partial class LocationsViewModel : ObservableObject
         var result = await _resolver.ResolveDeviceOrFallbackAsync(_lastCustomCoordinate, CancellationToken.None);
         if (result.Source != LocationResolutionSource.OperatingSystemLocation)
         {
-            ResolutionMessage = "Device location could not be resolved. The current planning location was not changed.";
+            ResolutionMessage = Strings.Get("Locations_Device_NotResolved");
             return;
         }
         _lastCustomCoordinate = result.Coordinate;
-        ResolutionMessage = "Device location selected.";
+        ResolutionMessage = Strings.Get("Locations_Device_Selected");
         await _openCustom(result);
     }
 
@@ -475,11 +481,13 @@ public partial class LocationsViewModel : ObservableObject
     {
         var values = Saved.SelectMany(card => AttributionEntries(card.ThumbnailMetadata))
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Text))
-            .DistinctBy(entry => ($"{entry.Text.Trim()}|{entry.Url?.Trim()}"),
-                StringComparer.OrdinalIgnoreCase)
+            // By the credit itself: the map raster and the road/water features are both OpenStreetMap and
+            // carry the same wording, and the same sentence twice credits nobody further.
+            .DistinctBy(entry => entry.Text.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(entry => entry.Text)
             .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase);
-        ThumbnailAttributionSummary = string.Join("  |  ", values);
+        // One quiet line, the same separator the rest of the UI uses between related fragments.
+        ThumbnailAttributionSummary = string.Join(" · ", values);
         OnPropertyChanged(nameof(HasThumbnailAttributions));
     }
 

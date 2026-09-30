@@ -14,12 +14,24 @@ public interface IThemeableBasemap
     bool ApplyStyle(BasemapStyle style);
 }
 
+/// <summary>A basemap that draws its own place names and can draw them in a preferred language.</summary>
+public interface ILabelledBasemap
+{
+    /// <summary>The preferred language, a culture identifier such as <c>en-GB</c>.</summary>
+    string LabelLanguage { get; }
+    /// <summary>
+    /// Redraws the names in another language, in place: only tiles that contain names are rendered
+    /// again. Returns false when nothing changed.
+    /// </summary>
+    bool ApplyLabelLanguage(string language);
+}
+
 /// <summary>
 /// The Planner's street/topographic basemap: OpenFreeMap vector tiles (OpenMapTiles schema, OSM
 /// data) drawn by Noctaxis in the selected theme. One source is shared by every activation, so its
 /// decoded vector data survives basemap replacement and theme changes alike.
 /// </summary>
-public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap
+public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap, ILabelledBasemap
 {
     public const string AttributionText = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap";
     private readonly object _gate = new();
@@ -65,6 +77,19 @@ public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap
         foreach (var layer in layers) layer.Restyle();
         return true;
     }
+
+    public string LabelLanguage => Source.LabelLanguage;
+
+    public bool ApplyLabelLanguage(string language)
+    {
+        if (!Source.SetLabelLanguage(language)) return false;
+        ThemedBasemapTileLayer[] layers;
+        lock (_gate) layers = _layers;
+        // Names are drawn by the reference pass (or the single full pass). The geography pass holds
+        // none, so its rendered tiles stay; so does the vector data, which has every language.
+        foreach (var layer in layers.Where(layer => layer.DrawsLabels)) layer.Restyle();
+        return true;
+    }
 }
 
 /// <summary>
@@ -86,8 +111,15 @@ internal sealed class ThemedBasemapTileLayer : TileLayer
 
     internal BasemapPass Pass { get; }
 
+    /// <summary>Whether this layer's tiles contain names. The geography pass never does.</summary>
+    internal bool DrawsLabels => Pass != BasemapPass.Geography;
+
+    /// <summary>Times this layer's rendered tiles were discarded, by a theme or a language change.</summary>
+    internal int Invalidations { get; private set; }
+
     internal void Restyle()
     {
+        Invalidations++;
         ClearCache();
         DataHasChanged();
     }
@@ -95,10 +127,12 @@ internal sealed class ThemedBasemapTileLayer : TileLayer
     public override IEnumerable<IFeature> GetFeatures(MRect extent, double resolution)
     {
         var version = _source.StyleVersion;
+        var labels = _source.LabelVersion;
         var stale = false;
         foreach (var feature in base.GetFeatures(extent, resolution))
         {
-            if (feature is StyledRasterFeature styled && styled.StyleVersion != version) { stale = true; continue; }
+            if (feature is StyledRasterFeature styled &&
+                (styled.StyleVersion != version || (DrawsLabels && styled.LabelVersion != labels))) { stale = true; continue; }
             yield return feature;
         }
         if (stale && Interlocked.Exchange(ref _healScheduled, 1) == 0)
@@ -109,15 +143,16 @@ internal sealed class ThemedBasemapTileLayer : TileLayer
             });
     }
 
-    private sealed class StyledRasterFeature(MRaster raster, long styleVersion) : RasterFeature(raster)
+    private sealed class StyledRasterFeature(MRaster raster, long styleVersion, long labelVersion) : RasterFeature(raster)
     {
         public long StyleVersion { get; } = styleVersion;
+        public long LabelVersion { get; } = labelVersion;
     }
 
     private static async Task<IFeature?> Fetch(ThemedVectorTileSource source, TileInfo info, BasemapPass pass)
     {
-        var (bytes, version) = await source.RenderAsync(info, pass).ConfigureAwait(false);
+        var (bytes, version, labels) = await source.RenderAsync(info, pass).ConfigureAwait(false);
         return bytes is null ? null : new StyledRasterFeature(new MRaster(bytes,
-            new MRect(info.Extent.MinX, info.Extent.MinY, info.Extent.MaxX, info.Extent.MaxY)), version);
+            new MRect(info.Extent.MinX, info.Extent.MinY, info.Extent.MaxX, info.Extent.MaxY)), version, labels);
     }
 }

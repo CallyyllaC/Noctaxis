@@ -1,4 +1,6 @@
+using Noctaxis.Core.Localisation;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Measurements;
 
 namespace Noctaxis.Core.Calculations;
 
@@ -60,11 +62,12 @@ public sealed class FramingVisibilityCalculator : IFramingVisibilityCalculator
 
         var status = terrainObstructed
             ? Math.Abs(clearance!.Value) <= 1e-12
-                ? "At terrain horizon"
-                : $"Below terrain horizon by {Math.Abs(clearance.Value):F1}°"
+                ? Strings.Get("Planning_Framing_AtTerrainHorizon")
+                : Strings.Format("Planning_Framing_BelowTerrainHorizon_Format", Math.Abs(clearance.Value))
             : weatherVisibilityDistanceMetres.HasValue
-                ? $"Weather visibility: {visibility!.Value:F1} km"
-                : "Visibility data unavailable";
+                // In SI here; FramingVisibilityAssessment.StatusFor shows it in the user's units.
+                ? FramingVisibilityAssessment.WeatherVisibilityStatus(weatherVisibilityDistanceMetres.Value, MeasurementProfile.Metric)
+                : Strings.Get("Planning_Visibility_DataUnavailable");
 
         return new FramingVisibilityAssessment(
             terrainObstructed,

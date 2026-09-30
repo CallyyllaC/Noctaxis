@@ -125,9 +125,24 @@ public sealed class PlannerMapComposition
         ApplyBasemapGates();
         // A themeable replacement takes the current theme at once; imagery is never restyled.
         if (_basemapStyle is not null && basemap is Vector.IThemeableBasemap themeable) themeable.ApplyStyle(_basemapStyle);
+        if (_labelLanguage is not null && basemap is Vector.ILabelledBasemap labelled) labelled.ApplyLabelLanguage(_labelLanguage);
     }
 
     private Vector.BasemapStyle? _basemapStyle;
+    private string? _labelLanguage;
+
+    /// <summary>
+    /// Sets the language the basemap's place names are preferred in: the application language. Only a
+    /// basemap that draws its own names follows it, and only its name-bearing tiles are rendered
+    /// again; geography, the environmental layers and every download are untouched. Returns true when
+    /// the visible names changed language.
+    /// </summary>
+    public bool ApplyLabelLanguage(string language)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(language);
+        _labelLanguage = language;
+        return _basemap is Vector.ILabelledBasemap labelled && labelled.ApplyLabelLanguage(language);
+    }
 
     /// <summary>The adapter currently providing the basemap.</summary>
     public IMapsuiBasemap ActiveBasemap => _basemap;

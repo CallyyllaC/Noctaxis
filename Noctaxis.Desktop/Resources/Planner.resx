@@ -1,0 +1,631 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
+  <data name="Planner_Camera_AngularCompositionGuide_Description" xml:space="preserve">
+    <value>Angular composition guide; not a simulation of terrain perspective.</value>
+  </data>
+  <data name="Planner_Camera_CameraBearing_AccessibleName" xml:space="preserve">
+    <value>Camera bearing</value>
+  </data>
+  <data name="Planner_Camera_CameraBearing_Label" xml:space="preserve">
+    <value>Camera bearing (°)</value>
+  </data>
+  <data name="Planner_Camera_CameraBearingPreciseValue_AccessibleName" xml:space="preserve">
+    <value>Camera bearing precise value</value>
+  </data>
+  <data name="Planner_Camera_CameraFraming_Header" xml:space="preserve">
+    <value>Camera and framing</value>
+  </data>
+  <data name="Planner_Camera_CameraPitch_AccessibleName" xml:space="preserve">
+    <value>Camera pitch</value>
+  </data>
+  <data name="Planner_Camera_CameraPitch_Label" xml:space="preserve">
+    <value>Camera pitch (°)</value>
+  </data>
+  <data name="Planner_Camera_CameraPitchPreciseValue_AccessibleName" xml:space="preserve">
+    <value>Camera pitch precise value</value>
+  </data>
+  <data name="Planner_Camera_FieldView_Label" xml:space="preserve">
+    <value>Field of view</value>
+  </data>
+  <data name="Planner_Camera_FocalLength_AccessibleName" xml:space="preserve">
+    <value>Focal length</value>
+  </data>
+  <data name="Planner_Camera_FocalLength_Format" xml:space="preserve">
+    <value>{0:0.#} mm</value>
+    <comment>Focal length in millimetres. {0} is the number.</comment>
+  </data>
+  <data name="Planner_Camera_FocalLength_Label" xml:space="preserve">
+    <value>Focal length</value>
+  </data>
+  <data name="Planner_Camera_Label" xml:space="preserve">
+    <value>Camera</value>
+  </data>
+  <data name="Planner_Camera_Landscape_Option" xml:space="preserve">
+    <value>Landscape</value>
+  </data>
+  <data name="Planner_Camera_Lens_Label" xml:space="preserve">
+    <value>Lens</value>
+  </data>
+  <data name="Planner_Camera_NoLensSelected" xml:space="preserve">
+    <value>No lens selected</value>
+  </data>
+  <data name="Planner_Camera_Orientation_Label" xml:space="preserve">
+    <value>Orientation</value>
+  </data>
+  <data name="Planner_Camera_PitchConvention_Description" xml:space="preserve">
+    <value>0° horizontal · positive looks upward</value>
+  </data>
+  <data name="Planner_Camera_Portrait_Option" xml:space="preserve">
+    <value>Portrait</value>
+  </data>
+  <data name="Planner_Camera_PrimeLens_Format" xml:space="preserve">
+    <value>Prime · {0:0.#} mm</value>
+    <comment>{0} is the focal length in millimetres.</comment>
+  </data>
+  <data name="Planner_Camera_ZoomLens_Format" xml:space="preserve">
+    <value>Zoom · {0:0.#}–{1:0.#} mm</value>
+    <comment>{0} and {1} are the shortest and longest focal lengths in millimetres.</comment>
+  </data>
+  <data name="Planner_CopyPNG_Button" xml:space="preserve">
+    <value>Copy PNG</value>
+  </data>
+  <data name="Planner_Date_Label" xml:space="preserve">
+    <value>Date</value>
+  </data>
+  <data name="Planner_Export_Cancelled_Format" xml:space="preserve">
+    <value>Export cancelled: {0}</value>
+    <comment>{0} is the reason the weather could not be fetched.</comment>
+  </data>
+  <data name="Planner_Export_Failed_Format" xml:space="preserve">
+    <value>Export failed: {0}</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Planner_Export_Ready" xml:space="preserve">
+    <value>Scouting card ready</value>
+  </data>
+  <data name="Planner_Export_RefreshingWeather" xml:space="preserve">
+    <value>Refreshing weather for export…</value>
+  </data>
+  <data name="Planner_Export_SaveDialog_PngFileType" xml:space="preserve">
+    <value>PNG image</value>
+  </data>
+  <data name="Planner_Export_SaveDialog_Title" xml:space="preserve">
+    <value>Export Noctaxis scouting card</value>
+  </data>
+  <data name="Planner_Framing_LimitsHidden" xml:space="preserve">
+    <value>Visibility limits hidden</value>
+  </data>
+  <data name="Planner_Horizon_CurrentLocation_Label" xml:space="preserve">
+    <value>Current location</value>
+  </data>
+  <data name="Planner_Horizon_Loading" xml:space="preserve">
+    <value>Loading terrain horizon…</value>
+  </data>
+  <data name="Planner_Horizon_ObserverDatum_Loading" xml:space="preserve">
+    <value>Observer datum: Loading</value>
+  </data>
+  <data name="Planner_Horizon_ObserverDatum_Normal" xml:space="preserve">
+    <value>Observer datum: Normal</value>
+  </data>
+  <data name="Planner_Horizon_ObserverDatum_Unavailable" xml:space="preserve">
+    <value>Observer datum: Unavailable</value>
+  </data>
+  <data name="Planner_Horizon_Obstruction_Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Planner_Horizon_State_Disabled" xml:space="preserve">
+    <value>Disabled</value>
+  </data>
+  <data name="Planner_Horizon_State_Error" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="Planner_Horizon_State_Loading" xml:space="preserve">
+    <value>Loading</value>
+  </data>
+  <data name="Planner_Horizon_State_LoadingEllipsis" xml:space="preserve">
+    <value>Loading…</value>
+  </data>
+  <data name="Planner_Horizon_State_Ready" xml:space="preserve">
+    <value>Ready</value>
+  </data>
+  <data name="Planner_Horizon_State_Refining" xml:space="preserve">
+    <value>Ready · refining…</value>
+  </data>
+  <data name="Planner_Horizon_State_Unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="Planner_Horizon_TerrainData_Label" xml:space="preserve">
+    <value>Terrain data</value>
+  </data>
+  <data name="Planner_Horizon_TerrainHorizon_Header" xml:space="preserve">
+    <value>Terrain horizon</value>
+  </data>
+  <data name="Planner_Horizon_TerrainHorizon_Label" xml:space="preserve">
+    <value>Terrain horizon</value>
+  </data>
+  <data name="Planner_Horizon_TerrainObstruction_Label" xml:space="preserve">
+    <value>Terrain obstruction</value>
+  </data>
+  <data name="Planner_Label" xml:space="preserve">
+    <value>PLANNER</value>
+  </data>
+  <data name="Planner_Layers_AdjustHowStrongly_HelpText" xml:space="preserve">
+    <value>Adjust how strongly hills and valleys are shaded.</value>
+  </data>
+  <data name="Planner_Layers_AdjustHowStronglyLight_HelpText" xml:space="preserve">
+    <value>Adjust how strongly the Light Pollution overlay covers the base map.</value>
+  </data>
+  <data name="Planner_Layers_Button" xml:space="preserve">
+    <value>Layers ▾</value>
+  </data>
+  <data name="Planner_Layers_ChooseMapLayers_HelpText" xml:space="preserve">
+    <value>Choose the map layers shown in the Planner.</value>
+  </data>
+  <data name="Planner_Layers_LightPollution_Option" xml:space="preserve">
+    <value>Light Pollution</value>
+  </data>
+  <data name="Planner_Layers_LightPollutionOpacity_AccessibleName" xml:space="preserve">
+    <value>Light Pollution opacity</value>
+  </data>
+  <data name="Planner_Layers_MapLayers_AccessibleName" xml:space="preserve">
+    <value>Map layers</value>
+  </data>
+  <data name="Planner_Layers_MapLayers_Heading" xml:space="preserve">
+    <value>Map layers</value>
+  </data>
+  <data name="Planner_Layers_Opacity_Format" xml:space="preserve">
+    <value>{0:F0}%</value>
+    <comment>Layer opacity as a whole percentage. {0} is the number.</comment>
+  </data>
+  <data name="Planner_Layers_Opacity_Label" xml:space="preserve">
+    <value>Opacity</value>
+  </data>
+  <data name="Planner_Layers_Overlays_Label" xml:space="preserve">
+    <value>Overlays</value>
+  </data>
+  <data name="Planner_Layers_SaveFailed" xml:space="preserve">
+    <value>Layer preferences could not be saved. Reopen Layers and try again.</value>
+  </data>
+  <data name="Planner_Layers_ShadeHillsValleys_HelpText" xml:space="preserve">
+    <value>Shade hills and valleys so the shape of the land shows on the map.</value>
+  </data>
+  <data name="Planner_Layers_ShowModelledArtificial_HelpText" xml:space="preserve">
+    <value>Show modelled artificial zenith sky brightness on the map.</value>
+  </data>
+  <data name="Planner_Layers_ShownOverSatellite_Description" xml:space="preserve">
+    <value>Not shown over satellite imagery, which already shows the terrain.</value>
+  </data>
+  <data name="Planner_Layers_TerrainRelief_Option" xml:space="preserve">
+    <value>Terrain relief</value>
+  </data>
+  <data name="Planner_Layers_TerrainReliefOpacity_AccessibleName" xml:space="preserve">
+    <value>Terrain relief opacity</value>
+  </data>
+  <data name="Planner_LocalTime_Label" xml:space="preserve">
+    <value>Local time</value>
+  </data>
+  <data name="Planner_Location_CurrentLocation_Name" xml:space="preserve">
+    <value>Current location</value>
+    <comment>Default name of the planning location before it is saved or named.</comment>
+  </data>
+  <data name="Planner_Location_DeleteSavedLocation_Button" xml:space="preserve">
+    <value>Delete saved location</value>
+  </data>
+  <data name="Planner_Location_EffectiveAltitude_Format" xml:space="preserve">
+    <value>Effective camera altitude: {0} ASL (ground + {1} camera height)</value>
+    <comment>{0} is the altitude and {1} the camera height, each with its unit.</comment>
+  </data>
+  <data name="Planner_Location_EffectiveAltitude_Resolving" xml:space="preserve">
+    <value>Effective camera altitude: resolving terrain surface…</value>
+  </data>
+  <data name="Planner_Location_GroundElevationAboveSea_Label" xml:space="preserve">
+    <value>Ground elevation above sea level</value>
+  </data>
+  <data name="Planner_Location_GroundSource_Resolving" xml:space="preserve">
+    <value>Resolving terrain surface elevation…</value>
+  </data>
+  <data name="Planner_Location_GroundSource_TerrainDerived" xml:space="preserve">
+    <value>Terrain-derived ground elevation</value>
+  </data>
+  <data name="Planner_Location_GroundSource_TerrainDisabled_Format" xml:space="preserve">
+    <value>Terrain disabled · {0} MSL fallback</value>
+    <comment>{0} is the assumed ground elevation with its unit: 0 m, or 0 ft under Imperial. MSL is mean sea level.</comment>
+  </data>
+  <data name="Planner_Location_Latitude_Label" xml:space="preserve">
+    <value>Latitude</value>
+  </data>
+  <data name="Planner_Location_LocationName_Label" xml:space="preserve">
+    <value>Location name</value>
+  </data>
+  <data name="Planner_Location_Longitude_Label" xml:space="preserve">
+    <value>Longitude</value>
+  </data>
+  <data name="Planner_Location_MapProviderInvalid" xml:space="preserve">
+    <value>The location or map provider is invalid.</value>
+  </data>
+  <data name="Planner_Location_AboveSeaLevel_Unit_Format" xml:space="preserve">
+    <value>{0} ASL</value>
+    <comment>{0} is the unit of the elevation shown beside it: m or ft. ASL is above sea level.</comment>
+  </data>
+  <data name="Planner_Location_NewLocation_Name" xml:space="preserve">
+    <value>New location</value>
+    <comment>Default name of a pin placed on the map.</comment>
+  </data>
+  <data name="Planner_Location_OpenMaps_Button" xml:space="preserve">
+    <value>Open in Maps</value>
+  </data>
+  <data name="Planner_Location_OpenMapsFailed_Format" xml:space="preserve">
+    <value>Could not open Maps: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Planner_Location_PlanningCoordinates_Heading" xml:space="preserve">
+    <value>Planning coordinates</value>
+  </data>
+  <data name="Planner_Location_PlanningLocation_Header" xml:space="preserve">
+    <value>Planning location</value>
+  </data>
+  <data name="Planner_Location_ResetTerrainElevation_Button" xml:space="preserve">
+    <value>Reset to terrain elevation</value>
+  </data>
+  <data name="Planner_Location_ResolvedPhysicalSurface_Tooltip" xml:space="preserve">
+    <value>Resolved physical surface elevation relative to mean sea level</value>
+  </data>
+  <data name="Planner_Location_SaveUpdateLocation_Button" xml:space="preserve">
+    <value>Save or update location</value>
+  </data>
+  <data name="Planner_Location_SearchPlace_Label" xml:space="preserve">
+    <value>Search for a place</value>
+  </data>
+  <data name="Planner_Map_SaveCurrentPin_MenuItem" xml:space="preserve">
+    <value>Save current pin location</value>
+  </data>
+  <data name="Planner_Map_SetPinHere_MenuItem" xml:space="preserve">
+    <value>Set planning pin here</value>
+  </data>
+  <data name="Planner_Moon_Details_Format" xml:space="preserve">
+    <value>{0} · illumination {1:F0}% · phase angle {2:F0}°</value>
+    <comment>{0} is the phase name, {1} the illuminated percentage, {2} the phase angle in degrees.</comment>
+  </data>
+  <data name="Planner_Moon_Phase_FirstQuarter" xml:space="preserve">
+    <value>First quarter</value>
+  </data>
+  <data name="Planner_Moon_Phase_Full" xml:space="preserve">
+    <value>Full Moon</value>
+  </data>
+  <data name="Planner_Moon_Phase_LastQuarter" xml:space="preserve">
+    <value>Last quarter</value>
+  </data>
+  <data name="Planner_Moon_Phase_New" xml:space="preserve">
+    <value>New Moon</value>
+  </data>
+  <data name="Planner_Moon_Phase_WaningCrescent" xml:space="preserve">
+    <value>Waning crescent</value>
+  </data>
+  <data name="Planner_Moon_Phase_WaningGibbous" xml:space="preserve">
+    <value>Waning gibbous</value>
+  </data>
+  <data name="Planner_Moon_Phase_WaxingCrescent" xml:space="preserve">
+    <value>Waxing crescent</value>
+  </data>
+  <data name="Planner_Moon_Phase_WaxingGibbous" xml:space="preserve">
+    <value>Waxing gibbous</value>
+  </data>
+  <data name="Planner_NextDay_Button" xml:space="preserve">
+    <value>Next day</value>
+  </data>
+  <data name="Planner_Now_Button" xml:space="preserve">
+    <value>Now</value>
+  </data>
+  <data name="Planner_PlanningPinPreview_Label" xml:space="preserve">
+    <value>Planning pin preview</value>
+  </data>
+  <data name="Planner_PreviousDay_Button" xml:space="preserve">
+    <value>Previous day</value>
+  </data>
+  <data name="Planner_SavePNG_Button" xml:space="preserve">
+    <value>Save PNG</value>
+  </data>
+  <data name="Planner_Status_ApplyingVisibility" xml:space="preserve">
+    <value>Applying environmental visibility…</value>
+  </data>
+  <data name="Planner_Status_CalculatingViewTerrain" xml:space="preserve">
+    <value>Planner ready · calculating current view terrain…</value>
+  </data>
+  <data name="Planner_Status_LoadingEnvironment" xml:space="preserve">
+    <value>Planner ready · loading environment metadata…</value>
+  </data>
+  <data name="Planner_Status_LoadingTerrain" xml:space="preserve">
+    <value>Planner ready · loading terrain…</value>
+  </data>
+  <data name="Planner_Status_LoadingWeather" xml:space="preserve">
+    <value>Planner ready · loading weather…</value>
+  </data>
+  <data name="Planner_Status_Ready" xml:space="preserve">
+    <value>Planner ready</value>
+  </data>
+  <data name="Planner_Status_ReadyPartial" xml:space="preserve">
+    <value>Planner ready · some environmental data unavailable</value>
+  </data>
+  <data name="Planner_Status_RefiningHorizon" xml:space="preserve">
+    <value>Planner ready · refining terrain horizon…</value>
+  </data>
+  <data name="Planner_Status_UpdateFailed_Format" xml:space="preserve">
+    <value>Planner update failed: {0}</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Planner_Status_UpdatingCamera" xml:space="preserve">
+    <value>Updating camera view…</value>
+  </data>
+  <data name="Planner_Status_UpdatingTargets" xml:space="preserve">
+    <value>Updating target directions…</value>
+  </data>
+  <data name="Planner_Sun_Details_Format" xml:space="preserve">
+    <value>Sunrise {0} · Sunset {1}
+Civil {2}–{3} · Nautical {4}–{5}
+Astronomical {6}–{7}</value>
+    <comment>Times of sunrise, sunset and each twilight&apos;s dawn and dusk.</comment>
+  </data>
+  <data name="Planner_Target_Altitude_Label" xml:space="preserve">
+    <value>Altitude</value>
+  </data>
+  <data name="Planner_Target_Azimuth_Label" xml:space="preserve">
+    <value>Azimuth</value>
+  </data>
+  <data name="Planner_Target_BlockedBy_Label" xml:space="preserve">
+    <value>Blocked by</value>
+  </data>
+  <data name="Planner_Target_Clearance_Label" xml:space="preserve">
+    <value>Clearance</value>
+  </data>
+  <data name="Planner_Target_CurrentTargetDetails_Header" xml:space="preserve">
+    <value>Current target details</value>
+  </data>
+  <data name="Planner_Target_Horizon_BelowAstronomical" xml:space="preserve">
+    <value>Below astronomical horizon</value>
+  </data>
+  <data name="Planner_Target_Horizon_Calculating" xml:space="preserve">
+    <value>Calculating…</value>
+  </data>
+  <data name="Planner_Target_Horizon_Clear" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Planner_Target_Horizon_Marginal" xml:space="preserve">
+    <value>Marginal</value>
+  </data>
+  <data name="Planner_Target_Horizon_TerrainBlocked" xml:space="preserve">
+    <value>Terrain blocked</value>
+  </data>
+  <data name="Planner_Target_Horizon_TerrainUnavailable" xml:space="preserve">
+    <value>Above astronomical horizon · terrain unavailable</value>
+  </data>
+  <data name="Planner_Target_LocalHorizon_Label" xml:space="preserve">
+    <value>Local horizon</value>
+  </data>
+  <data name="Planner_Target_Rise_Label" xml:space="preserve">
+    <value>Rise</value>
+  </data>
+  <data name="Planner_Target_Set_Label" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="Planner_Target_Transit_Label" xml:space="preserve">
+    <value>Transit</value>
+  </data>
+  <data name="Planner_Target_Visibility_Label" xml:space="preserve">
+    <value>Visibility</value>
+  </data>
+  <data name="Planner_Targets_LineMarkerUsed_Tooltip" xml:space="preserve">
+    <value>Line and marker used for this object on the timeline and map</value>
+  </data>
+  <data name="Planner_Targets_Moon_ShortLabel" xml:space="preserve">
+    <value>Moon</value>
+  </data>
+  <data name="Planner_Targets_Primary_Label" xml:space="preserve">
+    <value>Primary</value>
+  </data>
+  <data name="Planner_Targets_PrimaryTargetThick_Description" xml:space="preserve">
+    <value>Primary target: thick solid line. Each other object has its own dash pattern and marker, labelled at its highest point on the timeline.</value>
+  </data>
+  <data name="Planner_Targets_RemoveObject_Tooltip" xml:space="preserve">
+    <value>Remove object</value>
+  </data>
+  <data name="Planner_Targets_SelectedTargets_Header" xml:space="preserve">
+    <value>Selected targets</value>
+  </data>
+  <data name="Planner_Targets_SetPrimary_Button" xml:space="preserve">
+    <value>Set primary</value>
+  </data>
+  <data name="Planner_Targets_Sun_ShortLabel" xml:space="preserve">
+    <value>Sun</value>
+  </data>
+  <data name="Planner_Targets_VisibleCount_Format" xml:space="preserve">
+    <value>Visible objects: {0} / {1}</value>
+    <comment>{0} is the number visible, {1} the maximum.</comment>
+  </data>
+  <data name="Planner_Terrain_Centre_Label" xml:space="preserve">
+    <value>Centre</value>
+  </data>
+  <data name="Planner_Terrain_Far_Label" xml:space="preserve">
+    <value>Far</value>
+  </data>
+  <data name="Planner_Terrain_Frame_GroundFacing" xml:space="preserve">
+    <value>Ground-facing · frame below horizontal horizon</value>
+  </data>
+  <data name="Planner_Terrain_Label" xml:space="preserve">
+    <value>Terrain</value>
+  </data>
+  <data name="Planner_Terrain_Minimap_North" xml:space="preserve">
+    <value>N ↑</value>
+  </data>
+  <data name="Planner_Terrain_Minimap_Radius_Format" xml:space="preserve">
+    <value>{0} radius</value>
+    <comment>{0} is the distance from the centre of the terrain minimap to its edge, with its unit.</comment>
+  </data>
+  <data name="Planner_Terrain_Near_Label" xml:space="preserve">
+    <value>Near</value>
+  </data>
+  <data name="Planner_Terrain_Sky_Label" xml:space="preserve">
+    <value>Sky</value>
+  </data>
+  <data name="Planner_Terrain_TerrainFrame_Label" xml:space="preserve">
+    <value>Terrain frame</value>
+  </data>
+  <data name="Planner_Terrain_Threshold_Label" xml:space="preserve">
+    <value>Threshold</value>
+  </data>
+  <data name="Planner_Terrain_ToggleInspector_Button" xml:space="preserve">
+    <value>Toggle inspector</value>
+  </data>
+  <data name="Planner_Timeline_AltitudeAxis_Label" xml:space="preserve">
+    <value>ALTITUDE  +90°</value>
+  </data>
+  <data name="Planner_Timeline_Date_Format" xml:space="preserve">
+    <value>{0:dd MMM yyyy}</value>
+    <comment>The planning date beside the nearby-date slider. {0} is the date.</comment>
+  </data>
+  <data name="Planner_Timeline_DayEnd_Label" xml:space="preserve">
+    <value>24:00</value>
+  </data>
+  <data name="Planner_Timeline_DayStart_Label" xml:space="preserve">
+    <value>00:00</value>
+  </data>
+  <data name="Planner_Timeline_LocalTime_Label" xml:space="preserve">
+    <value>LOCAL TIME</value>
+  </data>
+  <data name="Planner_Timeline_Marker_Now" xml:space="preserve">
+    <value>NOW</value>
+  </data>
+  <data name="Planner_Timeline_Marker_Rise" xml:space="preserve">
+    <value>R</value>
+    <comment>One-letter marker for the target&apos;s rise time on the altitude chart.</comment>
+  </data>
+  <data name="Planner_Timeline_Marker_Set" xml:space="preserve">
+    <value>S</value>
+    <comment>One-letter marker for the target&apos;s set time on the altitude chart.</comment>
+  </data>
+  <data name="Planner_Timeline_Marker_Transit" xml:space="preserve">
+    <value>T</value>
+    <comment>One-letter marker for the target&apos;s transit time on the altitude chart.</comment>
+  </data>
+  <data name="Planner_Timeline_NearbyDate_Label" xml:space="preserve">
+    <value>Nearby date</value>
+  </data>
+  <data name="Planner_Weather_AstronomicalDarkness_Format" xml:space="preserve">
+    <value>Astronomical darkness before {0} / after {1}</value>
+    <comment>{0} astronomical dawn, {1} astronomical dusk.</comment>
+  </data>
+  <data name="Planner_Weather_AstronomicalTwilight_Format" xml:space="preserve">
+    <value>Astronomical twilight {0}–{1}</value>
+    <comment>{0} dawn, {1} dusk.</comment>
+  </data>
+  <data name="Planner_Weather_CivilTwilight_Format" xml:space="preserve">
+    <value>Civil twilight {0}–{1}</value>
+    <comment>{0} dawn, {1} dusk.</comment>
+  </data>
+  <data name="Planner_Weather_Cloud_Format" xml:space="preserve">
+    <value>Cloud {0}</value>
+  </data>
+  <data name="Planner_Weather_Details_Format" xml:space="preserve">
+    <value>{0}Cloud {1} · {2}
+Low/Mid/High {3} / {4} / {5}
+Precip {6} · {7}
+Wind {8} from {9} · gust {10}
+Humidity {11} · Dew {12} · Visibility {13}</value>
+    <comment>{0} stale marker or empty; {1} cloud %; {2} temperature; {3}-{5} low/medium/high cloud %; {6} precipitation probability; {7} precipitation amount; {8} wind speed; {9} wind direction; {10} gust; {11} humidity; {12} dew point; {13} visibility.</comment>
+  </data>
+  <data name="Planner_Weather_DewPoint_Format" xml:space="preserve">
+    <value>Dew point {0}</value>
+  </data>
+  <data name="Planner_Weather_Heading" xml:space="preserve">
+    <value>Weather</value>
+  </data>
+  <data name="Planner_Weather_HighCloud_Format" xml:space="preserve">
+    <value>High cloud {0}</value>
+  </data>
+  <data name="Planner_Weather_Humidity_Format" xml:space="preserve">
+    <value>Humidity {0}</value>
+  </data>
+  <data name="Planner_Weather_LowCloud_Format" xml:space="preserve">
+    <value>Low cloud {0}</value>
+  </data>
+  <data name="Planner_Weather_MediumCloud_Format" xml:space="preserve">
+    <value>Medium cloud {0}</value>
+  </data>
+  <data name="Planner_Weather_MoonIllumination_Format" xml:space="preserve">
+    <value>Moon illumination {0:F0}%</value>
+    <comment>{0} is the illuminated percentage.</comment>
+  </data>
+  <data name="Planner_Weather_MoonPhase_Format" xml:space="preserve">
+    <value>Moon phase {0}</value>
+  </data>
+  <data name="Planner_Weather_Moonrise_Format" xml:space="preserve">
+    <value>Moonrise {0}</value>
+  </data>
+  <data name="Planner_Weather_Moonset_Format" xml:space="preserve">
+    <value>Moonset {0}</value>
+  </data>
+  <data name="Planner_Weather_NauticalTwilight_Format" xml:space="preserve">
+    <value>Nautical twilight {0}–{1}</value>
+    <comment>{0} dawn, {1} dusk.</comment>
+  </data>
+  <data name="Planner_Weather_NoValues" xml:space="preserve">
+    <value>No weather values</value>
+  </data>
+  <data name="Planner_Weather_Precipitation_Format" xml:space="preserve">
+    <value>Precipitation {0}</value>
+  </data>
+  <data name="Planner_Weather_PrecipitationProbability_Format" xml:space="preserve">
+    <value>Precipitation probability {0}</value>
+  </data>
+  <data name="Planner_Weather_PrecipitationType_Format" xml:space="preserve">
+    <value>Precipitation type {0}</value>
+  </data>
+  <data name="Planner_Weather_Refresh_Button" xml:space="preserve">
+    <value>Refresh</value>
+  </data>
+  <data name="Planner_Weather_Refreshed" xml:space="preserve">
+    <value>Weather refreshed</value>
+  </data>
+  <data name="Planner_Weather_RefreshFailed_Format" xml:space="preserve">
+    <value>Weather refresh failed: {0}</value>
+    <comment>{0} is the reason.</comment>
+  </data>
+  <data name="Planner_Weather_Refreshing" xml:space="preserve">
+    <value>Refreshing weather…</value>
+  </data>
+  <data name="Planner_Weather_Stale_Prefix" xml:space="preserve">
+    <value>STALE · </value>
+    <comment>Shown before the weather values when the forecast is out of date. Keep the trailing space.</comment>
+  </data>
+  <data name="Planner_Weather_Summary_Format" xml:space="preserve">
+    <value>Open-Meteo · {0}</value>
+    <comment>{0} is the weather summary, for example &quot;Partly cloudy&quot;.</comment>
+  </data>
+  <data name="Planner_Weather_Sunrise_Format" xml:space="preserve">
+    <value>Sunrise {0}</value>
+  </data>
+  <data name="Planner_Weather_Sunset_Format" xml:space="preserve">
+    <value>Sunset {0}</value>
+  </data>
+  <data name="Planner_Weather_Temperature_Format" xml:space="preserve">
+    <value>Temperature {0}</value>
+  </data>
+  <data name="Planner_Weather_Visibility_Format" xml:space="preserve">
+    <value>Visibility {0}</value>
+  </data>
+  <data name="Planner_Weather_WeatherConditions_Header" xml:space="preserve">
+    <value>Weather conditions</value>
+  </data>
+  <data name="Planner_Weather_WindDirection_Format" xml:space="preserve">
+    <value>Wind direction {0}</value>
+  </data>
+  <data name="Planner_Weather_WindGusts_Format" xml:space="preserve">
+    <value>Wind gusts {0}</value>
+  </data>
+  <data name="Planner_Weather_WindSpeed_Format" xml:space="preserve">
+    <value>Wind speed {0}</value>
+  </data>
+</root>
