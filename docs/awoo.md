@@ -10,7 +10,11 @@ The plan is to reach a solid V1 around the features below. After that, developme
 
 ## Inspiration
 
-[Photo Ephemeris](https://photoephemeris.com/) was one of the main early inspirations for Noctaxis, particularly the idea of planning celestial alignments against real geography. Noctaxis grew from that starting point into a broader desktop planning workspace, with its own approach to framing, terrain, weather, equipment and astronomical targets.
+[Photo Ephemeris](https://photoephemeris.com/) was one of the main early inspirations for Noctaxis, particularly the idea of planning celestial alignments against real geography.
+
+[AstroFrame](https://astroframe.app/) was another important early reference, especially its terrain-mesh visualisation of the real horizon beneath the sky. That helped shape Noctaxis's terrain-aware planning direction.
+
+Noctaxis grew from those starting points into a broader desktop planning workspace, with its own approach to framing, terrain, weather, equipment and astronomical targets.
 
 ## Key features
 
