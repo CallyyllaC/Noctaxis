@@ -9,5 +9,8 @@
     "Linux"
   ],
   "image": "images/awoo-card.webp",
-  "content": "docs/awoo.md"
+  "content": "docs/awoo.md",
+  "licence": "Awoo Licence v2.0",
+  "licenceLink": "https://awoo.ltd/licence/",
+  "licenceLinkText": "Learn more about Awoo Licence ↗"
 }
