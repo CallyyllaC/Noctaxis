@@ -1,4 +1,5 @@
 {
+  "$schema": "https://awoo.ltd/schemas/awoo.project.schema.json",
   "name": "Noctaxis",
   "summary": "A planning workspace built around your photography setup, tailored to astro photography without being limited to it.",
   "status": "active",
@@ -12,5 +13,6 @@
   "content": "docs/awoo.md",
   "licence": "Awoo Licence v2.0",
   "licenceLink": "https://awoo.ltd/licence/",
-  "licenceLinkText": "Learn more about Awoo Licence ↗"
+  "licenceLinkText": "Learn more about Awoo Licence ↗",
+  "roadmap": "ROADMAP.md"
 }
