@@ -152,7 +152,7 @@ Profile and fix measured PiP overhead, panel-drag latency, Layers opening latenc
 ### ⬜ Final general performance pass
 Startup, long-session allocations, binding churn, fetch churn and trace-based remaining hotspots only.
 
-### ⬜ Freeze v1 feature scope once the above is satisfactory
+### 🚫 Freeze v1 feature scope once the above is satisfactory
 
 
 ## v1.0 export / portable plans
