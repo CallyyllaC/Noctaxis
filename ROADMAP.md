@@ -109,6 +109,16 @@ Noctaxis-owned styling integrated with application themes.
 Terrarium-backed terrain/topographic presentation is implemented and integrated with the Planner.
 
 
+### ⬜ Add macOS support
+Add and validate macOS as a supported Noctaxis desktop platform.
+
+### ⬜ Investigate Windows/macOS code signing and notarisation
+Investigate the release requirements, tooling and practical distribution path for Windows code signing and macOS code signing/notarisation.
+
+### ⬜ Create a Wiki
+Create and publish the Noctaxis Wiki using the agreed documentation structure and polished user-facing content.
+
+
 ## v1.0, first proper public release
 
 ### 🟡 End-to-end dogfooding
