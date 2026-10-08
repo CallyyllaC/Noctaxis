@@ -140,6 +140,12 @@ Architecture is cross-platform, but native Linux rendering, interaction, browser
 ### ⬜ macOS release support/validation
 Complete platform-specific build, packaging and native interaction validation.
 
+### ⬜ Theme dropdown presentation polish
+Separate the visible theme availability label from tooltip details: standard themes show no redundant status beside their names, while tooltips identify them as Standard. Supporter and locked-theme labels remain informative. Keep this independent of the tooltip crash/full-row selection fixes.
+
+### ⬜ Version-aware portable plan import/export
+Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
+
 ### ⬜ Final first-run/release polish
 Version metadata, release-facing wording, documentation, clean-machine testing and release presentation.
 
