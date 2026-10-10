@@ -146,6 +146,12 @@ Separate the visible theme availability label from tooltip details: standard the
 ### ⬜ Settings page layout and space utilisation
 Review every Settings page for sensible use of available horizontal and vertical space across typical and constrained window sizes and text scales. Eliminate excessive empty space, awkward stretching and unnecessary scrolling without sacrificing readability, accessibility or responsive behaviour.
 
+### ⬜ Show celestial objects in the Planner camera frame
+Render relevant celestial objects in the camera-direction frame at their projected positions for the selected location, time and camera framing, so their placement can be checked against the field of view and terrain horizon.
+
+### ⬜ Camera ISO and lens aperture data
+Add camera ISO and lens aperture (f-number) data to the appropriate equipment and capture settings, and expose them wherever useful for planning and exported capture information.
+
 ### ⬜ Version-aware portable plan import/export
 Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
 
