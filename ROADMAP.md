@@ -140,6 +140,9 @@ Separate the visible theme availability label from tooltip details: standard the
 ### ⬜ Settings page layout and space utilisation
 Review every Settings page for sensible use of available horizontal and vertical space across typical and constrained window sizes and text scales. Eliminate excessive empty space, awkward stretching and unnecessary scrolling without sacrificing readability, accessibility or responsive behaviour.
 
+### ⬜ Investigate equipment profile validation and save isolation
+Check whether an incomplete or invalid camera/lens profile prevents unrelated valid equipment edits from being saved. Verify that existing profiles remain safely persisted during partial edits, decide whether validation should be isolated per profile, and add focused regression coverage for any confirmed defect.
+
 ### ⬜ Curvature-aware Planner view cone from camera pitch
 Use the camera's visual pitch, vertical field of view and observer height to project the Planner view cone against Earth's curvature and the local terrain. Dynamically limit the map footprint at the physical ground intersection or visible horizon, instead of extending indefinitely or ending at an arbitrary fixed distance. Handle skyward rays with no ground intersection explicitly, and keep the result consistent with the Camera frame's terrain-horizon calculations.
 
