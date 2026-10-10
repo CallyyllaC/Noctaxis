@@ -115,8 +115,8 @@ macOS Intel and Apple Silicon courtesy builds added, with automated verification
 ### ✅ Investigate Windows/macOS code signing and notarisation
 Investigated signing, notarisation and practical distribution requirements. macOS uses ad-hoc signing; paid certificates and developer subscriptions are not part of the current release plan.
 
-### 🟡 Create a Wiki
-Wiki structure is in place; user-facing documentation and screenshots are being reviewed and polished for publication.
+### ✅ Create a Wiki
+Public wiki documentation, navigation and screenshots are complete and reviewed, covering Home, About, Getting Started, Locations, Planner and Settings. Ready for publication.
 
 
 ## v1.0, first proper public release
