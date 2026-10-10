@@ -146,6 +146,9 @@ Render relevant celestial objects in the camera-direction frame at their project
 ### ⬜ Camera ISO and lens aperture data
 Add camera ISO and lens aperture (f-number) data to the appropriate equipment and capture settings, and expose them wherever useful for planning and exported capture information.
 
+### ⬜ Show saved timezone on Saved Location Cards
+Display each saved location's stored timezone on its card, using a clear, readable timezone label so users can see the timezone context of their bookmarked places.
+
 ### 🟡 Version-aware portable plan import/export
 Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
 
