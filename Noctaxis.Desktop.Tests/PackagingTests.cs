@@ -136,92 +136,122 @@ public sealed class PackagingTests
         ("ubuntu-24.04-arm", "linux-arm64"), ("macos-latest", "osx-arm64"), ("macos-15-intel", "osx-x64"),
     ];
 
-    /// <summary>The platforms whose test suites run in CI, each in a workflow (and README badge) of its own.</summary>
-    private static readonly (string Runner, string Rid)[] TestRunners =
-        [("windows-latest", "win-x64"), ("ubuntu-latest", "linux-x64"), ("macos-latest", "osx-arm64")];
+    /// <summary>
+    /// The platforms whose test suites run natively: the supported one in CI and before every release, the
+    /// best-effort ones in a workflow (and badge) of their own that gates nothing.
+    /// </summary>
+    private static readonly (string Runner, string Rid) SupportedTestRunner = ("windows-latest", "win-x64");
+    private static readonly (string Runner, string Rid)[] BestEffortTestRunners =
+        [("ubuntu-latest", "linux-x64"), ("macos-latest", "osx-arm64")];
 
     private static string Workflows => Path.Combine(Repository, ".github", "workflows");
     private static string Workflow(string name) => File.ReadAllText(Path.Combine(Workflows, name)).ReplaceLineEndings("\n");
     private static string Triggers(string workflow) =>
         workflow[workflow.IndexOf("\non:\n", StringComparison.Ordinal)..workflow.IndexOf("\npermissions:", StringComparison.Ordinal)];
+    private static string Job(string workflow, string job) =>
+        workflow[workflow.IndexOf($"\n  {job}:\n", StringComparison.Ordinal)..];
 
     /// <summary>
-    /// The package workflows keep to the support policy (docs/releasing.md):
-    /// - every package is built, checked and started on a hosted runner of its own operating system and processor,
-    ///   which the job confirms first;
-    /// - each platform has a build workflow of its own (its README badge) for pushes and pull requests, which keeps nothing;
-    /// - only package.yml keeps packages, and it runs only by hand or for a version tag, never on an ordinary push;
-    /// - nothing is published and no secret is used.
+    /// The release workflow keeps to the support policy (docs/releasing.md):
+    /// - every package is built, checked and started from its archive on a hosted runner of its own operating
+    ///   system and processor, which the job confirms first, and only then kept;
+    /// - a release is published only by the publish job, only when the plan says so and every package and test job
+    ///   succeeded, as a draft completed before it is made public;
+    /// - it runs by hand (publishing only when asked), for pushes to main, or from the version bump, never for pull
+    ///   requests, tags or on a schedule; only the publish job may write, with the workflow's own token.
     /// </summary>
     [Fact]
-    public void ThePackageWorkflowsStartEveryPackageOnItsOwnSystemAndKeepItOnlyWhenWanted()
+    public void TheReleaseWorkflowStartsEveryPackageOnItsOwnSystemAndPublishesOnlyWhenEverythingPassed()
     {
         var shared = Workflow("platform-package.yml");
-        var release = Workflow("package.yml");
+        var release = Workflow("release.yml");
         foreach (var (runner, rid) in PackageRunners)
-        {
-            Assert.Contains($"- {{ os: {runner}, rid: {rid} }}", release);
-            var build = Workflow($"build-{rid}.yml");
-            Assert.Contains($"uses: ./.github/workflows/platform-package.yml\n    with:\n      runner: {runner}\n      rid: {rid}\n", build);
-            Assert.DoesNotContain("keep-package", build);
-            var triggers = Triggers(build);
-            Assert.Contains("branches:", triggers);
-            Assert.Contains("pull_request:", triggers);
-            Assert.DoesNotContain("tags:", triggers);
-            Assert.DoesNotContain("secrets.", build);
-        }
-        Assert.Contains("uses: ./.github/workflows/platform-package.yml", release);
-        Assert.Contains("keep-package: true", release);
+            Assert.Contains($"- {{ runner: {runner}, rid: {rid} }}", Job(release, "package"));
+        Assert.Contains("uses: ./.github/workflows/platform-package.yml", Job(release, "package"));
 
-        // Every package is started: no step is limited to some of them.
-        Assert.DoesNotContain("matrix.smoke", shared);
-        var platformCheck = shared.IndexOf("bash scripts/check-runner-platform.sh ${{ inputs.rid }}", StringComparison.Ordinal);
-        Assert.InRange(platformCheck, 0, shared.IndexOf("- name: Package (Windows)", StringComparison.Ordinal));
+        // Every package is checked from its archive, then started: no step is limited to some of them.
+        int At(string text) => shared.IndexOf(text, StringComparison.Ordinal);
+        Assert.InRange(At("bash scripts/check-runner-platform.sh ${{ inputs.rid }}"), 0, At("- name: Package (Windows)"));
+        Assert.InRange(At("bash scripts/check-package.sh"), At("- name: Package (Linux, macOS)"), At("- name: Start the package (Windows)"));
         foreach (var system in new[] { "Windows", "Linux", "macOS" })
             Assert.Contains($"- name: Start the package ({system})\n        if: runner.os == '{system}'", shared);
         Assert.Contains("bash scripts/check-startup-log.sh", shared);
-        Assert.Contains("- name: Keep the package\n        if: inputs.keep-package\n", shared);
+        Assert.Contains("${{ inputs.version }}", shared[At("- name: Start the package (Linux)")..]);
+        Assert.True(At("- name: Keep the package") > At("- name: Start the package (macOS)"), "a package is kept only once it has started");
 
-        var releaseTriggers = Triggers(release);
-        Assert.Contains("workflow_dispatch:", releaseTriggers);
-        Assert.Contains("tags:", releaseTriggers);
-        Assert.DoesNotContain("branches:", releaseTriggers);
-        Assert.DoesNotContain("pull_request", releaseTriggers);
-        Assert.DoesNotContain("schedule:", releaseTriggers);
-        foreach (var workflow in new[] { shared, release })
+        var triggers = Triggers(release);
+        Assert.Contains("workflow_dispatch:\n    inputs:\n      publish:", triggers);
+        Assert.Contains("default: false", triggers);
+        Assert.Contains("push:\n    branches:\n      - main\n", triggers);
+        Assert.Contains("workflow_call:", triggers);
+        foreach (var excluded in new[] { "pull_request", "tags:", "schedule:" })
+            Assert.DoesNotContain(excluded, triggers);
+
+        var publish = Job(release, "publish");
+        Assert.Contains("needs: [plan, package, tests]", publish);
+        Assert.Contains("if: needs.plan.outputs.publish == 'true'", publish);
+        Assert.Contains("--draft", publish);
+        Assert.Contains("gh release edit \"$TAG\" --draft=false", publish);
+        Assert.Contains("\npermissions:\n  contents: read\n", release);
+        Assert.Single(Regex.Matches(release, "contents: write"));
+        Assert.Contains("contents: write", publish);
+        Assert.DoesNotContain("gh release", release[..release.IndexOf("\n  publish:\n", StringComparison.Ordinal)]);
+
+        // Nothing else publishes, and no workflow but the AWOO website hook uses a secret.
+        foreach (var file in Directory.GetFiles(Workflows, "*.yml"))
         {
-            Assert.DoesNotContain("gh release", workflow);
-            Assert.DoesNotContain("secrets.", workflow);
-            Assert.Contains("contents: read", workflow);
+            var name = Path.GetFileName(file);
+            var text = Workflow(name);
+            if (name != "release.yml") Assert.DoesNotContain("gh release", text);
+            if (name != "trigger-awoo-rebuild.yml") Assert.DoesNotContain("secrets.", text);
         }
+        foreach (var name in new[] { "ci.yml", "platform-tests-best-effort.yml", "platform-package.yml", "platform-tests.yml" })
+        {
+            Assert.Contains("contents: read", Workflow(name));
+            Assert.DoesNotContain("contents: write", Workflow(name));
+        }
+        // Ordinary development builds and tests; it never packages.
+        Assert.DoesNotContain("platform-package.yml", Workflow("ci.yml"));
+        Assert.DoesNotContain("platform-package.yml", Workflow("platform-tests-best-effort.yml"));
     }
 
     /// <summary>
-    /// Each tested platform runs the suites natively in a workflow of its own, and no workflow turns a failure into a
-    /// success, so a README badge never shows a pass that did not happen.
+    /// The suites run natively: the supported platform's in CI and as a required job of every release, the best-effort
+    /// platforms' in their own workflow, each reporting its own result. No workflow turns a failure into a success, so
+    /// a badge never shows a pass that did not happen.
     /// </summary>
     [Fact]
-    public void EveryPlatformWorkflowReportsItsOwnFailures()
+    public void EveryPlatformReportsItsOwnFailures()
     {
-        foreach (var (runner, rid) in TestRunners)
-            Assert.Contains($"uses: ./.github/workflows/platform-tests.yml\n    with:\n      runner: {runner}\n      rid: {rid}\n",
-                Workflow($"tests-{rid}.yml"));
+        foreach (var name in new[] { "ci.yml", "release.yml" })
+        {
+            var tests = Job(Workflow(name), "tests");
+            Assert.Contains("uses: ./.github/workflows/platform-tests.yml", tests);
+            Assert.Contains($"runner: {SupportedTestRunner.Runner}\n      rid: {SupportedTestRunner.Rid}\n", tests);
+        }
+        var bestEffort = Job(Workflow("platform-tests-best-effort.yml"), "tests");
+        Assert.Contains("fail-fast: false", bestEffort);
+        Assert.Contains("uses: ./.github/workflows/platform-tests.yml", bestEffort);
+        foreach (var (runner, rid) in BestEffortTestRunners)
+            Assert.Contains($"- {{ runner: {runner}, rid: {rid} }}", bestEffort);
+        Assert.Equal(Triggers(Workflow("ci.yml")), Triggers(Workflow("platform-tests-best-effort.yml")));
         Assert.Contains("bash scripts/check-runner-platform.sh ${{ inputs.rid }}", Workflow("platform-tests.yml"));
         foreach (var file in Directory.GetFiles(Workflows, "*.yml"))
             Assert.DoesNotContain("continue-on-error", File.ReadAllText(file));
     }
 
-    /// <summary>Every README status badge shows and links a workflow that exists, for pushes to main.</summary>
+    /// <summary>
+    /// The README's status badges are those of CI, the best-effort platform tests and the release workflow, on main,
+    /// and each shows and links a workflow that exists.
+    /// </summary>
     [Fact]
     public void TheReadmeBadgesShowRealWorkflows()
     {
         var readme = File.ReadAllText(Path.Combine(Repository, "README.md"));
         const string Actions = @"https://github\.com/CallyyllaC/Noctaxis/actions/workflows/";
         var badges = Regex.Matches(readme,
-            $@"\[!\[[^\]]+\]\({Actions}([\w.-]+\.yml)/badge\.svg\?branch=main&event=push\)\]\({Actions}([\w.-]+\.yml)\?query=branch%3Amain\)");
-        var shown = badges.Select(badge => badge.Groups[1].Value).ToArray();
-        Assert.Equal(PackageRunners.Select(platform => $"build-{platform.Rid}.yml")
-            .Concat(TestRunners.Select(platform => $"tests-{platform.Rid}.yml")).Order(), shown.Order());
+            $@"\[!\[[^\]]+\]\({Actions}([\w.-]+\.yml)/badge\.svg\?branch=main\)\]\({Actions}([\w.-]+\.yml)\?query=branch%3Amain\)");
+        Assert.Equal(["ci.yml", "platform-tests-best-effort.yml", "release.yml"], badges.Select(badge => badge.Groups[1].Value).Order());
         foreach (Match badge in badges)
         {
             Assert.Equal(badge.Groups[1].Value, badge.Groups[2].Value);

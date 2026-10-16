@@ -8,46 +8,40 @@ package's `README.txt` ([Windows](../packaging/windows/README.txt), [Linux](../p
 ## Support policy
 
 - **Windows x64 is the only officially supported platform.** It is developed and tested by hand on
-  Windows, and gets full developer support.
+  Windows, and gets full developer support. Its test suites must pass before anything is released.
 - **Windows Arm64, Linux (x64, Arm64) and macOS (Apple silicon, Intel) are courtesy builds,** offered on
   a best-effort basis:
-  - They are built, packaged and started automatically on GitHub-hosted runners of their own operating
-    system and processor. These are real hosted machines, not emulators. The full test suite also runs on
-    Linux and, informationally, on macOS.
+  - Every release builds, checks and starts them on GitHub-hosted runners of their own operating system
+    and processor. These are real hosted machines, not emulators or cross-compilation. The test suites
+    also run on Linux x64 and macOS Apple silicon, reported separately; they do not hold up a release.
   - Nobody uses them as a daily desktop, so native desktop behaviour and hardware compatibility are not
     guaranteed.
   - Bugs reported on them may be investigated, but fixes are not promised.
   - They need no personal Linux or macOS hardware, and no paid signing or developer accounts.
   - The unsigned-application warnings below apply.
-- Every push to `main` or `dev`, and every pull request, builds, checks and starts every package; packages
-  are kept only when they are wanted (see [continuous integration](#continuous-integration)).
 
 The [native checklist](#native-verification-checklist) is there for anyone with one of those systems
 who would like to help; it is not a release requirement for courtesy builds.
 
 ## Platform status
 
-As of the last review. Each column claims only what was actually done:
-- **Compiles:** a self-contained `dotnet publish` for that target succeeded.
-- **Packaged:** the packaging script wrote and checked the package.
-- **Automated tests:** headless test suites run on that operating system.
-- **Started:** the packaged app was launched and stayed running with nothing fatal logged; this says
-  nothing about the interface.
+From the first full CI run (16 October 2026, commit `ad60002`) and the fixes since. Each column claims
+only what was actually done:
+- **Packaged and started:** the release workflow built the package on its own system, checked it and
+  launched it; it stayed running with nothing fatal logged. This says nothing about the interface.
+- **Automated tests:** the headless Core and Desktop suites on that operating system.
 - **Native use:** a person used the app on that platform.
 
-"CI, not yet run" means the workflow step exists but no run result has been seen. The runner is
-where `build-<rid>.yml` and `package.yml` build and start that package.
+| Package | Support | Runner | Packaged and started | Automated tests | Native use |
+|---|---|---|---|---|---|
+| Windows x64 (`win-x64`) | **Official** | `windows-latest` | Yes, in CI | Required. Two failures in that run, both fixed; passing locally | Yes: developed and tested by hand |
+| Windows Arm64 (`win-arm64`) | Courtesy | `windows-11-arm` | Yes, in CI | Not run | No |
+| Linux x64 (`linux-x64`) | Courtesy | `ubuntu-latest` | Yes, in CI (Xvfb) | Best effort. Fixed: Core tests could not load Skia. Known: four text-layout tests (see [platform differences](#known-platform-test-differences)) | No |
+| Linux Arm64 (`linux-arm64`) | Courtesy | `ubuntu-24.04-arm` | Yes, in CI (Xvfb) | Not run | No |
+| macOS Apple silicon (`osx-arm64`) | Courtesy | `macos-latest` | Failed at signing; fixed, not yet re-run | Best effort. Fixed: pixel byte order, time-zone list, timing. Known: one text-layout test | No |
+| macOS Intel (`osx-x64`) | Courtesy | `macos-15-intel` | Failed at signing; fixed, not yet re-run | Not run | No |
 
-| Package | Support | Runner | Compiles | Packaged | Automated tests | Started | Native use |
-|---|---|---|---|---|---|---|---|
-| Windows x64 (`win-x64`) | **Official** | `windows-latest` | Yes | Yes, locally | Yes: full Core and Desktop suites, locally | No: CI, not yet run | Yes: developed and tested by hand on Windows (built from source; the zip itself not yet run) |
-| Windows Arm64 (`win-arm64`) | Courtesy | `windows-11-arm` | Yes (cross) | Yes, locally | No | No: CI, not yet run | No |
-| Linux x64 (`linux-x64`) | Courtesy | `ubuntu-latest` | Yes (cross) | Yes, locally (Git Bash) | Full suites on Ubuntu in `tests-linux-x64.yml`; no result seen in this review | No: CI under Xvfb, not yet run | No |
-| Linux Arm64 (`linux-arm64`) | Courtesy | `ubuntu-24.04-arm` | Yes (cross) | Yes, locally (Git Bash) | No | No: CI under Xvfb, not yet run | No |
-| macOS Apple silicon (`osx-arm64`) | Courtesy | `macos-latest` | Yes (cross; SDK ad-hoc signs the executable) | Layout checked locally. Sealing and zipping need macOS: CI, not yet run | macOS in `tests-osx-arm64.yml`, informational; not yet run | No: CI, not yet run | No |
-| macOS Intel (`osx-x64`) | Courtesy | `macos-15-intel` | Yes (cross) | As above | No | No: CI, not yet run | No |
-
-Once the Package workflow has run, update the "Started" and "Packaged" columns from its results.
+Update this table from the next release workflow run.
 
 ## Building and testing
 
@@ -96,7 +90,7 @@ SDK ad-hoc signs the macOS executable even there.
 
 The version is `X.Y.Z` from `Directory.Build.props`, with `Z` taken from the `NoctaxisBuildNumber`
 environment variable (CI sets the run number; local builds use 0). It names the package and fills the
-bundle's `CFBundleShortVersionString`.
+bundle's `CFBundleShortVersionString`; see [the version and what a release is](#the-version-and-what-a-release-is).
 
 Package metadata lives in `packaging/`:
 - `macos/Info.plist`, with bundle identifier `io.github.callyyllac.noctaxis`;
@@ -138,35 +132,107 @@ official OpenCvSharp runtime exists for macOS, and the Linux one depends on a sp
 
 Caches from earlier versions move there at startup by a same-volume rename only. They are never copied; on another volume they stay where they are. One Noctaxis runs per OS user and holds `.noctaxis-instance.lock` in the data folder. Details: [architecture](architecture.md#persistence-storage-and-single-instance).
 
-## Continuous integration
+## Continuous integration and releases
 
-Each platform has workflows of its own, so each has its own status badge in the README. A badge reports
-its workflow's latest run on `main`, and a workflow fails when any of its steps fails.
+Four workflows, plus two reusable ones that do the work:
 
 | Workflow | Runs | Does |
 |---|---|---|
-| `build-<rid>.yml` (six: `win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`) | Every push to `main` or `dev` and every pull request, except changes only to `docs/`, `images/` or non-packaged root Markdown; by hand | Builds, checks and starts that package through `platform-package.yml`. Keeps nothing. |
-| `tests-<rid>.yml` (three: `win-x64`, `linux-x64`, `osx-arm64`) | Every push to `main` or `dev` and every pull request; by hand | Builds the solution and runs the full Core and Desktop suites through `platform-tests.yml`. |
-| `package.yml` | By hand (Actions → Package → Run workflow), or for a version tag (`v*`) | The same as all six build workflows through `platform-package.yml`, then keeps every package as a workflow artifact for 7 days. |
-| `ci.yml` | Every push and pull request | Tests the version scheme's own logic. |
+| `ci.yml` (CI) | Pushes to `main` or `dev`, pull requests, by hand | Tests the version and release scripts; builds and runs both test suites on Windows x64. |
+| `platform-tests-best-effort.yml` | The same as CI | Builds and runs both test suites on Linux x64 and macOS Apple silicon. Gates nothing. |
+| `release.yml` (Release) | By hand; pushes to `main` that change the version or the packaging; called by the version bump | Builds, checks and starts all six packages, runs the Windows x64 tests, and publishes a GitHub Release when the version calls for it. |
+| `version-bump.yml` | A `dev` → `main` pull request is merged | Increments Y on `main` and `dev`, then calls `release.yml` for the new version. |
+| `platform-package.yml`, `platform-tests.yml` | Called by the above | One package built, checked and started; one platform's test suites. |
 
-- Every job first runs `scripts/check-runner-platform.sh`. It fails unless the runner reports the expected
-  operating system and processor, and the .NET SDK runs natively as that runtime identifier, not under
-  emulation. No result is ever claimed for a platform the job did not actually run on.
-- Every package is built on a runner of its own operating system and processor (see the table above),
-  so macOS packages are sealed on macOS.
-- Every package is started there: Linux under Xvfb. `scripts/check-startup-log.sh` (Linux, macOS) and the
-  Windows step then check that the app was still running after 25 seconds, logged its start and
-  logged nothing fatal. This is a startup check only; it does not exercise the interface.
-- On macOS the extracted bundle's seal is also verified.
-- Tests run only on Windows x64, Linux x64 and macOS Apple silicon. Windows Arm64, Linux Arm64 and macOS
-  Intel are built, packaged and started, but their test suites are not run, so they have no test badge.
-- The macOS test workflow is informational. Pixel-level tests were written against Windows and Linux Skia
-  output, so it may fail until its rendering results have been reviewed once. It fails in its own
-  workflow and badge without affecting the others. No branch protection requires any of these checks.
-- A newer push to a pull request cancels its older runs. Runs for `main` and `dev` always finish, so
-  their badges show a result.
-- Nothing is released or published, and no secrets or credentials are used.
+`trigger-awoo-rebuild.yml` rebuilds awoo.ltd on pushes to `main` and when a release is published; it is
+unrelated to the build.
+
+Every job first runs `scripts/check-runner-platform.sh`, which fails unless the runner and its .NET SDK
+really are the expected operating system and processor, so no result is claimed for a platform the job did
+not run on. No workflow uses `continue-on-error`.
+
+### Ordinary pushes and pull requests
+
+CI and the best-effort tests run for every change except documentation-only ones (`docs/`, `images/`,
+`ROADMAP.md`, `awoo.project.json`). The licensing documents the tests read still trigger them. A newer push
+to a pull request cancels its older runs. Nothing is packaged or published.
+
+Release also runs, without publishing, when a push to `main` touches packaging: `Directory.Build.props`,
+`Directory.Packages.props`, the Desktop project, `packaging/`, the package and check scripts, or the
+release workflows.
+
+### The version and what a release is
+
+`NoctaxisVersion` in `Directory.Build.props` (X.Y) is the only version kept in the repository. A build's
+version is X.Y.Z, where Z is the workflow's run number. Packages are named `Noctaxis-X.Y.Z-<rid>.zip`
+(`.tar.gz` for Linux), and a release is tagged `vX.Y.Z` and titled `Noctaxis X.Y.Z`. While X is 0, every
+release is marked as an alpha pre-release.
+
+Each X.Y is released once. `scripts/release_plan.py` decides, at the start of each Release run:
+- **A push to `main` that changes X.Y**, or the version bump after a `dev` → `main` merge, publishes,
+  unless a `vX.Y.*` release already exists (a repeated push or re-run then only verifies).
+- **Any other push** only verifies.
+- **A run by hand** publishes only when *publish* is ticked, only on `main`, and only for an X.Y not yet
+  released.
+- It fails with the reason when X.Y would go down, when X.Y is lower than an existing release, or when the
+  tag `vX.Y.Z` already exists on another commit.
+
+### How a release is published
+
+The Publish job runs only when the plan says so **and** every package job and the Windows x64 test job have
+succeeded. It:
+1. collects the six packages, as built and checked, and fails unless they are exactly the six for X.Y.Z;
+2. writes `SHA256SUMS.txt`;
+3. checks that no other `vX.Y.*` release appeared meanwhile;
+4. creates a draft release with every file attached, then publishes it, which creates the tag. A re-run
+   of a failed run (it keeps its run number) finishes the same draft; a published release is never changed.
+
+It uses the workflow's own `GITHUB_TOKEN`, with write access in that job only. No other secrets are used.
+
+Workflow artifacts are not releases. Each run keeps its packages (`package-<rid>`) and test results
+(`test-results-<rid>`) for 14 days, for diagnosis; downloading them needs a GitHub sign-in.
+
+To release the current version for the first time, or after a failure: run Release by hand on `main`
+with *publish* ticked. To release a new version: change `NoctaxisVersion` on `main`, or merge `dev` into
+`main`.
+
+### Building by hand
+
+Actions → **Release** → **Run workflow**, choose the branch, and leave *publish* unticked. It builds,
+checks and starts all six packages and runs the Windows tests; the packages are on the run's page under
+Artifacts. Actions → **CI** (or **Best-effort platform tests**) → **Run workflow** runs only the tests.
+
+Locally: [Building and testing](#building-and-testing) and [Packages](#packages).
+
+### When a platform job fails
+
+1. Open the failed run, then the failed job (`Package (<rid>)` or `Tests (<rid>)`). The first step in red
+   is where it failed: an error in *Confirm the runner's operating system and processor* means the hosted
+   runner image changed, not the code.
+2. For tests, the error is in the test step's log, and `test-results-<rid>` holds the `.trx` files. Find
+   the first failure: a crashed test host (`Test Run Aborted`) hides everything after it.
+3. For packages, *Check the package* names any missing file or wrong version, and *Start the package*
+   prints the app's log. `[CRT]` lines are the fatal errors.
+4. Re-run only the failed jobs if the cause was outside the code (a runner or network fault). Otherwise fix
+   it and push: a release that did not publish can simply be run again.
+
+One Desktop failure is a known, intermittent test-isolation defect rather than a product fault: a
+`Test Case Cleanup Failure` with "The calling thread cannot access this object because a different thread
+owns it" from `EnsureIsolatedApplication`, on a different UI test each time. Avalonia creates its UI
+dispatcher on whichever thread first asks after the headless session resets it between tests, and plain
+tests that build a `MainViewModel` on other threads can ask first. The named test passes on its own; re-run
+the job. Moving those tests onto the headless dispatcher fixes it.
+
+### Known platform test differences
+
+On Linux and macOS the following fail because of the system font, not the code under test. The window style
+names the `Inter` family, which resolves to each system's own font for that name: Segoe UI on Windows,
+which the layout tests were written against, and wider fonts on the hosted Linux and macOS runners. They
+point to real text-fitting problems on those systems at large text sizes.
+- Linux x64: `ANarrowWindowShrinksTheLocationFirstAndKeepsEverythingElse`,
+  `LongerTranslatedTextStillFitsOnEveryScreenAtEveryTextSize`, `TheFourValuesAreOneStatusLine`,
+  `HorizonAndObstructionShareOneLine`.
+- macOS Apple silicon: `ANarrowWindowShrinksTheLocationFirstAndKeepsEverythingElse`.
 
 ## Signing and distribution trust
 
@@ -175,7 +241,7 @@ its workflow's latest run on `main`, and a workflow fails when any of its steps 
 | Windows Authenticode with publisher identity | **Deferred: not worth the effort for v1.0.** It needs a paid certificate from a CA, or Azure Artifact Signing (a monthly subscription with identity validation, and open to individuals only in some countries). Both need an account and an identity check. |
 | Windows self-signed certificate | Not used. It establishes no publisher identity, and is trusted only if users install the certificate, which they should not be asked to do. |
 | macOS Developer ID signing and notarisation | **Deferred: not worth the effort for v1.0.** Both need a paid Apple Developer Program membership. |
-| macOS ad-hoc signing | **Used**: free, needs no account, and adds no maintenance. Apple silicon runs only signed code: the .NET SDK ad-hoc signs the executable, and the native libraries come signed by their publishers. `package.sh` signs every file in `Contents/MacOS` and then the bundle, as Avalonia's macOS deployment guide does. It establishes no publisher identity. |
+| macOS ad-hoc signing | **Used**: free, needs no account, and adds no maintenance. Apple silicon runs only signed code: the .NET SDK ad-hoc signs the executable, and the native libraries come signed by their publishers. `package.sh` signs every file in `Contents/MacOS` except the app itself, then the bundle, which signs the app and seals the rest, as Avalonia's macOS deployment guide does. It establishes no publisher identity. |
 
 `codesign` keeps the signatures of files that are not Mach-O code (the .NET assemblies and the licence
 texts in `Contents/MacOS`) in extended attributes. `ditto` stores those in the zip and Finder restores

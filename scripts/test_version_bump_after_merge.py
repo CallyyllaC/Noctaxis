@@ -103,6 +103,18 @@ class VersionBumpAfterMergeTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(["0.5.0 main", "0.5.0 dev"], self.verify_log.read_text().splitlines())
 
+    def test_result_names_the_main_commit_carrying_the_bump_for_the_release(self):
+        merge = self.merge_dev_into_main()
+        result_file = Path(self._temp.name) / "result.txt"
+        for attempt in range(2):  # the bump, then a re-run that finds it
+            result = self.run_bump(7, merge, RESULT_FILE=str(result_file))
+            self.assertEqual(0, result.returncode, result.stderr)
+        self.git(self.author, "fetch", "--quiet", "origin")
+        bump = self.git(self.author, "rev-parse", "origin/main")
+        self.assertIn(TRAILER.format(7), self.git(self.author, "log", "-1", "--format=%B", bump).splitlines())
+        expected = f"main-sha={bump}\nprevious-version=0.4\nversion=0.5\n"
+        self.assertEqual(expected * 2, result_file.read_text())
+
     def test_failed_verification_pushes_nothing(self):
         merge = self.merge_dev_into_main()
         main_commits = self.commit_count("main")

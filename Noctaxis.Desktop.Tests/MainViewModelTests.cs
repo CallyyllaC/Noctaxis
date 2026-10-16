@@ -1498,13 +1498,19 @@ public sealed partial class MainViewModelTests
     [Fact]
     public async Task SharedLocationSearch_DebouncesAndCancelsObsoleteRequest()
     {
-        var provider = new DelayedSearchProvider();
+        // Waits on the states themselves rather than on fixed delays a slow runner can overrun: "London" is held
+        // by the provider until it is cancelled, "Paris" answers at once.
+        var provider = new DelayedSearchProvider(hold: "London");
         var search = new LocationSearchViewModel(provider, NullLogger<LocationSearchViewModel>.Instance);
+        // Typing within the debounce interval searches only for the final text.
+        search.Query = "Lon";
         search.Query = "London";
-        await Task.Delay(400);
+        await WaitUntilAsync(() => provider.Started == 1, TimeSpan.FromSeconds(10));
+        Assert.Equal(["London"], provider.Queries);
+        // A new query cancels the one in flight, and only its own results are shown.
         search.Query = "Paris";
-        await Task.Delay(650);
-        Assert.Equal(2, provider.Started);
+        await WaitUntilAsync(() => search.Results.Count == 1, TimeSpan.FromSeconds(10));
+        Assert.Equal(["London", "Paris"], provider.Queries);
         Assert.Equal(1, provider.Cancelled);
         Assert.Equal("Paris", Assert.Single(search.Results).DisplayName);
     }
@@ -2179,16 +2185,23 @@ public sealed partial class MainViewModelTests
         }
     }
 
-    private sealed class DelayedSearchProvider : ILocationSearchProvider
+    /// <summary>Answers at once, except for <paramref name="hold"/>, which it answers only by being cancelled.</summary>
+    private sealed class DelayedSearchProvider(string hold) : ILocationSearchProvider
     {
-        public int Started { get; private set; }
-        public int Cancelled { get; private set; }
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _queries = new();
+        private int _cancelled;
+        public int Started => _queries.Count;
+        public string[] Queries => [.. _queries];
+        public int Cancelled => Volatile.Read(ref _cancelled);
         public string Attribution => "Test";
         public async Task<IReadOnlyList<LocationSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
         {
-            Started++;
-            try { await Task.Delay(250, cancellationToken); }
-            catch (OperationCanceledException) { Cancelled++; throw; }
+            _queries.Enqueue(query);
+            if (query == hold)
+            {
+                try { await Task.Delay(Timeout.Infinite, cancellationToken); }
+                catch (OperationCanceledException) { Interlocked.Increment(ref _cancelled); throw; }
+            }
             return [new LocationSearchResult(query, query, new GeoCoordinate(1, 2), "Region", "Country", "UTC", Attribution)];
         }
     }

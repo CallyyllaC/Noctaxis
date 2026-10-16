@@ -27,16 +27,28 @@ public sealed class LicensingTests
     public void DeclarationExactlyMatchesFiveRegisteredSupporterFamiliesAndUsableStandardThemes()
     {
         var document = File.ReadAllText(Source("AWOO-SUPPORTER-SYSTEM.md"));
-        var declared = Regex.Matches(document, @"\*\*Supporter feature\*\*\s+Access to the `(supporter\.[a-z-]+)`")
-            .Select(match => match.Groups[1].Value).ToArray();
+        // The supporter features are the rows of the "Supporter themes" table: | **Name** | `identifier` | ... |,
+        // which the definition says are the only ones.
+        var table = Regex.Match(document, @"^## Supporter themes\r?$(?<body>.*?)^## ", RegexOptions.Multiline | RegexOptions.Singleline);
+        Assert.True(table.Success, "the definition has no Supporter themes section");
+        var rows = Regex.Matches(table.Groups["body"].Value, @"^\| \*\*(?<name>[^*|]+)\*\* \| `(?<id>[a-z.-]+)` \|", RegexOptions.Multiline)
+            .Select(match => (Name: match.Groups["name"].Value, Id: match.Groups["id"].Value)).ToArray();
+        Assert.Contains("the **only** supporter features currently defined", table.Groups["body"].Value);
+        var declared = rows.Select(row => row.Id).ToArray();
         var families = BuiltInPalettes.Definitions.Where(theme => theme.IsSupporter).ToArray();
         Assert.Equal(5, declared.Length);
         Assert.Equal(families.Select(theme => theme.Id), declared);
-        Assert.Equal(declared.Length, declared.Distinct().Count());
+        Assert.Equal(families.Select(theme => theme.DisplayName), rows.Select(row => row.Name));
+        Assert.All(declared, id => Assert.StartsWith("supporter.", id));
         Assert.Contains("supporter.pigeon", declared);
+        // The licence contract: the revision, the operative licence, one shared entitlement with no tier of its
+        // own for Pigeon, and the standard themes that stay available without it.
         Assert.Contains("**Definition revision:** 1", document);
-        Assert.Contains("same Official Supporter Licence", document);
-        Assert.Contains("no special tier", document);
+        Assert.Contains("[AWOO Licence v2.0](LICENSE)", document);
+        Assert.Contains("same official supporter entitlement", document);
+        Assert.Contains("private theme tier", document);
+        Assert.Contains("`builtin.noctaxis`", document);
+        Assert.Contains("`builtin.highcontrast`", document);
 
         var locked = new ThemeCatalogue();
         var unlocked = new ThemeCatalogue(isAvailable: _ => true);

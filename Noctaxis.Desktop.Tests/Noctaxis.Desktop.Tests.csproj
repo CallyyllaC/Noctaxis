@@ -11,4 +11,7 @@
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="Baselines\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

@@ -93,15 +93,7 @@ public sealed partial class MainViewModelTests
             {
                 using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(size);
                 bitmap.Render(stage);
-                var pixels = new byte[size.Width * size.Height * 4];
-                var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(pixels.Length);
-                try
-                {
-                    bitmap.CopyPixels(new PixelRect(size), buffer, pixels.Length, size.Width * 4);
-                    System.Runtime.InteropServices.Marshal.Copy(buffer, pixels, 0, pixels.Length);
-                }
-                finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
-                return pixels;
+                return RenderedPixels.Bgra(bitmap);
             }
             double Luminance(byte[] pixels, Rect area)
             {

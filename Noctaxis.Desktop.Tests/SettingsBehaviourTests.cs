@@ -232,8 +232,12 @@ public sealed partial class MainViewModelTests
         // An earlier wait argument is replaced by one naming this process.
         Assert.Equal(["--flag", ApplicationRestartService.WaitForExitArgument, "4242"], started.ArgumentList);
 
-        var dotnet = ApplicationRestartService.CreateStartInfo(@"C:\Program Files\dotnet\dotnet.exe", @"C:\Noctaxis\Noctaxis.Desktop.dll", [], 7);
-        Assert.Equal([@"C:\Noctaxis\Noctaxis.Desktop.dll", ApplicationRestartService.WaitForExitArgument, "7"], dotnet.ArgumentList);
+        // Paths as this operating system writes them: a Windows path is not one elsewhere ('\' is no separator).
+        var root = Path.GetPathRoot(Path.GetTempPath())!;
+        var host = Path.Combine(root, "dotnet", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+        var assembly = Path.Combine(root, "Noctaxis", "Noctaxis.Desktop.dll");
+        var dotnet = ApplicationRestartService.CreateStartInfo(host, assembly, [], 7);
+        Assert.Equal([assembly, ApplicationRestartService.WaitForExitArgument, "7"], dotnet.ArgumentList);
 
         var remaining = ApplicationRestartService.WithoutWaitArgument(["a", ApplicationRestartService.WaitForExitArgument, "99", "b"], out var waitFor);
         Assert.Equal(["a", "b"], remaining);

@@ -163,8 +163,17 @@ public sealed class VectorBasemapTests : IDisposable
         var renderer = new BasemapTileRenderer(1);
         using var regional = renderer.RenderBitmap(WaterAndRoadTile(), new BasemapTileRequest(9, 0, 0), NoctaxisDark);
         Assert.Equal(NoctaxisDark.Land, regional.GetPixel(200, 192));
-        Assert.True(Near(regional.GetPixel(200, 64), NoctaxisDark.RoadMajor, 60));
+        // At this zoom the motorway is 1.3 px wide and centred on a pixel boundary (y = 64), so no single pixel
+        // is fully covered and how coverage splits between rows 63 and 64 is down to the platform's Skia
+        // rasteriser. The road is drawn when its strongest pixel there is nearer the road colour than the land.
+        var strongest = Enumerable.Range(62, 5).Select(y => regional.GetPixel(200, y))
+            .MinBy(pixel => Distance(pixel, NoctaxisDark.RoadMajor));
+        Assert.True(Distance(strongest, NoctaxisDark.RoadMajor) < Distance(strongest, NoctaxisDark.Land),
+            $"no motorway pixel near y = 64: strongest {strongest}");
     }
+
+    private static int Distance(SKColor a, SKColor b) =>
+        Math.Abs(a.Red - b.Red) + Math.Abs(a.Green - b.Green) + Math.Abs(a.Blue - b.Blue);
 
     [Fact]
     public void OverzoomDrawsTheMatchingQuarterOfTheDeepestVectorTile()

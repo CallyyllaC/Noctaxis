@@ -1,0 +1,69 @@
+name: Best-effort platform tests
+
+# The Core and Desktop suites run natively on Linux x64 and macOS Apple silicon (platform-tests.yml), for the same
+# changes as CI. These platforms are offered on a best-effort basis (docs/releasing.md): their results are reported
+# here, each in its own job, and do not gate CI or a release. Known platform differences are listed in
+# docs/releasing.md. Nothing is packaged or published.
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!images/**'
+      - '!ROADMAP.md'
+      - '!awoo.project.json'
+      - '!.github/workflows/trigger-awoo-rebuild.yml'
+      # The documents LicensingTests reads are checked like code.
+      - docs/licensing.md
+      - docs/awoo.md
+      - docs/supporter-themes.md
+      - docs/supporter-licensing.md
+      - docs/branding.md
+      - docs/user-guide/README.md
+      - docs/user-guide/settings.md
+      - docs/user-guide/about.md
+  pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!images/**'
+      - '!ROADMAP.md'
+      - '!awoo.project.json'
+      - '!.github/workflows/trigger-awoo-rebuild.yml'
+      # The documents LicensingTests reads are checked like code.
+      - docs/licensing.md
+      - docs/awoo.md
+      - docs/supporter-themes.md
+      - docs/supporter-licensing.md
+      - docs/branding.md
+      - docs/user-guide/README.md
+      - docs/user-guide/settings.md
+      - docs/user-guide/about.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: best-effort-tests-${{ github.ref }}
+  # A newer push to a pull request replaces its run; runs for main and dev always finish, so the badge shows a
+  # result rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    name: Tests
+    strategy:
+      # Every platform reports its own result; one failing does not cancel the other.
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest, rid: linux-x64 }
+          - { runner: macos-latest, rid: osx-arm64 }
+    uses: ./.github/workflows/platform-tests.yml
+    with:
+      runner: ${{ matrix.runner }}
+      rid: ${{ matrix.rid }}
