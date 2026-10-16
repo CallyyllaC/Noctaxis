@@ -9,7 +9,7 @@ Legend:
 “Done” here means done enough for that roadmap item, not “never touch this code again because computers famously respect such declarations.”
 
 
-## v1 Alpha, current development release
+## Alpha, current development release
 
 ### ✅ Core manual Planner
 Map/pin, planning date/time, current-time startup behaviour, targets, camera bearing/pitch, framing and FoV.
@@ -92,13 +92,13 @@ Cancellation/lifecycle architecture is strong, but hours-long native use, repeat
 ### ✅ Light-pollution map layer
 David Lorenz data integrated into the Planner.
 
-### 🟡 Overall “is this shot viable?” presentation
-Terrain, Moon, darkness, weather, target visibility and timing exist, but a clearer combined photographer-facing answer is still a future improvement.
+### ✅ Overall “is this shot viable?” presentation
+Combined photographer-facing viability presentation drawing on terrain, Moon, darkness, weather, target visibility and timing.
 
 ### ✅ Maps/location external links
 Open in Maps is implemented. Street View integration was intentionally removed from scope.
 
-### ⬜ Investigate whether the planning pin itself should become a map-rendered layer rather than a separate interaction/rendering element
+### ✅ Investigate whether the planning pin itself should become a map-rendered layer rather than a separate interaction/rendering element
 
 ### ✅ OpenFreeMap themed vector basemap
 Noctaxis-owned styling integrated with application themes.
@@ -109,14 +109,14 @@ Noctaxis-owned styling integrated with application themes.
 Terrarium-backed terrain/topographic presentation is implemented and integrated with the Planner.
 
 
-### ⬜ Add macOS support
-Add and validate macOS as a supported Noctaxis desktop platform.
+### ✅ Add macOS support
+macOS Intel and Apple Silicon courtesy builds added, with automated verification where available. Windows remains the officially developed and manually tested platform.
 
-### ⬜ Investigate Windows/macOS code signing and notarisation
-Investigate the release requirements, tooling and practical distribution path for Windows code signing and macOS code signing/notarisation.
+### ✅ Investigate Windows/macOS code signing and notarisation
+Investigated signing, notarisation and practical distribution requirements. macOS uses ad-hoc signing; paid certificates and developer subscriptions are not part of the current release plan.
 
-### ⬜ Create a Wiki
-Create and publish the Noctaxis Wiki using the agreed documentation structure and polished user-facing content.
+### ✅ Create a Wiki
+Public wiki documentation, navigation and screenshots are complete and reviewed, covering Home, About, Getting Started, Locations, Planner and Settings. Ready for publication.
 
 
 ## v1.0, first proper public release
@@ -134,11 +134,29 @@ Use Noctaxis for several real photography plans and fix workflow annoyances rath
 ### 🟡 Windows release packaging
 Release builds are mature; installer/distribution/update packaging still needs final release treatment.
 
-### 🟡 Linux release validation
-Architecture is cross-platform, but native Linux rendering, interaction, browser launch, settings and licence behaviour need smoke testing.
+### ⬜ Theme dropdown presentation polish
+Separate the visible theme availability label from tooltip details: standard themes show no redundant status beside their names, while tooltips identify them as Standard. Supporter and locked-theme labels remain informative. Keep this independent of the tooltip crash/full-row selection fixes.
 
-### ⬜ macOS release support/validation
-Complete platform-specific build, packaging and native interaction validation.
+### ⬜ Settings page layout and space utilisation
+Review every Settings page for sensible use of available horizontal and vertical space across typical and constrained window sizes and text scales. Eliminate excessive empty space, awkward stretching and unnecessary scrolling without sacrificing readability, accessibility or responsive behaviour.
+
+### ⬜ Investigate equipment profile validation and save isolation
+Review collection-wide validation: one incomplete or invalid camera/lens profile currently blocks unrelated valid equipment edits from saving, and can cancel pending debounced saves. Confirm safe persistence of existing profiles and determine whether drafts can be isolated per profile. Investigate the apparent autosave gap where Manufacturer or Model edits alone do not trigger saving. Cover partial/invalid drafts, pending edits on close, last-profile removal, and manufacturer/model-only changes with targeted regression tests.
+
+### ⬜ Curvature-aware Planner view cone from camera pitch
+Use the camera's visual pitch, vertical field of view and observer height to project the Planner view cone against Earth's curvature and the local terrain. Dynamically limit the map footprint at the physical ground intersection or visible horizon, instead of extending indefinitely or ending at an arbitrary fixed distance. Handle skyward rays with no ground intersection explicitly, and keep the result consistent with the Camera frame's terrain-horizon calculations.
+
+### ⬜ Show celestial objects in the Planner camera frame
+Render relevant celestial objects in the camera-direction frame at their projected positions for the selected location, time and camera framing, so their placement can be checked against the field of view and terrain horizon.
+
+### ⬜ Camera ISO and lens aperture data
+Add camera ISO and lens aperture (f-number) data to the appropriate equipment and capture settings, and expose them wherever useful for planning and exported capture information.
+
+### ⬜ Show saved timezone on Saved Location Cards
+Display each saved location's stored timezone on its card, using a clear, readable timezone label so users can see the timezone context of their bookmarked places.
+
+### 🟡 Version-aware portable plan import/export
+Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
 
 ### ⬜ Final first-run/release polish
 Version metadata, release-facing wording, documentation, clean-machine testing and release presentation.
@@ -157,13 +175,16 @@ Startup, long-session allocations, binding churn, fetch churn and trace-based re
 
 ## v1.0 export / portable plans
 
-### 🟡 Canonical planning-sheet export
+### ✅ Canonical planning-sheet export
 One detached renderer shared by Save PNG and Copy image rather than capturing the desktop UI.
 
-### 🟡 Single-target field export
+### ✅ Single-target field export
 Export is centred on the focused target rather than dumping every visible target into one chart.
 
-### 🟡 Direction-over-time export Timeline
+### ⬜ Multiple-target field export
+Extend the field export to include several deliberately selected targets in a single plan, while keeping the completed focused-target export available.
+
+### ✅ Direction-over-time export Timeline
 Focused target bearing/azimuth and pitch/altitude across the planning window, with darkness, terrain/horizon and useful event context.
 
 ### ✅ Clean export map
@@ -175,7 +196,7 @@ Compact sampled weather across the exported planning window.
 ### ✅ Equipment/capture header
 Camera, lens, focal length and FoV shown as human-readable planning context.
 
-### 🟡 Importable Noctaxis plan images
+### ✅ Importable Noctaxis plan images
 Exported PNG embeds a minimal versioned `Noctaxis.Plan` payload.
 
 Stored state:
@@ -188,15 +209,18 @@ Stored state:
 
 Derived/stale information is deliberately not embedded.
 
-### 🟡 Image-plan import
+### ✅ Image-plan import
 - Open image…
 - Load from clipboard
 - drag-and-drop exported PNG
 - transactional validation before changing Planner state
 - terrain, weather and astronomy recalculated fresh after import
 
-### 🟡 Final export visual polish
+### ✅ Final export visual polish
 Proportions, Timeline height, weather spacing, friendly timezone labels and final native visual review.
+
+### ⬜ Detailed print/PDF planning-sheet export
+Create a printer-friendly, substantially more detailed field plan with a clean layout suitable for physical printing or saving as PDF. Include the relevant location, time, target, terrain, weather, equipment and capture context without relying on the compact image-export layout.
 
 
 ## v2, automatic scouting / intelligent planning
@@ -250,8 +274,8 @@ Potential later extension:
 
 This should integrate naturally with the export header so a field plan can eventually include the suggested capture settings.
 
-### 🟡 Expand map layers into PiP
-The PiP now shares much of the Planner map composition; review whether any remaining useful layers should also be available there.
+### ✅ Expand map layers into PiP
+PiP shares the Planner map composition and supports its relevant map layers.
 
 ### ⬜ Improve topographic map rendering
 Refine the existing terrain/topographic presentation further, potentially including:
