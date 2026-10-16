@@ -10,7 +10,7 @@
 
 Noctaxis is my desktop planning application for photography and astrophotography. It brings locations, celestial targets, camera framing, terrain, light pollution, weather and time into one workspace. It gives you the information to plan a shot without deciding the composition for you.
 
-![Noctaxis Planner showing the map, camera framing, Inspector and Timeline](images/wiki/planner-overview.png)
+![Noctaxis Planner showing the map, camera framing, Inspector and Timeline](images/awoo-card.webp)
 
 ## Getting Noctaxis
 
