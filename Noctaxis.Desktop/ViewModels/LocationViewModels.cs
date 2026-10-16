@@ -7,7 +7,6 @@ using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
 using Noctaxis.Core.Locations;
 using Noctaxis.Desktop.Services;
-using Avalonia.Media.Imaging;
 
 namespace Noctaxis.Desktop.ViewModels;
 
@@ -101,7 +100,11 @@ public partial class LocationSearchViewModel(ILocationSearchProvider provider, I
         }
         catch (OperationCanceledException) { logger.LogDebug("Obsolete location search cancelled"); }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
-        { ErrorMessage = ex.Message; logger.LogWarning(ex, "Location search failed"); }
+        {
+            // Only the provider's own, localised explanation is shown; anything else is logged (NX-04).
+            ErrorMessage = ex is LocationSearchUnavailableException ? ex.Message : Strings.Get("Places_Search_Unavailable");
+            logger.LogWarning(ex, "Location search failed");
+        }
         catch (Exception) when (cancellationToken.IsCancellationRequested) { }
         finally { if (!cancellationToken.IsCancellationRequested) IsSearching = false; }
     }
@@ -185,7 +188,6 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
     public bool HasLastUsed => LastUsedText is not null;
     [ObservableProperty] private bool _isFavourite;
     [ObservableProperty] private bool _isSelected;
-    [ObservableProperty] private Bitmap? _mapThumbnail;
     /// <summary>Theme-independent preview content; the card renders it with the current theme.</summary>
     [ObservableProperty] private Mapping.Preview.LocationPreviewScene? _previewScene;
     [ObservableProperty] private bool _isMapThumbnailLoading;
@@ -323,25 +325,8 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
                 cancellationToken.ThrowIfCancellationRequested();
                 PreviewScene = scene;
             }
-            if (result.Metadata.LegacyArtworkSkipped)
-            {
-                // No legacy artwork for this frame; an earlier bitmap no longer matches the saved data.
-                var stale = MapThumbnail;
-                MapThumbnail = null;
-                stale?.Dispose();
-            }
-            else try
-            {
-                var bitmap = new Bitmap(result.ImagePath);
-                var previous = MapThumbnail;
-                MapThumbnail = bitmap;
-                previous?.Dispose();
-            }
-            catch (Exception) when (!cancellationToken.IsCancellationRequested)
-            {
-                // The generated disk asset remains valid even when this UI process cannot decode it yet.
-                // Preserve the currently displayed bitmap; a later page load can retry the disk asset.
-            }
+            // The card shows the preview scene only. The retired legacy artwork (thumbnail.png) is neither shown nor
+            // decoded any more.
             return result.RefreshSucceeded;
         }
         catch (OperationCanceledException) { return false; }
@@ -359,9 +344,6 @@ public partial class LocationCardViewModel : ObservableObject, ILocationGridItem
         _thumbnailCancellation?.Cancel();
         _thumbnailCancellation?.Dispose();
         _thumbnailCancellation = null;
-        var bitmap = MapThumbnail;
-        MapThumbnail = null;
-        bitmap?.Dispose();
         IsMapThumbnailLoading = false;
     }
 
@@ -383,8 +365,6 @@ public sealed record LocationSortOption(LocationSortMode Mode, string Label);
 
 public partial class LocationsViewModel : ObservableObject
 {
-    private readonly ILocationResolver _resolver;
-    private readonly IDeviceLocationAvailabilityService _deviceAvailability;
     private readonly Func<LocationResolution, Task> _openCustom;
     private readonly Func<LocationSearchResult, bool, Task> _useSearchResult;
     private readonly Func<string?, Task<LocationSearchResult?>> _showSearch;
@@ -394,17 +374,15 @@ public partial class LocationsViewModel : ObservableObject
     private readonly Func<LocationCardViewModel, Task> _toggleFavourite;
     private readonly ILocationMapThumbnailService _mapThumbnails;
     private readonly Func<DateTimeOffset> _now;
-    private GeoCoordinate? _lastCustomCoordinate;
     private readonly AddLocationCardViewModel _addLocationCard;
 
-    public LocationsViewModel(ILocationResolver resolver, IDeviceLocationAvailabilityService deviceAvailability,
-        Func<LocationResolution, Task> openCustom, Func<LocationSearchResult, bool, Task> useSearchResult,
+    public LocationsViewModel(Func<LocationResolution, Task> openCustom, Func<LocationSearchResult, bool, Task> useSearchResult,
         Func<string?, Task<LocationSearchResult?>> showSearch,
         Func<LocationCardViewModel, Task> openSaved, Func<LocationCardViewModel, Task> edit,
         Func<LocationCardViewModel, Task> delete, Func<LocationCardViewModel, Task> toggleFavourite,
         Func<Task> addLocation, ILocationMapThumbnailService mapThumbnails, Func<DateTimeOffset> now)
     {
-        _resolver = resolver; _deviceAvailability = deviceAvailability; _openCustom = openCustom;
+        _openCustom = openCustom;
         _useSearchResult = useSearchResult; _showSearch = showSearch;
         _openSaved = openSaved; _edit = edit; _delete = delete; _toggleFavourite = toggleFavourite;
         _mapThumbnails = mapThumbnails; _now = now;
@@ -472,14 +450,11 @@ public partial class LocationsViewModel : ObservableObject
     }
     [ObservableProperty] private LocationSortOption _selectedSortOption;
     [ObservableProperty] private string? _resolutionMessage;
-    [ObservableProperty] private bool _canUseDeviceLocation;
-    [ObservableProperty] private string? _deviceLocationUnavailableReason;
     [ObservableProperty] private string? _thumbnailAttributionSummary;
     public bool HasThumbnailAttributions => !string.IsNullOrWhiteSpace(ThumbnailAttributionSummary);
 
-    public void Load(IEnumerable<SavedLocation> locations, GeoCoordinate? lastCustomCoordinate, Guid? selectedLocationId = null)
+    public void Load(IEnumerable<SavedLocation> locations, Guid? selectedLocationId = null)
     {
-        _lastCustomCoordinate = lastCustomCoordinate;
         var previous = Saved.ToDictionary(card => card.Id);
         var incoming = locations.ToArray();
         Saved.Clear();
@@ -503,28 +478,6 @@ public partial class LocationsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSavedLocations)); OnPropertyChanged(nameof(IsFirstRun)); OnPropertyChanged(nameof(SavedSummary));
     }
 
-    public async Task RefreshDeviceAvailabilityAsync(CancellationToken cancellationToken)
-    {
-        var availability = await _deviceAvailability.GetAvailabilityAsync(cancellationToken);
-        CanUseDeviceLocation = availability.CanRequest;
-        DeviceLocationUnavailableReason = availability.CanRequest ? null : availability.Reason ?? Strings.Get("Locations_Device_Unavailable");
-        UseDeviceLocationCommand.NotifyCanExecuteChanged();
-    }
-
-    [RelayCommand(CanExecute = nameof(CanUseDeviceLocation))]
-    private async Task UseDeviceLocation()
-    {
-        var result = await _resolver.ResolveDeviceOrFallbackAsync(_lastCustomCoordinate, CancellationToken.None);
-        if (result.Source != LocationResolutionSource.OperatingSystemLocation)
-        {
-            ResolutionMessage = Strings.Get("Locations_Device_NotResolved");
-            return;
-        }
-        _lastCustomCoordinate = result.Coordinate;
-        ResolutionMessage = Strings.Get("Locations_Device_Selected");
-        await _openCustom(result);
-    }
-
     [RelayCommand]
     private Task SearchForPlace() => SearchForPlaceAsync(null);
 
@@ -536,7 +489,6 @@ public partial class LocationsViewModel : ObservableObject
     {
         var result = await _showSearch(initialQuery);
         if (result is null) return;
-        _lastCustomCoordinate = result.Coordinate;
         await _useSearchResult(result, false);
     }
 

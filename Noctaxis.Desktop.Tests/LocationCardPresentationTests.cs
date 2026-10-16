@@ -148,11 +148,15 @@ public sealed partial class MainViewModelTests
             Assert.Equal(C("Accent"), Brush(add.BorderBrush));
             window.MouseMove(new Point(2, 2)); Dispatcher.UIThread.RunJobs();
 
-            // Enlarged text takes the full card width over a fully opaque scrim.
+            // Enlarged text takes a larger share of the card over a solid backing, but never the whole
+            // card: the scrim still fades away, so the artwork is squeezed rather than painted over.
             await vm.ApplyAppearanceAsync(new(id, TextScale: 1.5, AppearanceMode: appearance)); Dispatcher.UIThread.RunJobs();
-            Assert.True(card.GetVisualDescendants().OfType<LocationCardTextGrid>().Single().FullWidth);
-            foreach (var key in new[] { "CardOpaque", "CardScrim", "CardFade", "CardTransparent" })
-                Assert.True(Application.Current.TryFindResource(key, out var stop) && ((Color)stop!).A == 255, key);
+            var textGrid = card.GetVisualDescendants().OfType<LocationCardTextGrid>().Single();
+            Assert.InRange(textGrid.TextShare, .5, .67);
+            Assert.True(textGrid.ColumnDefinitions[1].Width.Value > 0);
+            Assert.True(Application.Current.TryFindResource("CardOpaque", out var opaque) && ((Color)opaque!).A == 255);
+            Assert.True(Application.Current.TryFindResource("CardTransparent", out var clear) && ((Color)clear!).A == 0);
+            Assert.True(Application.Current.TryFindResource("CardStopClear", out var ends) && (double)ends! <= .9);
         }
         finally
         {

@@ -33,9 +33,7 @@ public sealed class TerrainAvailabilityTests
         var observer = new GeoCoordinate(Input("NOCTAXIS_AVAILABILITY_LATITUDE"),
             Input("NOCTAXIS_AVAILABILITY_LONGITUDE"));
         var profile = await horizons.GetProfileAsync(observer, new(), default);
-        var map = await new TerrainDebugMapService(resolver).GetMapAsync(observer, new(), default);
         Assert.True(profile.HasTerrainCoverage);
-        Assert.Contains(map.SurfaceElevationsMetres, v => v.HasValue);
         var clearBearing = Enumerable.Range(0, 360).First(b =>
             profile.Samples[b].TerrainHorizonElevationDegrees is <= 0 &&
             profile.Samples[(b + 1) % 360].TerrainHorizonElevationDegrees is <= 0) + .5;
@@ -60,7 +58,7 @@ public sealed class TerrainAvailabilityTests
             profile.IsComplete, profile.CompletedBearingCount,
             validHorizons = profile.Samples.Count(s => s.TerrainHorizonElevationDegrees.HasValue),
             positiveHorizons = profile.Samples.Count(s => s.TerrainHorizonElevationDegrees > 0),
-            mapValid = map.SurfaceElevationsMetres.Count(v => v.HasValue), clearBearing, horizontalFov = .5,
+            clearBearing, horizontalFov = .5,
             planRebuilds = coordinator.Diagnostics.OverlayStateRebuilds, rows }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
@@ -91,16 +89,12 @@ public sealed partial class MainViewModelTests
     public async Task FullProfileAvailabilityIsIndependentOfPositivePlanMask(double angle)
     {
         var catalogue = new OpenNgcTargetCatalogue();
-        var maps = new ControllableTerrainDebugMapService();
         var vm = CreateViewModel(new FakePlanning(catalogue), catalogue,
             new FakeStore(new PersistedState(4, new AppSettings(), [],
                 PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
-            new FakeExporter(), terrainDebugMaps: maps);
+            new FakeExporter());
         await vm.InitializeAsync();
         vm.ShowPlannerCommand.Execute(null);
-        Assert.True(await maps.Started.WaitAsync(TimeSpan.FromSeconds(3)));
-        maps.Complete(0);
-        await vm.WaitForTerrainDebugMapRefreshAsync();
         await vm.WaitForPlannerRefreshAsync();
         var profile = vm.Snapshot!.Terrain with { HasDemCoverage = true, HorizonState = EnvironmentalDataState.Available,
             Samples = Enumerable.Range(0, 360).Select(b => new TerrainHorizonSample(b, angle, 1000,
@@ -111,8 +105,6 @@ public sealed partial class MainViewModelTests
         foreach (var pitch in new[] { -20d, 0, 20 })
         {
             vm.CameraPitchDegrees = pitch;
-            Assert.Equal(TerrainDebugMapLoadState.Ready, vm.TerrainDebugMapLoadState);
-            Assert.NotNull(vm.TerrainDebugMap);
             Assert.Equal(string.Empty, vm.TerrainFrameStatus);
             var depth = Assert.IsType<CameraTerrainDepth>(vm.TerrainFrameDepth);
             pixels.Add(depth.DistancesMetres.Count(d => d > 0));
@@ -128,12 +120,10 @@ public sealed partial class MainViewModelTests
         }
         Assert.True(pixels[0] > pixels[1] && pixels[1] > pixels[2]);
         Assert.InRange(coordinator.Diagnostics.OverlayStateRebuilds, 2, 3);
-        // A genuine absent profile remains unavailable even if the independently acquired
-        // minimap is populated. Raster availability cannot manufacture a radial profile.
+        // A genuine absent profile remains unavailable.
         vm.Snapshot = vm.Snapshot with { Terrain = profile with { HasDemCoverage = false,
             Samples = [], HorizonState = EnvironmentalDataState.Error } };
         Assert.Null(vm.TerrainFrameDepth);
         Assert.Equal("Terrain unavailable", vm.TerrainFrameStatus);
-        Assert.Equal(TerrainDebugMapLoadState.Ready, vm.TerrainDebugMapLoadState);
     }
 }

@@ -27,6 +27,7 @@ public sealed partial class MainViewModelTests
         {
             var pages = (TabControl)((Grid)window.Content!).Children[1]; pages.SelectedIndex = 2;
             Dispatcher.UIThread.RunJobs();
+            window.SelectSettingsCategory("Appearance");
             var picker = Assert.Single(window.GetVisualDescendants().OfType<ComboBox>(), picker => Avalonia.Automation.AutomationProperties.GetName(picker) == "Theme");
             void Capture(string name)
             {
@@ -54,7 +55,7 @@ public sealed partial class MainViewModelTests
             Assert.All(picker.Items.Cast<Noctaxis.Desktop.ViewModels.AppearanceOption>().Where(o => o.IsSupporter), o => Assert.True(o.IsAvailable));
             Assert.Equal("supporter.moonlit", themes.EffectiveTheme.Definition.Id);
             Capture("02-activated");
-            foreach (var id in new[] { "supporter.noctaxis-neon", "supporter.foxfire", "supporter.deep-space", "supporter.moonlit" })
+            foreach (var id in new[] { "supporter.noctaxis-neon", "supporter.foxfire", "supporter.deep-space", "supporter.pigeon", "supporter.moonlit" })
             {
                 picker.SelectedItem = picker.Items.Cast<Noctaxis.Desktop.ViewModels.AppearanceOption>().Single(o => o.Id == id);
                 Dispatcher.UIThread.RunJobs(); Assert.Equal(id, themes.EffectiveTheme.Definition.Id);

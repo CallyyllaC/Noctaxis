@@ -142,8 +142,8 @@ public sealed class LocationPreviewRendererTests
     {
         var scene = Scene();
         var renditions = LocationPreviewExport.RenderMatrix(scene, Catalogue, 256, 144).ToArray();
-        Assert.Equal(48, renditions.Length);
-        Assert.Equal(48, renditions.Select(r => r.FileName).Distinct().Count());
+        Assert.Equal(56, renditions.Length);
+        Assert.Equal(56, renditions.Select(r => r.FileName).Distinct().Count());
         string Hash(LocationPreviewRendition r) => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(r.Png));
         // Families and Light/Dark always differ.
         var normal = renditions.Where(r => r.ColourVision == ColourVisionMode.None).ToArray();
@@ -205,7 +205,7 @@ public sealed class LocationPreviewRendererTests
         try
         {
             var paths = LocationPreviewExport.WriteMatrix(Scene(), Catalogue, directory, 128, 72);
-            Assert.Equal(48, paths.Count);
+            Assert.Equal(56, paths.Count);
             Assert.All(paths, path => Assert.True(new FileInfo(path).Length > 0));
             Assert.Contains(paths, p => Path.GetFileName(p) == "noctaxis-dark-none.png");
             Assert.Contains(paths, p => Path.GetFileName(p) == "highcontrast-light-tritanopia.png");

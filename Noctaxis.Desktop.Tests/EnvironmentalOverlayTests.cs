@@ -459,14 +459,16 @@ public sealed partial class EnvironmentalOverlayTests
             if (hatchPixels >= 4) coveredBearings.Add(bearing);
         }
 
-        Assert.Contains((int)guide.CentreBearingDegrees, coveredBearings);
+        // The two field-of-view edges, centred on the camera's bearing, and no line down the centre.
+        Assert.Equal(guide.CentreBearingDegrees, (coveredBearings.Min() + coveredBearings.Max()) / 2.0, 0);
+        Assert.DoesNotContain(coveredBearings, bearing => Math.Abs(bearing - guide.CentreBearingDegrees) <= 3);
         Assert.InRange(coveredBearings.Min(), 68, 72);
         Assert.InRange(coveredBearings.Max(), 138, 142);
         window.Close();
     }
 
     [AvaloniaFact]
-    public void TerrainDebugMapVisualMarksProductionWinningSample()
+    public void TerrainDebugOverlayMarksProductionWinningSample()
     {
         const int width = 800;
         const int height = 600;
@@ -567,79 +569,6 @@ public sealed partial class EnvironmentalOverlayTests
         Assert.Equal(8_000, observedWeather[^1]);
     }
 
-    [AvaloniaFact]
-    public void PermanentMinimap_RendersStatesAndRedrawsBearingWithoutReplacingRaster()
-    {
-        var map = DebugMap(new GeoCoordinate(53, -1));
-        var control = new LocalTerrainMap { Width = 208, Height = 208, Observer = map.Observer,
-            Map = map, LoadState = TerrainDebugMapLoadState.Ready };
-        control.Measure(new Size(208, 208));
-        control.Arrange(new Rect(0, 0, 208, 208));
-        byte[] Render()
-        {
-            using var bitmap = new RenderTargetBitmap(new PixelSize(208, 208), new Vector(96, 96));
-            bitmap.Render(control);
-            using var stream = new MemoryStream();
-            bitmap.Save(stream, new PngBitmapEncoderOptions());
-            return stream.ToArray();
-        }
-        var north = Render();
-        control.CentreBearingDegrees = 90;
-        var east = Render();
-        Assert.Same(map, control.Map);
-        Assert.False(north.SequenceEqual(east));
-        var images = new List<byte[]> { east };
-        foreach (var state in new[] { TerrainDebugMapLoadState.Resolving,
-                     TerrainDebugMapLoadState.Disabled, TerrainDebugMapLoadState.Unavailable })
-        {
-            control.LoadState = state;
-            var rendered = Render();
-            Assert.All(images, prior => Assert.False(prior.SequenceEqual(rendered)));
-            images.Add(rendered);
-        }
-        // Optional local visual review; ordinary tests create no image artifacts.
-        if (System.Environment.GetEnvironmentVariable("NOCTAXIS_MINIMAP_CAPTURE") is { Length: > 0 } directory)
-        {
-            Directory.CreateDirectory(directory);
-            for (var index = 0; index < images.Count; index++)
-                File.WriteAllBytes(Path.Combine(directory, $"minimap-{index}.png"), images[index]);
-        }
-    }
-
-    [AvaloniaFact]
-    public void LocalTerrainMapUsesNorthUpBearingAndReactiveMapIdentity()
-    {
-        var centre = new Point(100, 100);
-        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 0).Y < centre.Y);
-        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 90).X > centre.X);
-        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 180).Y > centre.Y);
-        Assert.True(LocalTerrainMap.BearingPoint(centre, 80, 270).X < centre.X);
-
-        var first = DebugMap(new GeoCoordinate(51, -1));
-        var second = DebugMap(new GeoCoordinate(53, 1));
-        var observed = new List<TerrainDebugMapSnapshot?>();
-        var control = new LocalTerrainMap();
-        using var subscription = control.GetObservable(LocalTerrainMap.MapProperty)
-            .Subscribe(new ValueObserver<TerrainDebugMapSnapshot?>(observed));
-        control.Map = first;
-        control.Map = null;
-        control.Observer = second.Observer;
-        control.Generation = 2;
-        control.CentreBearingDegrees = 90;
-        control.HorizontalFieldOfViewDegrees = 40;
-        control.Map = second;
-
-        var left = LocalTerrainMap.BearingPoint(centre, 80,
-            control.CentreBearingDegrees - control.HorizontalFieldOfViewDegrees / 2);
-        var right = LocalTerrainMap.BearingPoint(centre, 80,
-            control.CentreBearingDegrees + control.HorizontalFieldOfViewDegrees / 2);
-        Assert.True(left.X > centre.X && left.Y < centre.Y);
-        Assert.True(right.X > centre.X && right.Y > centre.Y);
-        Assert.Contains(null, observed);
-        Assert.Same(second, observed[^1]);
-        Assert.Equal(second.Observer, control.Observer);
-    }
-
     [Fact]
     public void NegativeCoastalHorizonDoesNotCreateMapHatchingForVisibleTarget()
     {
@@ -667,12 +596,6 @@ public sealed partial class EnvironmentalOverlayTests
         public void OnError(Exception error) => throw error;
         public void OnNext(T value) => values.Add(value);
     }
-
-    private static TerrainDebugMapSnapshot DebugMap(GeoCoordinate observer) => new(observer,
-        20_000, 1, 1, [observer], [10], [10], [Noctaxis.Core.Environment.LandCoverClass.Grassland],
-        [false], [TerrainSampleStatus.Valid], ["12/1/1"],
-        Noctaxis.Core.Environment.EnvironmentalDataState.Available,
-        Instant.FromUtc(2026, 1, 1, 0, 0), "Synthetic");
 
     private static PlanningSnapshot Snapshot(GeoCoordinate observer)
     {

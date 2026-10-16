@@ -73,6 +73,31 @@ public sealed class LightPollutionMapTests
         Assert.Null(await raster.GetTileAsync(info));
     }
 
+    /// <summary>
+    /// The Picture-in-Picture map reads the atlas through the main map's reader, so the decoded atlas is
+    /// read and held once. Releasing the Picture-in-Picture map leaves that reader to the main map, which
+    /// releases it.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task APictureInPictureMapBorrowsTheMainMapsAtlasReader()
+    {
+        await using var paths = new AtlasTestData();
+        using var http = Offline(); var store = new LorenzInstallation(paths, http);
+        var main = new PlannerMapView();
+        main.ConfigureLightPollution(store);
+        var pip = main.CreatePictureInPicture();
+        pip.ShareEnvironmentalSources(main);
+        var reader = main.LightPollutionForTesting!.Provider;
+        Assert.Same(reader, pip.LightPollutionForTesting!.Provider);
+        Assert.NotSame(main.CompositionForTesting.NativeLayerOrder.Single(x => x.Id == LightPollutionMapBinding.LayerId).Layer,
+            pip.CompositionForTesting.NativeLayerOrder.Single(x => x.Id == LightPollutionMapBinding.LayerId).Layer);
+
+        await pip.ReleaseLightPollutionAsync();
+        using (await reader.OpenAsync()) { }
+        await main.ReleaseLightPollutionAsync();
+        await Assert.ThrowsAsync<ObjectDisposedException>(async () => await reader.OpenAsync());
+    }
+
     [AvaloniaFact]
     public async Task RegisteredLayerTransitionsInPlaceAndPreferencesAndAttributionFollowRuntime()
     {
@@ -100,11 +125,11 @@ public sealed class LightPollutionMapTests
             Assert.False(layer.Enabled); // Explicit visibility remains off until requested.
             view.LightPollutionPreferences = new(true, .35);
             Assert.True(layer.Enabled); Assert.Equal(.35, layer.Opacity);
-            Assert.Contains(LorenzAtlas.Name, view.AttributionForTesting!);
+            Assert.Contains(MapAttributions.LightPollutionAtlas.Label, view.AttributionForTesting!);
             var preferences = MapLayerPreferences.Capture(map.Runtime);
             var stored = JsonSerializer.Deserialize<MapLayerPreference[]>(JsonSerializer.Serialize(preferences))!;
             map.Runtime.SetVisibility("light-pollution", false);
-            Assert.DoesNotContain(LorenzAtlas.Name, view.AttributionForTesting!);
+            Assert.DoesNotContain(MapAttributions.LightPollutionAtlas.Label, view.AttributionForTesting!);
             MapLayerPreferences.Restore(map.Runtime, stored); Assert.True(layer.Enabled);
             for (var i = 0; i < 3; i++)
             {
@@ -115,7 +140,7 @@ public sealed class LightPollutionMapTests
             }
             await store.RemoveAsync(); Dispatcher.UIThread.RunJobs();
             Assert.False(layer.Enabled); Assert.Same(composition, map.Composition);
-            Assert.DoesNotContain(LorenzAtlas.Name, view.AttributionForTesting!);
+            Assert.DoesNotContain(MapAttributions.LightPollutionAtlas.Label, view.AttributionForTesting!);
         }
         finally { window.Close(); await view.ReleaseLightPollutionAsync(); }
     }

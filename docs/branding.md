@@ -37,3 +37,13 @@ The `.ico` is 16, 20, 24, 32, 40, 48, 64 and 256 px, one PNG frame each. After c
 `NoctaxisIcon.WriteAssets("<repo>/Noctaxis.Desktop/Assets")` from any small program that references
 `Noctaxis.Desktop`. `BrandingTests.CommittedAssetsAreGeneratedFromTheCanonicalLogo` fails until the
 committed assets match the definition.
+
+## Licence and reuse
+
+The branding geometry and generated assets above identify Noctaxis. Section 12
+of [Awoo Licence v2.0](../LICENSE) governs names, logos and source identity;
+accurate attribution/reference use is permitted, while other reuse needs
+applicable permission. Distributed forks must identify themselves as modified
+and unofficial under section 11. See the [current licence audit](licensing-final-audit.md#manual-review)
+for the scope question concerning unchanged bundled logos. No separate
+`AWOO-ASSETS-DEFINITION.md` is currently supplied for Noctaxis.

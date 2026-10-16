@@ -106,7 +106,7 @@ public sealed partial class MainViewModelTests
             Assert.Equal(Strings.Get("Shell_Window_Title"), window.Title);
             var categories = window.FindControl<TabControl>("SettingsCategories")!;
             Assert.Equal(Strings.Get("Settings_SettingsCategories_AccessibleName"), AutomationProperties.GetName(categories));
-            Assert.Equal(Strings.Get("Settings_Appearance_Tab"), categories.Items.OfType<TabItem>().First().Header);
+            Assert.Equal(Strings.Get("Settings_General_Tab"), categories.Items.OfType<TabItem>().First().Header);
             Assert.Equal("Appearance", Strings.Get("Settings_Appearance_Tab"));
             // C#: view-model text comes from the same place.
             Assert.Equal(Strings.Get("Supporter_Licence_Status_None"), vm.SupporterLicenceStateLabel);
@@ -232,6 +232,7 @@ public sealed partial class MainViewModelTests
         var map = window.FindControl<PlannerMapView>("PlannerMap")!;
         foreach (var (id, layer) in map.CompositionForTesting.NativeLayerOrder)
             if (id is "basemap" or Mapping.PlannerMapComposition.BasemapReferenceId) layer.Enabled = false; // Offline.
+        TestMaps.OfflinePip(window);
         window.Show();
         Dispatcher.UIThread.RunJobs();
         return (vm, window);

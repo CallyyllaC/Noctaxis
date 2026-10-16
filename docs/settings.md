@@ -8,10 +8,10 @@ Revert. The Settings page has no copy of the settings of its own. Every control 
 
 | Category | Settings | Actions |
 | --- | --- | --- |
-| Appearance | Theme, Mode (System/Dark/Light), Colour vision mode, Text size | — |
+| Appearance | Theme, Mode (System/Dark/Light), Colour vision mode, Text size (see `docs/accessibility.md`) | — |
 | General | Language, Measurement system, Planning time zone, Time slider snap interval, Open locations in (external map) | — |
 | Equipment | Camera height above ground, Cameras, Lenses | Add/remove camera or lens |
-| Planner map | Terrain calculations, Minimum terrain frame coverage, Terrain minimap context, Camera framing on map, Visibility limits, Overlay opacity, Terrain tint strength, Terrain obstruction colour, Boundary line thickness, Light pollution colour map | Use Cividis |
+| Planner map | Terrain calculations, Minimum terrain coverage, Picture-in-Picture map, Camera framing on map, Visibility limits, Overlay opacity, Terrain tint strength, Terrain obstruction colour, Boundary line thickness, Invert horizontal drag, Invert vertical drag, Light pollution colour map | Use Cividis |
 | Weather | Forecast reuse distance, Weather values (requested, shown and exported) | — |
 | Celestial objects | Configured objects: visibility, order and primary | Search/add/remove, Restore default objects |
 | Data | Maximum terrain cache size | Clear terrain cache, Install/remove the light-pollution atlas, Repair saved map images |
@@ -86,10 +86,13 @@ editing pauses (`SettingCommit.Deferred`, 700 ms); **Release** means applied whe
 | Cameras, lenses | `Equipment` | Migrated from the session lens | Pause, once all profiles are valid | Typing names would otherwise save every keystroke. Invalid drafts are shown with a message and never saved |
 | Terrain calculations | `EnableTerrainCalculations` | On | Now | A toggle; cancels and restarts terrain work once |
 | Minimum terrain coverage | `CameraFraming.MinimumTerrainFrameCoveragePercent` | 5% | Now | Recomputes cached framing only |
-| Terrain minimap context | `TerrainMinimapContext` | 2.5× | Now (live while dragging) | Changes only the minimap's drawn extent |
+| Picture-in-Picture map | `PlannerPip.IsEnabled` | On | Now | Off releases the map entirely; on creates it. The retired `TerrainMinimapContext` is ignored if present |
+| Picture-in-Picture roads & labels | `PlannerPip.ShowRoadsAndLabels` | Off | Now | The Picture-in-Picture map only; the main map always shows them |
+| Picture-in-Picture contrast | `PlannerPip.EnhanceContrast` | On | Now | The Picture-in-Picture map's terrain relief only, in a stronger tone; the main map is unchanged |
 | Framing overlay visible, visibility limits | `CameraFraming` | On, On | Now | Same setting as the Planner toggles |
 | Overlay opacity, line thickness | `CameraFraming` | 10%, 1.25 | Now | Drawing only |
 | Terrain tint strength | `CameraFraming.TerrainTintStrengthPercent` | 40% | Now (live while dragging) | Drawing only |
+| Invert horizontal drag, Invert vertical drag | `CameraFraming.InvertHorizontalDrag`, `CameraFraming.InvertVerticalDrag` | Off, off | Now | Camera frame drags only; nudges, keys, Follow and the saved bearing and pitch are unchanged |
 | Terrain obstruction colour | `CameraFraming.TerrainObstructionColour` | #9A6F9E | Now (live) | Drawing only |
 | Light-pollution colour map | `LightPollution.PaletteId` | grayscale | Now | Overlay re-render only |
 | Forecast reuse distance | `Weather.CacheDistanceKilometres` | 5 km | Pause | Refreshes the forecast over the network. Edited in kilometres (Metric) or miles (UK Mixed, Imperial); always stored in kilometres |
@@ -119,7 +122,7 @@ It is compared, not flagged, so changing a setting back to its active value clea
 is pending, the Settings page shows a notice with **Restart Noctaxis**. The icon and wording carry the
 meaning, not colour alone.
 
-`ApplicationRestartService` restarts on Windows and Linux alike:
+`ApplicationRestartService` restarts the same way on every platform (on macOS, inside `Noctaxis.app`, it has not yet been tried; see [releasing](releasing.md#known-limitations)):
 
 1. It saves settings; if that fails, it does not restart.
 2. It starts the same executable with the same arguments, through the `dotnet` host when launched that

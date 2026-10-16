@@ -86,4 +86,10 @@
   <data name="Supporter_Title" xml:space="preserve">
     <value>Supporter</value>
   </data>
+  <data name="Supporter_SupportNoctaxis_Heading" xml:space="preserve">
+    <value>Support Noctaxis</value>
+  </data>
+  <data name="Supporter_SupportNoctaxis_Description" xml:space="preserve">
+    <value>Noctaxis is made independently. If it is useful to you, you can support its development on Ko-fi.</value>
+  </data>
 </root>

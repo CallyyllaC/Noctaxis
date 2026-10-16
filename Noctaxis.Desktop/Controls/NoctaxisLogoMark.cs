@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Noctaxis.Desktop.Branding;
+using Noctaxis.Desktop.Themes;
 
 namespace Noctaxis.Desktop.Controls;
 
@@ -40,8 +41,8 @@ public sealed class NoctaxisLogoMark : Control
 
     public NoctaxisLogoMark()
     {
-        this.Bind(FrameBrushProperty, new DynamicResourceExtension(FrameResourceKey));
-        this.Bind(StarBrushProperty, new DynamicResourceExtension(StarResourceKey));
+        this.BindThemeDefault(FrameBrushProperty, FrameResourceKey);
+        this.BindThemeDefault(StarBrushProperty, StarResourceKey);
     }
 
     /// <summary>The weight drawn at the current size and display scaling.</summary>

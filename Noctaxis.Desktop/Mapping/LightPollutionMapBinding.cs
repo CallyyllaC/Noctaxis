@@ -9,16 +9,16 @@ public sealed class LightPollutionMapBinding : IAsyncDisposable
 {
     public const string LayerId = "light-pollution";
     public static MapLayerDefinition Definition { get; } = new(LayerId, MapLayerGroup.Environmental, -10,
-        new(LorenzAtlas.Name, LorenzAtlas.Name, LorenzAtlas.InformationUrl),
+        new(LorenzAtlas.Name, Credits: [MapAttributions.LightPollutionAtlas]),
         MapLayerCapabilities.Visibility | MapLayerCapabilities.Opacity,
         MapLayerCapabilities.Visibility | MapLayerCapabilities.Opacity);
     /// <summary>
     /// The Planner's composition with both environmental layers registered: terrain relief beneath
     /// light pollution. Each is unavailable until its data source is configured.
     /// </summary>
-    public static PlannerMapComposition CreateComposition()
+    public static PlannerMapComposition CreateComposition(IMapsuiBasemap? basemap = null)
     {
-        var map = new PlannerMapComposition(additionalLayers: [TerrainReliefMapBinding.Definition, Definition]);
+        var map = new PlannerMapComposition(basemap, [TerrainReliefMapBinding.Definition, Definition]);
         map.Runtime.SetAvailability(LayerId, MapLayerAvailability.Unavailable);
         map.Runtime.SetAvailability(TerrainReliefMapBinding.LayerId, MapLayerAvailability.Unavailable);
         ApplyPreferences(map, new());
@@ -34,16 +34,25 @@ public sealed class LightPollutionMapBinding : IAsyncDisposable
     private readonly PlannerMapComposition _map;
     private readonly LorenzInstallation _installation;
     private readonly LightPollutionDataProvider _provider;
+    private readonly bool _ownsProvider;
     private readonly LightPollutionRasterSource _source;
     private readonly TileLayer _layer;
     private bool _attached;
     private int _generation;
     private volatile bool _paletteRefreshPending;
     internal string PaletteId => _source.PaletteId;
-    public LightPollutionMapBinding(PlannerMapComposition map, LorenzInstallation installation)
+    internal LorenzInstallation Installation => _installation;
+    internal LightPollutionDataProvider Provider => _provider;
+    /// <param name="sharedProvider">
+    /// Another view's reader of the same installation, such as the main map's for the Picture-in-Picture
+    /// map: the decoded atlas is then read and held once. It stays its owner's, which releases it.
+    /// </param>
+    public LightPollutionMapBinding(PlannerMapComposition map, LorenzInstallation installation,
+        LightPollutionDataProvider? sharedProvider = null)
     {
         _map = map; _installation = installation;
-        _provider = new(installation);
+        _ownsProvider = sharedProvider is null;
+        _provider = sharedProvider ?? new(installation);
         _source = new(_provider, installation, new GrayscaleLightPollutionColorMap());
         _layer = new LightPollutionTileLayer(_source) { Name = LorenzAtlas.Name };
         _layer.DataChanged += TilesChanged;
@@ -93,5 +102,9 @@ public sealed class LightPollutionMapBinding : IAsyncDisposable
         _layer.ClearCache();
         if (_installation.IsAvailable) _map.Runtime.SetAvailability(LayerId, MapLayerAvailability.Available);
     }
-    public async ValueTask DisposeAsync() { Detach(); _layer.DataChanged -= TilesChanged; _source.Dispose(); await _provider.DisposeAsync(); }
+    public async ValueTask DisposeAsync()
+    {
+        Detach(); _layer.DataChanged -= TilesChanged; _source.Dispose();
+        if (_ownsProvider) await _provider.DisposeAsync();
+    }
 }

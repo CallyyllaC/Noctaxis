@@ -142,8 +142,20 @@ public sealed class LorenzInstallation(IUserDataPathProvider paths, HttpClient h
                 await using var output = File.Create(path);
                 var buffer = new byte[32768];
                 int count; long total = 0;
-                while ((count = await input.ReadAsync(buffer, ct)) != 0)
+                // A body that stops arriving ends as a timeout (and is retried) rather than holding the install open
+                // until the user cancels: HttpClient.Timeout ends at the headers.
+                using var stall = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                var window = Environment.EnvironmentalHttpDownloader.BodyStallWindow(http);
+                while (true)
                 {
+                    stall.CancelAfter(window);
+                    try { count = await input.ReadAsync(buffer, stall.Token); }
+                    catch (OperationCanceledException ex) when (!ct.IsCancellationRequested)
+                    {
+                        throw new TaskCanceledException("The atlas source sent no data in time.", new TimeoutException(ex.Message, ex));
+                    }
+                    stall.CancelAfter(Timeout.InfiniteTimeSpan);
+                    if (count == 0) break;
                     total += count;
                     if (total > 2 * 1024 * 1024) throw new InvalidDataException("Oversized source tile.");
                     await output.WriteAsync(buffer.AsMemory(0, count), ct);

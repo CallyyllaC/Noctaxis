@@ -34,7 +34,7 @@ public sealed class LocationPreviewImage : Control
 
     static LocationPreviewImage() => AffectsRender<LocationPreviewImage>(SceneProperty, PreviewStyleProperty);
 
-    public LocationPreviewImage() => this.Bind(PreviewStyleProperty, new DynamicResourceExtension(ThemeService.LocationPreviewStyleKey));
+    public LocationPreviewImage() => this.BindThemeDefault(PreviewStyleProperty, ThemeService.LocationPreviewStyleKey);
 
     /// <summary>The render in flight, for tests; completed when the displayed bitmap is current.</summary>
     internal Task PendingRender { get; private set; } = Task.CompletedTask;

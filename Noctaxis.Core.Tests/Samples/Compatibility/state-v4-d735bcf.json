@@ -1,0 +1,184 @@
+{
+  "Version": 4,
+  "Settings": {
+    "Units": "UK",
+    "SelectedTimeZoneId": "America/Denver",
+    "Weather": {
+      "EnabledFields": [
+        "TotalCloudCover",
+        "WindSpeed",
+        "MoonPhase"
+      ],
+      "CacheDistanceKilometres": 12
+    },
+    "TimeSnapMinutes": 15,
+    "CelestialObjects": {
+      "ConfiguredObjects": [
+        {
+          "TargetId": "sun",
+          "IsVisible": true,
+          "Order": 0
+        },
+        {
+          "TargetId": "moon",
+          "IsVisible": false,
+          "Order": 1
+        },
+        {
+          "TargetId": "m31",
+          "IsVisible": true,
+          "Order": 2
+        }
+      ],
+      "DefaultPrimaryTargetId": "m31"
+    },
+    "CameraFraming": {
+      "IsOverlayVisible": false,
+      "ManualBearingDegrees": 120,
+      "CompositionOffsetDegrees": 5,
+      "ShowVisibilityLimits": false,
+      "ShadingOpacityPercent": 25,
+      "LineThickness": 2,
+      "TerrainCastAngularDetailDegrees": 1,
+      "CameraPitchDegrees": 12.5,
+      "MinimumTerrainFrameCoveragePercent": 15,
+      "TerrainObstructionColour": "#336699",
+      "TerrainTintStrengthPercent": 30
+    },
+    "CameraHeightAboveGroundMetres": 2.5,
+    "Equipment": {
+      "Cameras": [
+        {
+          "Id": "cam-xt5",
+          "DisplayName": "Fujifilm X-T5",
+          "SensorWidthMillimetres": 23.5,
+          "SensorHeightMillimetres": 15.6,
+          "Manufacturer": "Fujifilm",
+          "Model": "X-T5"
+        }
+      ],
+      "Lenses": [
+        {
+          "Id": "lens-1655",
+          "DisplayName": "XF 16-55mm",
+          "MinimumFocalLengthMillimetres": 16,
+          "MaximumFocalLengthMillimetres": 55,
+          "Manufacturer": "Fujifilm",
+          "Model": "XF16-55mmF2.8"
+        }
+      ]
+    },
+    "TerrainDebugOverlay": true,
+    "TerrainCacheLimitBytes": 1073741824,
+    "EnableTerrainCalculations": false,
+    "TerrainMinimapContext": 4,
+    "Appearance": {
+      "ThemeFamilyId": "builtin.highcontrast",
+      "AppearanceMode": "Light",
+      "ColourVisionMode": "Deuteranopia",
+      "TextScale": 1.5
+    },
+    "AwooSupporterLicenceCode": null,
+    "ExternalMapProvider": "Mapillary",
+    "LightPollution": {
+      "IsVisible": true,
+      "Opacity": 0.35,
+      "PaletteId": "grayscale"
+    },
+    "TerrainRelief": {
+      "IsVisible": false,
+      "Opacity": 0.4
+    },
+    "Language": "en-GB",
+    "EffectiveTerrainMinimapContext": 2.5
+  },
+  "Locations": [
+    {
+      "Id": "6f1c2b9e-3a4d-4c1e-9b7a-2d5e8f0a1b3c",
+      "Name": "Dark Ridge",
+      "Coordinate": {
+        "Latitude": 51.2,
+        "Longitude": -1.3,
+        "ElevationMetres": 410
+      },
+      "TimeZoneId": "Europe/London",
+      "Notes": "North-facing view",
+      "PreferredSensor": "FullFrame",
+      "RegionDescription": "Wiltshire",
+      "IsFavourite": true,
+      "LastUsedUtc": "2026-08-01T20:00:00+00:00",
+      "SortOrder": 0,
+      "DateAddedUtc": "2026-07-01T12:00:00+00:00",
+      "ObserverElevation": {
+        "TerrainGroundElevationAslMetres": 405,
+        "ManualGroundElevationOverrideAslMetres": 420
+      }
+    },
+    {
+      "Id": "0b9d8c7e-6f5a-4b3c-8d2e-1f0a9b8c7d6e",
+      "Name": "Harbour wall",
+      "Coordinate": {
+        "Latitude": -33.86785,
+        "Longitude": 151.20732,
+        "ElevationMetres": 4
+      },
+      "TimeZoneId": "Australia/Sydney",
+      "Notes": null,
+      "PreferredSensor": null,
+      "RegionDescription": null,
+      "IsFavourite": false,
+      "LastUsedUtc": null,
+      "SortOrder": 1,
+      "DateAddedUtc": null,
+      "ObserverElevation": null
+    }
+  ],
+  "Session": {
+    "Observer": {
+      "Latitude": 51.2,
+      "Longitude": -1.3,
+      "ElevationMetres": 410
+    },
+    "InstantUtc": "2026-10-07T21:30:00Z",
+    "TimeZoneId": "America/Denver",
+    "TargetId": "m31",
+    "Lens": {
+      "Preset": "ApsC",
+      "SensorWidthMillimetres": 23.5,
+      "SensorHeightMillimetres": 15.6,
+      "FocalLengthMillimetres": 35,
+      "Orientation": "Portrait",
+      "FramingMultiplier": 1
+    },
+    "SavedLocationId": "6f1c2b9e-3a4d-4c1e-9b7a-2d5e8f0a1b3c",
+    "VisibleObjects": [
+      {
+        "TargetId": "sun",
+        "IsVisible": true,
+        "Order": 0
+      },
+      {
+        "TargetId": "moon",
+        "IsVisible": false,
+        "Order": 1
+      },
+      {
+        "TargetId": "m31",
+        "IsVisible": true,
+        "Order": 2
+      }
+    ],
+    "CameraProfileId": "cam-xt5",
+    "LensProfileId": "lens-1655",
+    "ObserverElevation": {
+      "TerrainGroundElevationAslMetres": 405,
+      "ManualGroundElevationOverrideAslMetres": 420
+    }
+  },
+  "MostRecentLocationId": "6f1c2b9e-3a4d-4c1e-9b7a-2d5e8f0a1b3c",
+  "LastCustomCoordinate": {
+    "Latitude": 52,
+    "Longitude": -3.5,
+    "ElevationMetres": 300
+  }
+}

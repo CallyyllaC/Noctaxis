@@ -77,4 +77,49 @@ public static class NoctaxisIcon
         File.WriteAllBytes(Path.Combine(assetsDirectory, IcoFileName), BuildIco());
         File.WriteAllText(Path.Combine(assetsDirectory, SvgFileName), NoctaxisLogo.ToSvg(NoctaxisLogo.Regular));
     }
+
+    /// <summary>The macOS bundle icon's entries: its OSType and pixel size, each a PNG.</summary>
+    public static IReadOnlyList<(string Type, int Size)> IcnsEntries { get; } =
+        [("icp4", 16), ("icp5", 32), ("icp6", 64), ("ic07", 128), ("ic08", 256), ("ic09", 512), ("ic10", 1024)];
+
+    public const string IcnsFileName = "Noctaxis.icns", LinuxIconFileName = "noctaxis.png";
+    /// <summary>The Linux desktop icon's size, a standard hicolor size.</summary>
+    public const int LinuxIconSize = 256;
+
+    /// <summary>
+    /// A macOS .icns: the "icns" header and its length, then each <see cref="IcnsEntries"/> entry as its type, its
+    /// length and a PNG, all lengths big-endian and counting their own 8-byte headers.
+    /// </summary>
+    public static byte[] BuildIcns()
+    {
+        static void BigEndian(Stream stream, int value)
+        {
+            Span<byte> bytes = stackalloc byte[4];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(bytes, value);
+            stream.Write(bytes);
+        }
+        var entries = IcnsEntries.Select(entry => (entry.Type, Png: RenderPng(entry.Size))).ToArray();
+        using var stream = new MemoryStream();
+        stream.Write("icns"u8);
+        BigEndian(stream, 8 + entries.Sum(entry => 8 + entry.Png.Length));
+        foreach (var (type, png) in entries)
+        {
+            stream.Write(System.Text.Encoding.ASCII.GetBytes(type));
+            BigEndian(stream, 8 + png.Length);
+            stream.Write(png);
+        }
+        return stream.ToArray();
+    }
+
+    /// <summary>
+    /// Regenerates the release packages' icons under <paramref name="packagingDirectory"/> (the repository's
+    /// <c>packaging</c> folder): the macOS bundle icon and the Linux desktop icon. They are not application resources.
+    /// </summary>
+    public static void WritePackagingAssets(string packagingDirectory)
+    {
+        Directory.CreateDirectory(Path.Combine(packagingDirectory, "macos"));
+        Directory.CreateDirectory(Path.Combine(packagingDirectory, "linux"));
+        File.WriteAllBytes(Path.Combine(packagingDirectory, "macos", IcnsFileName), BuildIcns());
+        File.WriteAllBytes(Path.Combine(packagingDirectory, "linux", LinuxIconFileName), RenderPng(LinuxIconSize));
+    }
 }

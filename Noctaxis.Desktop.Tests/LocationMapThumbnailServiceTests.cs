@@ -40,7 +40,8 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.True(result.RefreshSucceeded);
         Assert.True(result.WasGenerated);
         Assert.Contains(location.Id.ToString("N"), result.ImagePath, StringComparison.OrdinalIgnoreCase);
-        Assert.True(File.Exists(result.ImagePath));
+        // The legacy card artwork is retired: nothing writes thumbnail.png any more.
+        Assert.False(File.Exists(result.ImagePath));
         var assetDirectory = Path.GetDirectoryName(result.ImagePath)!;
         var sourcePath = Path.Combine(assetDirectory, "source.png");
         var metadataPath = Path.Combine(assetDirectory, "metadata.json");
@@ -68,7 +69,9 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(SavedLocationMapImageProcessor.RendererVersion, metadata.ThumbnailRendererVersion);
         Assert.False(string.IsNullOrWhiteSpace(metadata.SourceConfigurationHash));
         Assert.False(string.IsNullOrWhiteSpace(metadata.SourceContentHash));
-        Assert.False(string.IsNullOrWhiteSpace(metadata.ThumbnailContentHash));
+        Assert.Null(metadata.ThumbnailContentHash);
+        Assert.True(metadata.LegacyArtworkSkipped);
+        Assert.Equal(LocationMapThumbnailService.LegacyArtworkRetiredReason, metadata.ThumbnailSkippedReason);
         Assert.Equal("source.png", metadata.SourceFileName);
         Assert.Equal("thumbnail.png", metadata.ImageFileName);
         Assert.DoesNotContain("key=", await File.ReadAllTextAsync(metadataPath), StringComparison.OrdinalIgnoreCase);
@@ -77,12 +80,36 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(LocationMapThumbnailService.SourceWidth, source.Width);
         Assert.Equal(LocationMapThumbnailService.SourceHeight, source.Height);
         Assert.Equal(255, source.GetPixel(source.Width / 2, source.Height / 2).Alpha);
-        using var rendered = SKBitmap.Decode(result.ImagePath);
-        Assert.Equal(LocationMapThumbnailService.OutputWidth, rendered.Width);
-        Assert.Equal(LocationMapThumbnailService.OutputHeight, rendered.Height);
-        Assert.True(rendered.GetPixel(0, rendered.Height / 2).Alpha < 32);
-        Assert.True(rendered.GetPixel(rendered.Width - 1, rendered.Height / 2).Alpha >= 200);
-        Assert.True(rendered.GetPixel(rendered.Width / 2, rendered.Height / 2).Alpha > 0);
+        // What the card shows is built from the persisted source data alone.
+        var scene = await Noctaxis.Desktop.Mapping.Preview.LocationPreviewSceneLoader.LoadAsync(assetDirectory, metadata,
+            location.Coordinate, CancellationToken.None);
+        Assert.Equal(location.Id, scene.LocationId);
+        Assert.True(scene.Width > 0 && scene.Height > 0);
+    }
+
+    [Fact]
+    public async Task AcquireMissing_ReusesHeldMapDataAndAcquiresOnlyWhatIsMissing()
+    {
+        // OSM tile policy: bulk regeneration must not pre-emptively re-download raster tiles already held.
+        using var files = new TestDirectory();
+        var held = Location(Guid.NewGuid(), 53.6101, -0.4325, "Held");
+        var missing = Location(Guid.NewGuid(), 53.6020, -0.4400, "Missing");
+        using (var first = CreateService(files, new TileHandler(CreateTile())))
+            Assert.NotNull(await first.Value.GetThumbnailAsync(held, SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None));
+        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), "source.png"));
+
+        var tiles = new TileHandler(CreateTile());
+        using var bulk = CreateService(files, tiles);
+        var reused = await bulk.Value.GetThumbnailAsync(held, SavedLocationMapRefreshMode.AcquireMissing, CancellationToken.None);
+        Assert.NotNull(reused);
+        Assert.False(reused.WasGenerated);
+        Assert.Equal(0, tiles.RequestCount);
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), "source.png")));
+
+        var acquired = await bulk.Value.GetThumbnailAsync(missing, SavedLocationMapRefreshMode.AcquireMissing, CancellationToken.None);
+        Assert.NotNull(acquired);
+        Assert.True(acquired.WasGenerated);
+        Assert.True(tiles.RequestCount > 0);
     }
 
     [Fact]
@@ -159,14 +186,12 @@ public sealed partial class LocationMapThumbnailServiceTests
         var location = Location(Guid.NewGuid(), 54.5, -3.1, "Lakes");
         string originalPath;
         byte[] originalSource;
-        byte[] originalThumbnail;
         string originalMetadata;
         using (var first = CreateService(files, new TileHandler(CreateTile())))
         {
             originalPath = (await first.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None))!.ImagePath;
             originalSource = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "source.png"));
-            originalThumbnail = await File.ReadAllBytesAsync(originalPath);
             originalMetadata = await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "metadata.json"));
         }
 
@@ -177,9 +202,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.False(result.RefreshSucceeded);
         Assert.True(result.IsPreviousAsset);
         Assert.Equal(originalPath, result.ImagePath);
-        Assert.True(File.Exists(originalPath));
         Assert.Equal(originalSource, await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "source.png")));
-        Assert.Equal(originalThumbnail, await File.ReadAllBytesAsync(originalPath));
         Assert.Equal(originalMetadata, await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "metadata.json")));
     }
 
@@ -310,11 +333,13 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(originalMetadata.SourceConfigurationHash, reapplied.Metadata.SourceConfigurationHash);
         Assert.Equal(originalMetadata.SourceContentHash, reapplied.Metadata.SourceContentHash);
         Assert.Equal(originalMetadata.GeneratedAtUtc, reapplied.Metadata.GeneratedAtUtc);
-        Assert.NotNull(reapplied.Metadata.ThumbnailGeneratedAtUtc);
+        // Reapplying the style composes no legacy artwork; the source data stays the preview's input.
+        Assert.Null(reapplied.Metadata.ThumbnailGeneratedAtUtc);
+        Assert.True(reapplied.Metadata.LegacyArtworkSkipped);
     }
 
     [Fact]
-    public async Task UseCache_WithValidSourceButMissingThumbnail_DoesNotReprocessOrWrite()
+    public async Task UseCache_WithValidSourceAndNoArtwork_IsCompleteWithoutReprocessingOrWriting()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 52.4, -1.8, "Read-only cache");
@@ -335,7 +360,6 @@ public sealed partial class LocationMapThumbnailServiceTests
             metadataBytes = await File.ReadAllBytesAsync(metadataPath);
             sourceWriteTime = File.GetLastWriteTimeUtc(sourcePath);
             metadataWriteTime = File.GetLastWriteTimeUtc(metadataPath);
-            File.Delete(generated.ImagePath);
         }
 
         var offline = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
@@ -345,7 +369,9 @@ public sealed partial class LocationMapThumbnailServiceTests
 
         var persistedSource = Path.Combine(directory, "source.png");
         var persistedMetadata = Path.Combine(directory, "metadata.json");
-        Assert.Null(result);
+        // Retired artwork is not missing: the validated source data is the complete cache, reused as it is.
+        Assert.NotNull(result);
+        Assert.False(result.WasGenerated);
         Assert.Equal(0, offline.RequestCount);
         Assert.False(File.Exists(Path.Combine(directory, "thumbnail.png")));
         Assert.Equal(sourceBytes, await File.ReadAllBytesAsync(persistedSource));
@@ -531,9 +557,9 @@ public sealed partial class LocationMapThumbnailServiceTests
 
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
         var featurePath = Path.Combine(directory, "features.json");
-        var thumbnailPath = Path.Combine(directory, "thumbnail.png");
+        var sourcePath = Path.Combine(directory, "source.png");
         var featuresBefore = await File.ReadAllBytesAsync(featurePath);
-        var thumbnailBefore = await File.ReadAllBytesAsync(thumbnailPath);
+        var sourceBefore = await File.ReadAllBytesAsync(sourcePath);
         var failure = new MapFeatureFetchOutcome(MapFeatureFetchStatus.Unavailable, 0, 0,
             "timeout", "the Overpass request timed out", 504, true, false, false, 2,
             DateTimeOffset.UtcNow, true);
@@ -547,12 +573,13 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.NotNull(result);
         Assert.Equal(0, tiles.RequestCount);
         Assert.Equal(featuresBefore, await File.ReadAllBytesAsync(featurePath));
-        Assert.Equal(thumbnailBefore, await File.ReadAllBytesAsync(thumbnailPath));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(sourcePath));
         Assert.Equal(MapFeatureFetchStatus.CachedPrevious.ToString(), result.Metadata.FeatureFetchStatus);
         Assert.Equal("timeout", result.Metadata.FeatureFailureCode);
         Assert.True(result.Metadata.FeatureFetchTimedOut);
         Assert.Equal(2, result.Metadata.FeatureAttemptCount);
-        Assert.True(result.Operation!.ThumbnailUsedPrevious);
+        Assert.True(result.Operation!.RasterUsedPrevious);
+        Assert.True(result.Operation.LegacyArtworkSkipped);
     }
 
     [Fact]
@@ -567,8 +594,8 @@ public sealed partial class LocationMapThumbnailServiceTests
             await initial.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.RefreshSource,
                 CancellationToken.None);
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var thumbnailPath = Path.Combine(directory, "thumbnail.png");
-        var thumbnailBefore = await File.ReadAllBytesAsync(thumbnailPath);
+        var sourcePath = Path.Combine(directory, "source.png");
+        var sourceBefore = await File.ReadAllBytesAsync(sourcePath);
         var retryFailure = MapFeatureFetchOutcome.Failure("parse_failed", "the feature response could not be parsed",
             parseFailed: true);
         using var refreshed = CreateService(files,
@@ -579,7 +606,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             CancellationToken.None);
 
         Assert.NotNull(result);
-        Assert.Equal(thumbnailBefore, await File.ReadAllBytesAsync(thumbnailPath));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(sourcePath));
         Assert.False(File.Exists(Path.Combine(directory, "features.json")));
         Assert.Equal(MapFeatureFetchStatus.Unavailable.ToString(), result.Metadata.FeatureFetchStatus);
         Assert.True(result.Metadata.FeatureParseFailed);
@@ -620,7 +647,7 @@ public sealed partial class LocationMapThumbnailServiceTests
     }
 
     [Fact]
-    public async Task FailedSettlementRefresh_PreservesPreviousThumbnail()
+    public async Task FailedSettlementRefresh_PreservesPreviousSettlementData()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Castlethorpe Bridge");
@@ -630,8 +657,9 @@ public sealed partial class LocationMapThumbnailServiceTests
             Assert.NotNull(await initial.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, default));
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var thumbnailPath = Path.Combine(directory, "thumbnail.png");
-        var thumbnailBefore = await File.ReadAllBytesAsync(thumbnailPath);
+        var settlementPath = Path.Combine(directory, "settlement-field.bin.gz");
+        var settlementBefore = await File.ReadAllBytesAsync(settlementPath);
+        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(directory, "source.png"));
         var failed = new FakeSettlementService(available: false);
         using var refresh = CreateService(files, new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable),
             featureData: new FakeFeatureService((_, _) => throw new InvalidOperationException()),
@@ -643,9 +671,9 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.NotNull(result);
         Assert.Equal(EnvironmentalDataState.Unavailable, result.Operation!.SettlementState);
         Assert.Equal(EnvironmentalDataState.Cached.ToString(), result.Metadata.SettlementStatus);
-        Assert.True(result.Metadata.SettlementRendered,
-            $"active={result.Metadata.SettlementActiveCellCount}, stars={result.Metadata.SettlementGeneratedStarCount}, max={result.Metadata.SettlementMaximumDensity}");
-        Assert.Equal(thumbnailBefore, await File.ReadAllBytesAsync(thumbnailPath));
+        // The previous settlement field and source raster, which the preview is built from, are kept unchanged.
+        Assert.Equal(settlementBefore, await File.ReadAllBytesAsync(settlementPath));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "source.png")));
     }
 
     [Fact]
@@ -673,7 +701,7 @@ public sealed partial class LocationMapThumbnailServiceTests
     }
 
     [Fact]
-    public async Task PartialWsfRaster_RendersAndRemainsExplicitlyPartial()
+    public async Task PartialWsfRaster_IsKeptAndRemainsExplicitlyPartial()
     {
         using var files = new TestDirectory();
         var location = Location(Guid.NewGuid(), 53.5664, -0.5063, "Partial WSF");
@@ -687,9 +715,9 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.NotNull(result);
         Assert.Equal(nameof(EnvironmentalDataState.Partial), result.Metadata.SettlementStatus);
         Assert.True(result.Metadata.SettlementPartial);
-        Assert.True(result.Metadata.SettlementRendered,
-            $"active={result.Metadata.SettlementActiveCellCount}, stars={result.Metadata.SettlementGeneratedStarCount}, max={result.Metadata.SettlementMaximumDensity}");
-        Assert.True(result.Metadata.SettlementGeneratedStarCount > 0);
+        // The partial field is persisted for the preview (galaxy rendering belonged to the retired artwork).
+        Assert.False(string.IsNullOrWhiteSpace(result.Metadata.SettlementContentHash));
+        Assert.True(File.Exists(Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"), "settlement-field.bin.gz")));
         Assert.True(result.Operation!.IsComplete);
     }
 
@@ -851,7 +879,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             _ => Task.CompletedTask, _ => Task.CompletedTask);
         var cardResult = await card.RefreshMapThumbnailWithResultAsync(SavedLocationMapRefreshMode.UseCache);
         Assert.NotNull(cardResult);
-        Assert.NotNull(card.MapThumbnail);
+        Assert.NotNull(card.PreviewScene); // The card shows the preview scene; legacy artwork is retired.
         Assert.Equal(SavedLocationMapImageProcessor.RendererId, card.ThumbnailMetadata?.ThumbnailRendererId);
         Assert.Equal(result.ImagePath, cardResult.ImagePath);
     }

@@ -1,85 +1,53 @@
 # Third-party notices
 
-Noctaxis uses the following direct runtime dependencies. Copyright and full
-licence texts remain available from the linked projects and NuGet packages.
+Noctaxis uses libraries, astronomical catalogues, maps and environmental data made by other people. I'm grateful to their authors. **These components and datasets keep their own licences; the [AWOO Licence](LICENSE) applies only to material I'm entitled to license.**
 
-| Library | Version | Purpose | Licence |
-|---|---:|---|---|
-| Avalonia, Avalonia.Desktop, Fluent theme, Inter fonts | 12.1.0 | Cross-platform desktop UI | MIT |
-| Mapsui.Avalonia12 / Mapsui / Mapsui.Tiling | 5.1.0 | Native map control and tile rendering | MIT |
-| BruTile | 6.0.0 | Slippy-map tile schema and HTTP source | Apache-2.0 |
-| CosineKitty.AstronomyEngine | 2.1.19 | Sun/Moon ephemerides and coordinate transforms | MIT |
-| NodaTime | 3.3.3 | UTC, timezone, local date, and DST correctness | Apache-2.0 |
-| CommunityToolkit.Mvvm | 8.4.0 | Observable MVVM state and commands | MIT |
-| SkiaSharp | 3.119.4 | PNG scouting-card and saved-location thumbnail rendering (also used by Mapsui) | MIT |
-| OpenCvSharp4 | 4.13.0.20260627 | .NET bindings for accelerated settlement-image kernels | Apache-2.0 |
-| OpenCV native runtime | 4.13.0.20260627 | Optimised CPU image filtering for settlement thumbnails | Apache-2.0 |
-| Hjg.Pngcs | 1.1.5 | Standards-compliant PNG text metadata read/write | Apache-2.0 |
-| BitMiracle.LibTiff.NET | 2.4.660 | GeoTIFF validation and environmental raster sampling | BSD-style libtiff licence |
-| Microsoft.Extensions.Configuration.Json | 10.0.0 | Desktop configuration primitives | MIT |
-| Microsoft.Extensions.DependencyInjection | 10.0.0 | Composition root | MIT |
-| Microsoft.Extensions.Http | 10.0.0 | `HttpClientFactory` weather, geocoding, and map-thumbnail clients | MIT |
-| Microsoft.Extensions.Logging.Console | 10.0.0 | Recoverable-error logging | MIT |
+The full licence texts and applicable notices for redistributed packages are included in the application's `ThirdParty/` directory. For the complete resolved dependency inventory, see [ThirdParty package inventory](Noctaxis.Desktop/ThirdParty/README.md). This page is an attribution overview, not a substitute for those licence files.
 
-Test-only dependencies are Microsoft.NET.Test.Sdk 18.0.0 (MIT), xUnit 2.9.3
-(Apache-2.0), xunit.runner.visualstudio 3.1.5 (Apache-2.0), and
-coverlet.collector 6.0.4 (MIT).
+## Software libraries
 
-Mapsui brings permissively licensed rendering/geospatial dependencies including
-NetTopologySuite (BSD-3-Clause), HarfBuzzSharp (MIT), Svg.Skia (MIT), and
-RichTextKit (MIT). Avalonia and SkiaSharp bring their platform-native assets
-under their package licences.
+| Software | What I use it for | Licence |
+| --- | --- | --- |
+| [Avalonia](https://avaloniaui.net/) and Fluent theme | Desktop interface | MIT |
+| [Inter](https://github.com/rsms/inter) (via Avalonia.Fonts.Inter) | Interface fonts | SIL OFL 1.1 |
+| [Mapsui](https://github.com/Mapsui/Mapsui), [BruTile](https://github.com/BruTile/BruTile) and NetTopologySuite | Maps and geometry | MIT / Apache-2.0 / BSD-3-Clause |
+| [Astronomy Engine](https://github.com/cosinekitty/astronomy) | Astronomical calculations | MIT |
+| [NodaTime](https://nodatime.org/) | Time zones and dates | Apache-2.0 |
+| [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) | Application state and commands | MIT |
+| [SkiaSharp](https://github.com/mono/SkiaSharp), HarfBuzzSharp and associated native components | Graphics and text | MIT and bundled native-component notices |
+| [OpenCvSharp](https://github.com/shimat/opencvsharp) and OpenCV | Image processing | Apache-2.0 and bundled component notices |
+| [Hjg.Pngcs](https://www.nuget.org/packages/Hjg.Pngcs), [LibTiff.NET](https://bitmiracle.github.io/libtiff.net/) | PNG metadata and TIFF/GeoTIFF | Apache-2.0 / BSD-style and bundled notices |
+| [BouncyCastle](https://www.bouncycastle.org/) | Supporter-code signature verification | MIT |
+| Microsoft.Extensions libraries and .NET | Configuration, HTTP, logging, and runtime | MIT and bundled notices |
+| Svg.Custom, Svg.Skia, RichTextKit and related packages | SVG and text rendering | MS-PL / MIT / Apache-2.0 (see bundled notices) |
 
-Default map tiles are provided by OpenStreetMap. Tile imagery/data is not
-bundled with Noctaxis. The required visible attribution is:
-`© OpenStreetMap contributors`. The application does not expose tile URL or
-attribution editing.
+The packaged native libraries may include further third-party components. Their licence and copyright texts are supplied with the build rather than repeated here. Test-only libraries aren't distributed as part of the desktop application.
 
-Explicit saved-location map refreshes may also retrieve lightweight road and
-waterway geometry from an OpenStreetMap Overpass API endpoint. This semantic
-data is cached with the saved-location artwork and its own
-`© OpenStreetMap contributors` provenance under the Open Database License
-(ODbL). Bulk building requests are not part of normal Planner or saved-map
-operation. No Overpass request is made for terrain/environment acquisition.
+## Bundled data and assets
 
-Weather forecasts are obtained from Open-Meteo and identified as such in the
-application. No Open-Meteo response data or credential is bundled in Noctaxis.
-Location search uses Open-Meteo's geocoding API with location data based on
-GeoNames; the required attribution is displayed with search results.
+- **[OpenNGC](https://github.com/mattiaverga/OpenNGC):** Deep-sky catalogue by Mattia Verga and contributors, licensed **CC BY-SA 4.0**. Noctaxis includes upstream `NGC.csv` and `addendum.csv` from commit `da90466031b0372c896588b85be6016c617e205b`. The licence is included at `Noctaxis.Core/Data/OpenNGC-LICENSE.txt` and in the packaged notices.
+- **[Matplotlib](https://matplotlib.org/):** Turbo, Viridis, Inferno, Magma and Cividis colour tables, taken from Matplotlib 3.10.8 and converted to C# arrays with interpolation. Copyright © Matplotlib Development Team; see `Noctaxis.Desktop/ThirdParty/Matplotlib-LICENSE.txt` for terms and attribution.
+- **Inter font:** Copyright © The Inter Project Authors. Its separate SIL OFL 1.1 terms are included in the packaged notices.
 
-Deep-sky catalogue data is provided by
-[OpenNGC](https://github.com/mattiaverga/OpenNGC), copyright Mattia Verga and
-contributors, under CC-BY-SA-4.0. Noctaxis bundles the upstream `NGC.csv` and
-`addendum.csv` snapshot from commit
-`da90466031b0372c896588b85be6016c617e205b`. The complete licence text is bundled
-as `Noctaxis.Core/Data/OpenNGC-LICENSE.txt`, and attribution is visible beside
-catalogue search results. OpenNGC documents its contributing astronomical data
-sources in its upstream README and per-row `Sources` field.
+## Online maps, weather and environmental data
 
-Environmental source tiles are not bundled. They are downloaded on demand into
-the application environmental-data cache:
+These sources are accessed or downloaded while the application runs. Their data isn't mine, and local caching doesn't change their ownership.
 
-- Mapzen/Tilezen Terrain Tiles in Terrarium PNG format are accessed from the
-  public `elevation-tiles-prod` dataset. Tilezen's upstream attribution document
-  lists the regional source acknowledgements that apply to derived terrain use.
-- ESA WorldCover 2021 v200 is provided under CC BY 4.0. Required map/data
-  acknowledgement: `© ESA WorldCover project / Contains modified Copernicus
-  Sentinel data (2021) processed by ESA WorldCover consortium`.
-- World Settlement Footprint (WSF®) 3D v02 is provided by DLR/EOC under
-  CC BY 4.0 and supplies building fraction and average-height context.
+| Source | Used for | Attribution / terms |
+| --- | --- | --- |
+| [OpenFreeMap](https://openfreemap.org/), OpenMapTiles and [OpenStreetMap](https://www.openstreetmap.org/copyright) | Basemap | © OpenMapTiles; © OpenStreetMap contributors; provider terms |
+| [OpenStreetMap raster tiles](https://operations.osmfoundation.org/policies/tiles/), [Overpass](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | Location previews, roads, waterways and geocoding | © OpenStreetMap contributors; ODbL and endpoint policies |
+| [Open-Meteo](https://open-meteo.com/en/licence) and [GeoNames](https://www.geonames.org/export/) | Forecasts and location search | Provider attribution and data terms; Open-Meteo's free API has separate usage restrictions |
+| [NOAA Space Weather Prediction Center](https://www.swpc.noaa.gov/) | Aurora and planetary K-index | NOAA/SWPC attribution and applicable terms |
+| [Mapzen/Tilezen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Elevation and terrain horizons | Regional source acknowledgements |
+| [ESA WorldCover](https://esa-worldcover.org/en/data-access) | Land cover | CC BY 4.0; © ESA WorldCover project / modified Copernicus Sentinel data (2021) |
+| [DLR/EOC World Settlement Footprint 3D](https://geoservice.dlr.de/web/datasets/wsf_3d) | Settlement and building-height context | CC BY 4.0; DLR/EOC attribution |
+| [David Lorenz's Light Pollution Atlas](https://djlorenz.github.io/astronomy/lp/) | Light pollution | Used with the author's specific permission; see below |
 
-Noctaxis caches these source files locally but does not claim ownership,
-endorsement, or redistribution rights beyond the applicable source terms.
+### Light Pollution Atlas permission
 
-Light Pollution colour tables (Turbo, Viridis, Inferno, Magma and Cividis) are
-extracted without changing entries from Matplotlib v3.10.8 `_cm_listed.py`:
-https://github.com/matplotlib/matplotlib/blob/v3.10.8/lib/matplotlib/_cm_listed.py
-Copyright (c) 2012- Matplotlib Development Team; All Rights Reserved.
-The Matplotlib licence and change summary are distributed in
-`Noctaxis.Desktop/ThirdParty/Matplotlib-LICENSE.txt` and copied to app output.
-Noctaxis converts the tables to C# arrays and linearly interpolates RGB values.
-Turbo was contributed to Matplotlib by its author (Google's Anton Mikhailov,
-PR #15275). Viridis, Inferno and Magma originate with Nathaniel J. Smith and
-Stéfan van der Walt (Viridis also Eric Firing), who additionally released their
-tables under CC0 at https://bids.github.io/colormap/. Cividis is the standard
-Matplotlib table originating with Nuñez, Anderton and Renslow.
+David Lorenz gave me permission on **8 October 2026** to use his Light Pollution Atlas as a downloaded, locally cached light-pollution layer in Noctaxis. The data isn't bundled with the app. This permission doesn't turn the Atlas into an open-licensed dataset or grant permission to redistribute it independently. I credit David Lorenz and link to the [Atlas](https://djlorenz.github.io/astronomy/lp/); a materially different use would need fresh permission.
+
+Some data providers impose attribution, request-rate, caching or other service conditions. Those apply independently of my application's software licence. See [3rd Party References](docs/user-guide/third-party-references.md) for the user-facing credits and links.
+
+For release packaging, **keep the complete `ThirdParty/` licence and notice collection** with the app. Don't assume this short overview replaces required notices.

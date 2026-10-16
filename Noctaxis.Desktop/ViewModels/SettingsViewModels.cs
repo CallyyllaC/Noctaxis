@@ -12,9 +12,33 @@ public partial class WeatherFieldOptionViewModel(WeatherField field, string labe
     [ObservableProperty] private bool _isEnabled = isEnabled;
 }
 
-public sealed record WeatherFieldGroupViewModel(
+/// <summary>
+/// One weather topic in Settings — Clouds, Wind, Twilight — standing for the values behind it: on while any of
+/// them is, and turning it on or off turns all of them.
+/// </summary>
+public sealed partial class WeatherTopicOptionViewModel : ObservableObject
+{
+    public WeatherTopicOptionViewModel(string label, IReadOnlyList<WeatherFieldOptionViewModel> fields)
+    {
+        Label = label;
+        Fields = fields;
+        foreach (var field in fields)
+            field.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(WeatherFieldOptionViewModel.IsEnabled)) OnPropertyChanged(nameof(IsEnabled)); };
+    }
+
+    public string Label { get; }
+    public IReadOnlyList<WeatherFieldOptionViewModel> Fields { get; }
+
+    public bool IsEnabled
+    {
+        get => Fields.Any(option => option.IsEnabled);
+        set { foreach (var option in Fields) option.IsEnabled = value; }
+    }
+}
+
+public sealed record WeatherTopicGroupViewModel(
     string Label,
-    IReadOnlyList<WeatherFieldOptionViewModel> Fields);
+    IReadOnlyList<WeatherTopicOptionViewModel> Topics);
 
 public partial class CameraProfileEditorViewModel : ObservableObject
 {
@@ -28,6 +52,8 @@ public partial class CameraProfileEditorViewModel : ObservableObject
         _sensorHeightMillimetres = profile.SensorHeightMillimetres;
         _manufacturer = profile.Manufacturer ?? string.Empty;
         _model = profile.Model ?? string.Empty;
+        _resolutionWidthPixels = profile.ResolutionWidthPixels;
+        _resolutionHeightPixels = profile.ResolutionHeightPixels;
         _remove = remove;
     }
 
@@ -37,10 +63,36 @@ public partial class CameraProfileEditorViewModel : ObservableObject
     [ObservableProperty] private double _sensorHeightMillimetres;
     [ObservableProperty] private string _manufacturer;
     [ObservableProperty] private string _model;
-    public CameraProfile Profile => new(Id, DisplayName, SensorWidthMillimetres,
+    /// <summary>The optional resolution, as typed: whole pixels, and either dimension may be empty.</summary>
+    [ObservableProperty] private decimal? _resolutionWidthPixels;
+    [ObservableProperty] private decimal? _resolutionHeightPixels;
+
+    /// <summary>
+    /// The profile as saved. The resolution goes with it only when both dimensions are whole, positive pixel
+    /// counts; one dimension alone stays in the editor and is saved as no resolution, so it never makes a
+    /// half-described sensor.
+    /// </summary>
+    public CameraProfile Profile => Pixels(ResolutionWidthPixels) is { } width && Pixels(ResolutionHeightPixels) is { } height
+        ? Base with { ResolutionWidthPixels = width, ResolutionHeightPixels = height }
+        : Base;
+    private CameraProfile Base => new(Id, DisplayName, SensorWidthMillimetres,
         SensorHeightMillimetres, EmptyToNull(Manufacturer), EmptyToNull(Model));
     public bool IsValid => Profile.IsValid;
     public string? ValidationMessage => Profile.ValidationMessage;
+
+    /// <summary>Shown while only one dimension of the resolution is filled in.</summary>
+    public string? ResolutionHint => (Pixels(ResolutionWidthPixels) is null) != (Pixels(ResolutionHeightPixels) is null)
+        ? Strings.Get("Settings_Equipment_ResolutionIncomplete") : null;
+
+    /// <summary>The pixel pitch the sensor's size and resolution give, read-only; empty without a resolution.</summary>
+    public string PixelPitchText => Profile.PixelPitchMicrometres is { } pitch
+        ? Strings.Format("Settings_Equipment_PixelPitch_Format", pitch) : string.Empty;
+
+    /// <summary>The largest resolution dimension accepted.</summary>
+    public const int MaximumResolutionPixels = 1_000_000;
+
+    private static int? Pixels(decimal? value) =>
+        value is { } pixels && pixels >= 1 && pixels <= MaximumResolutionPixels && decimal.Truncate(pixels) == pixels ? (int)pixels : null;
 
     /// <summary>Asks, then removes this profile if confirmed (see MainViewModel).</summary>
     [RelayCommand]
@@ -49,12 +101,16 @@ public partial class CameraProfileEditorViewModel : ObservableObject
     partial void OnDisplayNameChanged(string value) => NotifyValidation();
     partial void OnSensorWidthMillimetresChanged(double value) => NotifyValidation();
     partial void OnSensorHeightMillimetresChanged(double value) => NotifyValidation();
+    partial void OnResolutionWidthPixelsChanged(decimal? value) => NotifyValidation();
+    partial void OnResolutionHeightPixelsChanged(decimal? value) => NotifyValidation();
 
     private void NotifyValidation()
     {
         OnPropertyChanged(nameof(Profile));
         OnPropertyChanged(nameof(IsValid));
         OnPropertyChanged(nameof(ValidationMessage));
+        OnPropertyChanged(nameof(ResolutionHint));
+        OnPropertyChanged(nameof(PixelPitchText));
     }
 
     private static string? EmptyToNull(string value) =>

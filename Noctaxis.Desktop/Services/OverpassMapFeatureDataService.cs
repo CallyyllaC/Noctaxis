@@ -23,11 +23,22 @@ public sealed record OverpassMapFeatureOptions(Uri Endpoint, string EndpointId)
     }
 }
 
+/// <remarks>
+/// The public Overpass instances are shared by everyone. One query per saved-location acquisition, bounded to the
+/// map frame, with no retries; when the instance answers HTTP 429 (rate limited) no further query is sent for
+/// <see cref="RateLimitBackoff"/>, so a bulk regeneration does not keep asking. Previous compatible features are kept.
+/// </remarks>
 public sealed class OverpassMapFeatureDataService(
     HttpClient httpClient,
     OverpassMapFeatureOptions options,
-    ILogger<OverpassMapFeatureDataService> logger) : IMapFeatureDataService
+    ILogger<OverpassMapFeatureDataService> logger,
+    TimeProvider? time = null) : IMapFeatureDataService
 {
+    /// <summary>How long queries stop after the instance rate-limits this client.</summary>
+    public static readonly TimeSpan RateLimitBackoff = TimeSpan.FromMinutes(10);
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+    private long _suspendedUntilTicks;
+
     public const int FeatureSchemaVersion = 1;
     public const int FeatureQueryVersion = 1;
     public const int MaximumResponseBytes = 8 * 1024 * 1024;
@@ -42,6 +53,9 @@ public sealed class OverpassMapFeatureDataService(
             locationId, options.EndpointId, FeatureQueryVersion);
         logger.LogDebug("OSM feature query bounds for {LocationId}: {South},{West},{North},{East}",
             locationId, viewport.Bounds.South, viewport.Bounds.West, viewport.Bounds.North, viewport.Bounds.East);
+        if (_time.GetUtcNow().UtcTicks < Interlocked.Read(ref _suspendedUntilTicks))
+            return new MapFeatureFetchResult(null, MapFeatureFetchOutcome.Failure("rate_limited",
+                "the Overpass instance asked this client to wait", httpStatusCode: 429));
         try
         {
             var complete = await FetchCoreAsync(locationId, viewport, attempt: 1,
@@ -159,6 +173,12 @@ public sealed class OverpassMapFeatureDataService(
         if (response.StatusCode == HttpStatusCode.RequestEntityTooLarge)
             throw new MapFeatureRequestException("response_too_large", "the Overpass response exceeded its size limit",
                 httpStatusCode: (int)response.StatusCode, responseTooLarge: true);
+        if (response.StatusCode == HttpStatusCode.TooManyRequests)
+        {
+            Interlocked.Exchange(ref _suspendedUntilTicks, (_time.GetUtcNow() + RateLimitBackoff).UtcTicks);
+            throw new MapFeatureRequestException("rate_limited", "the Overpass instance asked this client to wait",
+                httpStatusCode: (int)response.StatusCode);
+        }
         if (!response.IsSuccessStatusCode)
             throw new MapFeatureRequestException("http_error", $"Overpass returned HTTP {(int)response.StatusCode}",
                 httpStatusCode: (int)response.StatusCode);

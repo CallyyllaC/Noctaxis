@@ -72,7 +72,7 @@ public sealed class VectorTile
                 case 2 when wire == 2: rawFeatures.Add(DecodeFeature(reader.Bytes())); break;
                 case 3 when wire == 2: keys.Add(reader.String()); break;
                 case 4 when wire == 2: values.Add(DecodeValue(reader.Bytes())); break;
-                case 5 when wire == 0: extent = checked((int)reader.Varint()); break;
+                case 5 when wire == 0: extent = reader.Int32("Vector tile layer extent"); break;
                 default: reader.Skip(wire); break;
             }
         }
@@ -86,11 +86,11 @@ public sealed class VectorTile
             var properties = new Dictionary<string, object>(tags.Count / 2, StringComparer.Ordinal);
             for (var tag = 0; tag < tags.Count; tag += 2)
             {
-                var key = (int)tags[tag];
-                var value = (int)tags[tag + 1];
-                if (key >= keys.Count || value >= values.Count)
+                var key = tags[tag];
+                var value = tags[tag + 1];
+                if (key >= (uint)keys.Count || value >= (uint)values.Count)
                     throw new InvalidDataException("Vector tile feature tag is out of range.");
-                properties[keys[key]] = values[value];
+                properties[keys[(int)key]] = values[(int)value];
             }
             features[index] = new VectorTileFeature(type, DecodeGeometry(geometry), properties) { Extent = extent };
         }
@@ -217,10 +217,23 @@ public sealed class VectorTile
             return value;
         }
 
+        /// <summary>
+        /// A non-negative varint that fits an <see cref="int"/>; anything larger is malformed input, never an
+        /// arithmetic overflow.
+        /// </summary>
+        public int Int32(string what)
+        {
+            var value = Varint();
+            return value <= int.MaxValue ? (int)value : throw new InvalidDataException($"{what} {value} is out of range.");
+        }
+
         public ReadOnlySpan<byte> Bytes()
         {
-            var length = checked((int)Varint());
-            Require(length);
+            var value = Varint();
+            // Checked against what is left before any conversion or slicing, so no length is trusted.
+            if (value > (ulong)(_data.Length - _position))
+                throw new InvalidDataException("Truncated protobuf field.");
+            var length = (int)value;
             var slice = _data.Slice(_position, length);
             _position += length;
             return slice;
@@ -251,7 +264,7 @@ public sealed class VectorTile
 
         private readonly void Require(int length)
         {
-            if (length < 0 || _position + length > _data.Length)
+            if (length < 0 || length > _data.Length - _position)
                 throw new InvalidDataException("Truncated protobuf field.");
         }
     }

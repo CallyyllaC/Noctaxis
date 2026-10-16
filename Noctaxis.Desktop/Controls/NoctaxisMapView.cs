@@ -73,7 +73,130 @@ public class NoctaxisMapView : UserControl
 
     private readonly MapControl _mapControl;
     private readonly PlannerMapComposition _composition;
+    private readonly Border _attributionStrip;
     private readonly TextBlock _attribution;
+    private readonly Button _attributionInfo;
+    private readonly StackPanel _attributionDetails;
+    /// <summary>Opens a credit's link. Bound to the application's one external-link launcher.</summary>
+    public static readonly StyledProperty<System.Windows.Input.ICommand?> OpenLinkCommandProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, System.Windows.Input.ICommand?>(nameof(OpenLinkCommand));
+    public System.Windows.Input.ICommand? OpenLinkCommand { get => GetValue(OpenLinkCommandProperty); set => SetValue(OpenLinkCommandProperty, value); }
+    /// <summary>
+    /// Room the attribution leaves at the map's bottom-left for something the page lays over the map
+    /// there, so the two never overlap; the strip wraps into the rest.
+    /// </summary>
+    public static readonly StyledProperty<double> AttributionReservedLeftProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, double>(nameof(AttributionReservedLeft));
+    public double AttributionReservedLeft { get => GetValue(AttributionReservedLeftProperty); set => SetValue(AttributionReservedLeftProperty, value); }
+
+    /// <summary>
+    /// A secondary view: the Planner's Picture-in-Picture map. It is the same map — same composition,
+    /// layers and providers — in a constrained mode: it draws the pin and a simplified camera frame (the
+    /// framing outline, without the environmental shading or celestial rays), credits nothing itself
+    /// (the main map's strip gives its credits) and takes no input. Its host decides what may reach it.
+    /// </summary>
+    public static readonly StyledProperty<bool> IsPictureInPictureProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, bool>(nameof(IsPictureInPicture));
+    public bool IsPictureInPicture { get => GetValue(IsPictureInPictureProperty); set => SetValue(IsPictureInPictureProperty, value); }
+
+    /// <summary>
+    /// Whether the view centres on the pin whenever the pin moves. Only the centre follows: the zoom and
+    /// the layers stay the view's own. Off, the view keeps whatever centre it has.
+    /// </summary>
+    public static readonly StyledProperty<bool> FollowObserverProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, bool>(nameof(FollowObserver), true);
+    public bool FollowObserver { get => GetValue(FollowObserverProperty); set => SetValue(FollowObserverProperty, value); }
+
+    /// <summary>
+    /// Whether the view draws the basemap's reference pass: its roads, railways, boundaries and names.
+    /// Off, that pass is gated out of this view's composition, so its tiles are neither fetched nor drawn;
+    /// the geography, the environmental layers and the overlay stay. Each view has its own.
+    /// </summary>
+    public static readonly StyledProperty<bool> ShowRoadsAndLabelsProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, bool>(nameof(ShowRoadsAndLabels), true);
+    public bool ShowRoadsAndLabels { get => GetValue(ShowRoadsAndLabelsProperty); set => SetValue(ShowRoadsAndLabelsProperty, value); }
+
+    /// <summary>
+    /// Whether this view draws its terrain relief in the stronger tone
+    /// (<see cref="TerrainReliefTileSource.ReliefTone.Enhanced"/>): the Picture-in-Picture map's local contrast.
+    /// Only this view's relief tiles are redrawn, from the shared shaded grid; nothing else changes.
+    /// </summary>
+    public static readonly StyledProperty<bool> EnhanceReliefContrastProperty =
+        AvaloniaProperty.Register<NoctaxisMapView, bool>(nameof(EnhanceReliefContrast));
+    public bool EnhanceReliefContrast { get => GetValue(EnhanceReliefContrastProperty); set => SetValue(EnhanceReliefContrastProperty, value); }
+    private TerrainReliefTileSource.ReliefTone ReliefTone =>
+        EnhanceReliefContrast ? TerrainReliefTileSource.ReliefTone.Enhanced : TerrainReliefTileSource.ReliefTone.Normal;
+
+    /// <summary>A map view's own state: where it is centred and how far it is zoomed, as ground metres per pixel.</summary>
+    public readonly record struct MapViewState(GeoCoordinate Centre, double Resolution);
+
+    /// <summary>The zoom range every Planner view keeps to.</summary>
+    public const double MinimumResolution = PlannerPipSettings.MinimumResolutionMetresPerPixel;
+    public const double MaximumResolution = PlannerPipSettings.MaximumResolutionMetresPerPixel;
+
+    private MapViewState? _pendingView;
+
+    /// <summary>Where the view is now, once it has a viewport; otherwise the view it will open on, if one was given.</summary>
+    public MapViewState? CurrentView
+    {
+        get
+        {
+            if (!_attached || _mapControl.Map?.Navigator.Viewport is not { Resolution: > 0 } viewport) return _pendingView;
+            return new(WebMercator.ToWgs84(viewport.CenterX, viewport.CenterY), viewport.Resolution);
+        }
+    }
+
+    /// <summary>
+    /// Shows <paramref name="view"/>: its zoom always, and its centre unless the view follows the pin, in
+    /// which case the pin is the centre. <paramref name="centreOnPin"/> overrides that for this once: the
+    /// main map, which always follows the pin, still takes a switched-in centre until the pin next moves.
+    /// Before the view is on screen it is kept and shown on arrival.
+    /// </summary>
+    public void ShowView(MapViewState view, bool? centreOnPin = null)
+    {
+        var resolution = Math.Clamp(double.IsFinite(view.Resolution) && view.Resolution > 0 ? view.Resolution : 650, MinimumResolution, MaximumResolution);
+        _pendingView = view with { Resolution = resolution };
+        if (!_attached || _mapControl.Map is null) return;
+        var centre = WebMercator.FromWgs84(centreOnPin ?? FollowObserver ? Observer : view.Centre);
+        _mapControl.Map.Navigator.CenterOnAndZoomTo(new MPoint(centre.X, centre.Y), resolution, 0);
+        _overlay.InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Zooms in (positive) or out (negative) by whole steps of two, about the view's own centre, within
+    /// the Planner's zoom range. Returns whether the zoom changed.
+    /// </summary>
+    public bool Zoom(int steps)
+    {
+        if (steps == 0 || !_attached || _mapControl.Map?.Navigator is not { } navigator || navigator.Viewport.Resolution <= 0) return false;
+        var current = navigator.Viewport.Resolution;
+        var next = Math.Clamp(current / Math.Pow(2, steps), MinimumResolution, MaximumResolution);
+        if (Math.Abs(next - current) < current * 1e-9) return false;
+        navigator.ZoomTo(next, 0);
+        // The map has limits of its own: at one, nothing changed.
+        if (Math.Abs(navigator.Viewport.Resolution - current) < current * 1e-9) return false;
+        _pendingView = CurrentView;
+        _overlay.InvalidateVisual();
+        return true;
+    }
+
+    private NoctaxisMapView? _attributionCompanion;
+    /// <summary>
+    /// Another view whose credits this one's attribution strip gives as well: the Picture-in-Picture map,
+    /// which credits nothing itself. Each credit is still given once.
+    /// </summary>
+    public NoctaxisMapView? AttributionCompanion
+    {
+        get => _attributionCompanion;
+        set
+        {
+            if (ReferenceEquals(_attributionCompanion, value)) return;
+            if (_attributionCompanion is { } previous) previous._composition.Runtime.AttributionChanged -= RefreshAttribution;
+            _attributionCompanion = value;
+            if (value is not null) value._composition.Runtime.AttributionChanged += RefreshAttribution;
+            RefreshAttribution();
+        }
+    }
     private LightPollutionMapBinding? _lightPollution;
     public static readonly StyledProperty<LightPollutionPreferences> LightPollutionPreferencesProperty =
         AvaloniaProperty.Register<NoctaxisMapView, LightPollutionPreferences>(nameof(LightPollutionPreferences), new());
@@ -82,6 +205,8 @@ public class NoctaxisMapView : UserControl
         get => GetValue(LightPollutionPreferencesProperty);
         set => SetValue(LightPollutionPreferencesProperty, value);
     }
+    /// <summary>This map's reader of the installed atlas, which the shot-viability score shares.</summary>
+    internal Noctaxis.Core.LightPollution.LightPollutionDataProvider? LightPollutionProvider => _lightPollution?.Provider;
     public void ConfigureLightPollution(Noctaxis.Core.LightPollution.LorenzInstallation installation)
     {
         if (_lightPollution is not null) throw new InvalidOperationException("Light Pollution is already configured.");
@@ -109,7 +234,32 @@ public class NoctaxisMapView : UserControl
         if (_terrainRelief is not null) throw new InvalidOperationException("Terrain relief is already configured.");
         if (!_composition.Composition.Layers.Any(x => x.Id == TerrainReliefMapBinding.LayerId)) return;
         _terrainRelief = new(_composition, elevation, () => GetValue(TerrainReliefStrengthProperty));
+        _terrainRelief.SetTone(ReliefTone);
     }
+
+    /// <summary>
+    /// Shows the environmental layers <paramref name="primary"/> is configured with, from its own sources:
+    /// the Picture-in-Picture map borrows the main map's terrain relief source (shaded relief, computed
+    /// and cached once) and light pollution reader (the decoded atlas, read and held once). The layers,
+    /// their state and their drawn tiles stay this view's. <paramref name="primary"/> must outlive it.
+    /// </summary>
+    internal void ShareEnvironmentalSources(NoctaxisMapView primary)
+    {
+        if (primary._terrainRelief is { } terrain && _terrainRelief is null &&
+            _composition.Composition.Layers.Any(x => x.Id == TerrainReliefMapBinding.LayerId))
+        {
+            _terrainRelief = new(_composition, terrain.Source, () => GetValue(TerrainReliefStrengthProperty));
+            _terrainRelief.SetTone(ReliefTone);
+        }
+        if (primary._lightPollution is { } light && _lightPollution is null)
+        {
+            _lightPollution = new(_composition, light.Installation, light.Provider);
+            _lightPollution.SetPalette(LightPollutionPreferences.PaletteId);
+            if (_attached) _lightPollution.Attach();
+        }
+    }
+
+    internal LightPollutionMapBinding? LightPollutionForTesting => _lightPollution;
 
     // Final window close only; ordinary visual detachment must remain reattachable.
     public async ValueTask ReleaseLightPollutionAsync()
@@ -143,7 +293,12 @@ public class NoctaxisMapView : UserControl
         };
         var savePinMenuItem = new MenuItem { Header = Strings.Get("Planner_Map_SaveCurrentPin_MenuItem") };
         savePinMenuItem.Click += (_, _) => SaveCurrentPinRequested?.Invoke(this, EventArgs.Empty);
-        _mapControl.ContextMenu = new ContextMenu { ItemsSource = new object[] { setPinMenuItem, savePinMenuItem } };
+        var openMapsMenuItem = new MenuItem { Header = Strings.Get("Planner_Location_OpenMaps_Button") };
+        openMapsMenuItem.Click += (_, _) =>
+        {
+            if (_contextCoordinate is { } coordinate) OpenInMapsRequested?.Invoke(this, coordinate.Normalised());
+        };
+        _mapControl.ContextMenu = new ContextMenu { ItemsSource = new object[] { setPinMenuItem, savePinMenuItem, openMapsMenuItem } };
         // Capture the coordinate before Avalonia transfers input to the context menu. ContextRequested
         // does not reliably retain a pointer position on every supported platform.
         _mapControl.AddHandler(PointerPressedEvent, MapPointerPressed, RoutingStrategies.Tunnel, handledEventsToo: true);
@@ -154,41 +309,29 @@ public class NoctaxisMapView : UserControl
             IsHitTestVisible = false,
             ClipToBounds = true
         };
-        var attribution = _attribution = new TextBlock
-        {
-            Text = _composition.Runtime.AttributionText, Padding = new Thickness(7, 3),
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
-            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom, Margin = new Thickness(8)
-        };
-        attribution.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeText"));
-        attribution.Bind(TextBlock.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeBackground"));
-        attribution.Bind(TextBlock.FontSizeProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("TextSmall"));
+        var attribution = _attributionStrip = CreateAttributionStrip(out _attribution, out _attributionInfo, out _attributionDetails);
+        RefreshAttribution();
         // The map canvas shows before tiles arrive and beyond their extent. Mapsui paints its own opaque
         // Map.BackColor (white by default) over the control background, so both follow MapSurface.
-        Bind(BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.Surface));
-        Bind(MapSurfaceColourProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(MapThemeTokens.Surface)));
-        _overlay.Bind(MapOverlay.CelestialColoursProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(CelestialThemeTokens.ColourSet));
-        _overlay.Bind(MapOverlay.LineHaloProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
-            MapThemeTokens.ColourKey(MapThemeTokens.LabelHalo)));
-        _overlay.Bind(MapOverlay.WeatherMarkProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
-            MapThemeTokens.ColourKey(MapThemeTokens.Label)));
-        _overlay.Bind(MapOverlay.PinFillProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
-            MapThemeTokens.ColourKey(MapThemeTokens.PinFill)));
-        _overlay.Bind(MapOverlay.PinOutlineProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
-            MapThemeTokens.ColourKey(MapThemeTokens.PinOutline)));
-        _overlay.Bind(MapOverlay.PinActivityColourProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(
-            MapThemeTokens.ColourKey(MapThemeTokens.PinActivity)));
+        this.BindThemeDefault(BackgroundProperty, MapThemeTokens.Surface);
+        this.BindThemeDefault(MapSurfaceColourProperty, MapThemeTokens.ColourKey(MapThemeTokens.Surface));
+        _overlay.BindThemeDefault(MapOverlay.CelestialColoursProperty, CelestialThemeTokens.ColourSet);
+        _overlay.BindThemeDefault(MapOverlay.LineHaloProperty, MapThemeTokens.ColourKey(MapThemeTokens.LabelHalo));
+        _overlay.BindThemeDefault(MapOverlay.WeatherMarkProperty, MapThemeTokens.ColourKey(MapThemeTokens.Label));
+        _overlay.BindThemeDefault(MapOverlay.PinFillProperty, MapThemeTokens.ColourKey(MapThemeTokens.PinFill));
+        _overlay.BindThemeDefault(MapOverlay.PinOutlineProperty, MapThemeTokens.ColourKey(MapThemeTokens.PinOutline));
+        _overlay.BindThemeDefault(MapOverlay.PinActivityColourProperty, MapThemeTokens.ColourKey(MapThemeTokens.PinActivity));
         // The vector basemap is drawn from the theme's basemap roles and restyled live.
         foreach (var (property, token) in BasemapRoleProperties.Zip(MapThemeTokens.Basemap))
-            Bind(property, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.ColourKey(token)));
-        Bind(TerrainReliefStrengthProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(MapThemeTokens.TerrainReliefStrength));
+            this.BindThemeDefault(property, MapThemeTokens.ColourKey(token));
+        this.BindThemeDefault(TerrainReliefStrengthProperty, MapThemeTokens.TerrainReliefStrength);
         ApplyBasemapStyle();
         // Place names follow the application language: there is no separate map-language setting.
         _composition.ApplyLabelLanguage(AppLanguages.Current);
         Content = new Grid { Children = { _mapControl, _overlay, attribution } };
 
         _composition.Runtime.SetActive("camera-framing", ShowCameraOverlay);
-        _composition.Runtime.SetActive("celestial-rays", ShowCelestialOverlays);
+        _composition.Runtime.SetActive("celestial-rays", ShowCelestialOverlays && !IsPictureInPicture);
         UpdateEnvironmentalLayerGate();
         foreach (var id in new[] { "environmental-shading", "camera-framing", "celestial-rays", "observer-pin" })
             _composition.Runtime.BindAdapter(id, new DelegateMapLayerStateAdapter(ApplyOverlayLayerState));
@@ -223,7 +366,8 @@ public class NoctaxisMapView : UserControl
             map.Navigator.ViewportChanged += ViewportChanged;
             _pinInteraction.SetCommittedCoordinate(Observer);
             UpdateOverlay();
-            CenterOn(Observer);
+            if (_pendingView is { } view) ShowView(view);
+            else CenterOn(Observer);
             UpdateGroundScale();
             UpdateAnimationTimer();
         };
@@ -231,6 +375,7 @@ public class NoctaxisMapView : UserControl
         {
             _attached = false;
             _lightPollution?.Detach();
+            _attributionInfo.Flyout?.Hide();
             _composition.Runtime.AttributionChanged -= RefreshAttribution;
             AppLanguages.CurrentChanged -= ApplyLabelLanguage;
             _viewportRedraw.Detach();
@@ -255,12 +400,20 @@ public class NoctaxisMapView : UserControl
     public event EventHandler<GeoCoordinate>? CoordinateCommitted;
     public event EventHandler<bool>? InteractionStateChanged;
     public event EventHandler? SaveCurrentPinRequested;
+    public event EventHandler<GeoCoordinate>? OpenInMapsRequested;
 
     internal MapControl MapControlForTesting => _mapControl;
     protected MapLayerStateController LayerRuntime => _composition.Runtime;
     internal PlannerMapComposition CompositionForTesting => _composition;
+
+    /// <summary>The themed vector basemap this view draws, for a clean export map; null while imagery is shown.</summary>
+    internal Mapping.Vector.ThemedVectorTileSource? VectorBasemapSource =>
+        (_composition.ActiveBasemap as Mapping.Vector.OpenFreeMapBasemap)?.Source;
     internal string? AttributionForTesting => _attribution.Text;
     internal TextBlock AttributionControlForTesting => _attribution;
+    internal Border AttributionStripForTesting => _attributionStrip;
+    internal Button AttributionInfoForTesting => _attributionInfo;
+    internal StackPanel AttributionDetailsForTesting => _attributionDetails;
     internal (Color Fill, Color Outline, Color Activity) PinColoursForTesting =>
         (_overlay.PinFill, _overlay.PinOutline, _overlay.PinActivityColour);
     internal CelestialColourSet CelestialColoursForTesting => _overlay.CelestialColours;
@@ -354,6 +507,11 @@ public class NoctaxisMapView : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == AttributionReservedLeftProperty)
+        {
+            _attributionStrip.Margin = new Thickness(8 + Math.Max(0, AttributionReservedLeft), 8, 8, 8);
+            return;
+        }
         if (change.Property == MapSurfaceColourProperty)
         {
             if (_composition is not null) ApplyMapSurface();
@@ -410,8 +568,15 @@ public class NoctaxisMapView : UserControl
         {
             _pinInteraction.SetCommittedCoordinate(Observer);
             UpdateOverlay();
-            if (_attached && !_committingPin) CenterOn(Observer);
-            _committingPin = false;
+            // Only a horizontal move is a new place to follow. Resolving the ground elevation replaces
+            // Observer at the same latitude and longitude, seconds after a pin commit; that must neither
+            // pull a map the user has since panned back to the pin nor consume the pending commit.
+            var previous = change.GetOldValue<GeoCoordinate>();
+            if (previous.Latitude != Observer.Latitude || previous.Longitude != Observer.Longitude)
+            {
+                if (_attached && !_committingPin && FollowObserver) CenterOn(Observer);
+                _committingPin = false;
+            }
         }
         else if (change.Property == PinActivityProperty)
         {
@@ -420,9 +585,30 @@ public class NoctaxisMapView : UserControl
             UpdateAnimationTimer();
             _overlay.InvalidateVisual();
         }
+        else if (change.Property == IsPictureInPictureProperty)
+        {
+            // A secondary view is looked at, not worked: no input, no credits of its own, and only the
+            // lightweight part of the camera overlay.
+            IsHitTestVisible = !IsPictureInPicture;
+            _attributionStrip.IsVisible = !IsPictureInPicture;
+            _composition!.Runtime.SetActive("celestial-rays", ShowCelestialOverlays && !IsPictureInPicture);
+            UpdateEnvironmentalLayerGate();
+        }
+        else if (change.Property == FollowObserverProperty)
+        {
+            if (FollowObserver && _attached) CenterOn(Observer);
+        }
+        else if (change.Property == ShowRoadsAndLabelsProperty)
+        {
+            _composition!.Runtime.SetActive(PlannerMapComposition.BasemapReferenceId, ShowRoadsAndLabels);
+        }
+        else if (change.Property == EnhanceReliefContrastProperty)
+        {
+            _terrainRelief?.SetTone(ReliefTone);
+        }
         else if (change.Property == ShowCelestialOverlaysProperty)
         {
-            _composition!.Runtime.SetActive("celestial-rays", ShowCelestialOverlays);
+            _composition!.Runtime.SetActive("celestial-rays", ShowCelestialOverlays && !IsPictureInPicture);
         }
         else if (change.Property == ShowCameraOverlayProperty)
         {
@@ -495,12 +681,102 @@ public class NoctaxisMapView : UserControl
         _overlay.InvalidateVisual();
     }
 
-    private void RefreshAttribution(object? sender = null, EventArgs? args = null) =>
-        _attribution.Text = _composition.Runtime.AttributionText;
+    /// <summary>
+    /// The map's one attribution surface: a compact line naming every provider whose content is drawn
+    /// now, and an info button opening Map data &amp; licences, which gives each of those credits in full
+    /// with its links. Both follow the active credits, and change only when they do.
+    /// </summary>
+    /// <summary>The credits this strip gives: this view's own, then its companion's, each once.</summary>
+    internal IReadOnlyList<MapAttribution> StripAttributions => _attributionCompanion is { } companion
+        ? MapAttributions.Distinct(_composition.Runtime.ActiveAttributions.Concat(companion._composition.Runtime.ActiveAttributions))
+        : _composition.Runtime.ActiveAttributions;
+
+    private void RefreshAttribution(object? sender = null, EventArgs? args = null)
+    {
+        var credits = StripAttributions;
+        _attribution.Text = MapAttributions.Line(credits);
+        _attributionDetails.Children.RemoveRange(1, _attributionDetails.Children.Count - 1);
+        foreach (var credit in credits)
+        {
+            var links = new WrapPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, ItemSpacing = 12 };
+            if (credit.Url is { } url) links.Children.Add(AttributionLink(DisplayAddress(url), url));
+            if (credit.LicenceUrl is { } licence && credit.LicenceName is { } licenceName)
+                links.Children.Add(AttributionLink(Strings.Format("Planner_Map_Licence_Format", licenceName), licence));
+            _attributionDetails.Children.Add(new StackPanel
+            {
+                Tag = credit.Id,
+                Children = { new TextBlock { Text = credit.Credit, TextWrapping = TextWrapping.Wrap }, links }
+            });
+        }
+    }
+
+    private Border CreateAttributionStrip(out TextBlock line, out Button info, out StackPanel details)
+    {
+        line = new TextBlock
+        {
+            Text = _composition.Runtime.AttributionText,
+            // Attribution is a licence obligation, so it wraps rather than running off the map: the map
+            // is only as wide as the panels around it leave it, and at a large text size that is narrow.
+            TextWrapping = TextWrapping.Wrap, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Margin = new Thickness(0, 3)
+        };
+        line.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeText"));
+        line.Bind(TextBlock.FontSizeProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("TextSmall"));
+        details = new StackPanel { Spacing = 8, MaxWidth = 320 };
+        details.Children.Add(new TextBlock { Text = Strings.Get("Planner_Map_Licences_Heading"), FontWeight = FontWeight.SemiBold });
+        // Small to look at, never small to hit; a click, a tap, Enter or Space opens it.
+        var glyph = new Avalonia.Controls.Shapes.Path
+        {
+            Width = 13, Height = 13, Stretch = Stretch.Uniform,
+            Data = Geometry.Parse("F0 M12,2 A10,10 0 1 1 12,22 A10,10 0 1 1 12,2 Z M12,3.8 A8.2,8.2 0 1 0 12,20.2 A8.2,8.2 0 1 0 12,3.8 Z M10.9,10 L13.1,10 L13.1,17.5 L10.9,17.5 Z M10.9,6.2 L13.1,6.2 L13.1,8.4 L10.9,8.4 Z")
+        };
+        glyph.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MapChromeText"));
+        info = new Button
+        {
+            Name = "MapAttributionInfo", Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 2), MinWidth = 32, MinHeight = 28,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center, Content = glyph,
+            Flyout = new Flyout { Placement = PlacementMode.TopEdgeAlignedRight, Content = details }
+        };
+        var name = Strings.Get("Planner_Map_Licences_AccessibleName");
+        Avalonia.Automation.AutomationProperties.SetName(info, name);
+        // The icon alone does not say what it opens.
+        ToolTip.SetTip(info, name);
+        Grid.SetColumn(info, 1);
+        var strip = new Border
+        {
+            Name = "MapAttribution", CornerRadius = new CornerRadius(4), Padding = new Thickness(7, 0, 0, 0),
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Bottom, Margin = new Thickness(8),
+            Child = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Children = { line, info } }
+        };
+        strip.Classes.Add("mapChrome");
+        return strip;
+    }
+
+    private Button AttributionLink(string text, Uri url)
+    {
+        var content = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap, TextDecorations = TextDecorations.Underline };
+        content.Bind(TextBlock.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("Accent"));
+        var link = new Button
+        {
+            Content = content, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+            Padding = new Thickness(0, 4), MinHeight = 28, Tag = url, Cursor = new Cursor(StandardCursorType.Hand)
+        };
+        link.Click += (_, _) =>
+        {
+            if (OpenLinkCommand is { } command && command.CanExecute(url)) command.Execute(url);
+        };
+        return link;
+    }
+
+    /// <summary>A link's address as its own label: no scheme, no "www.", no trailing slash.</summary>
+    internal static string DisplayAddress(Uri url) =>
+        (url.Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? url.Host[4..] : url.Host) + url.AbsolutePath.TrimEnd('/');
 
     private void UpdateEnvironmentalLayerGate() =>
         _composition.Runtime.SetActive("environmental-shading",
-            _composition.Runtime["camera-framing"].IsRenderable && _overlay.FramingSettings.ShadingOpacityPercent > 0);
+            !IsPictureInPicture && _composition.Runtime["camera-framing"].IsRenderable && _overlay.FramingSettings.ShadingOpacityPercent > 0);
 
     // One control-plane adapter for the existing shared surface. Draw order and renderer
     // ownership stay in MapOverlay. Existing readiness bindings remain authoritative gates.
@@ -839,7 +1115,7 @@ public class NoctaxisMapView : UserControl
                     DrawCameraFramingGuide(context, snapshot, _cameraGeometry, _cameraBaseFill,
                         FramingSettings, currentViewport.Value);
                 if (_celestialGeometry is not null)
-                    DrawCelestialRays(context, snapshot, _celestialGeometry, FramingSettings, currentViewport.Value, pin.Value);
+                    DrawCelestialRays(context, snapshot, _celestialGeometry, FramingSettings, currentViewport.Value);
                 if (ShowTerrainDebug)
                     TerrainSampleRenderer.Draw(context, snapshot,
                         FramingGuide?.CentreBearingDegrees ?? snapshot.Position.Horizontal.AzimuthDegrees,
@@ -904,7 +1180,7 @@ public class NoctaxisMapView : UserControl
                     var plan = plans[index];
                     rays[index] = new CelestialRayRenderGeometry(
                         plan.Position.Target,
-                        plan.Position.Target.Id.Equals(Snapshot.Position.Target.Id, StringComparison.OrdinalIgnoreCase),
+                        Snapshot.Session.IsTargetFocused && plan.Position.Target.Id.Equals(Snapshot.Position.Target.Id, StringComparison.OrdinalIgnoreCase),
                         GeometryBuilder.BuildRay(new GeoRay(
                             Observer,
                             plan.Position.Horizontal.AzimuthDegrees,
@@ -1003,10 +1279,10 @@ public class NoctaxisMapView : UserControl
                 DrawTerrainTopology(context, _environmentalState, currentViewport);
 #endif
 
+            // The field of view's two edges only: a centre line said nothing the edges and the camera do not.
             var edgeAlpha = overlay.Sector.HorizontalFovDegrees < 3 ? (byte)160 : (byte)128;
             DrawBoundary(context, overlay.LeftBoundary, colour, edgeAlpha, settings.LineThickness, currentViewport);
             DrawBoundary(context, overlay.RightBoundary, colour, edgeAlpha, settings.LineThickness, currentViewport);
-            DrawBoundary(context, overlay.CentreBearing, colour, 190, settings.LineThickness * 1.45, currentViewport);
         }
 
 #if DEBUG
@@ -1037,8 +1313,7 @@ public class NoctaxisMapView : UserControl
             PlanningSnapshot snapshot,
             IReadOnlyList<CelestialRayRenderGeometry> rays,
             CameraFramingSettings framingSettings,
-            Viewport currentViewport,
-            Point observer)
+            Viewport currentViewport)
         {
             var lineThickness = framingSettings.Normalised().LineThickness;
             var colours = CelestialColours;
@@ -1046,27 +1321,13 @@ public class NoctaxisMapView : UserControl
             foreach (var ray in rays)
             {
                 var role = CelestialPalette.Role(snapshot, ray.Target);
-                var brush = new SolidColorBrush(colours[role]);
-                // A halo in the basemap's label-halo colour keeps the ray legible over roads, water and
-                // pale land; secondary rays carry the object's own dash pattern, as on the chart.
-                DrawPath(context, ray.Geometry.Coordinates, new Pen(halo, lineThickness + 2), currentViewport);
-                DrawPath(context, ray.Geometry.Coordinates, new Pen(brush, lineThickness,
-                    dashStyle: ray.IsPrimary ? null : CelestialPalette.Dash(role)), currentViewport);
-                // The object's marker a fixed distance out from the pin, matching the target-list key.
-                if (ray.Geometry.Coordinates.Count > 1 &&
-                    Project(ray.Geometry.Coordinates[^1], currentViewport) is { } end)
-                {
-                    var direction = end - observer;
-                    var length = Math.Sqrt(direction.X * direction.X + direction.Y * direction.Y);
-                    if (length > RayMarkerDistance)
-                        CelestialPalette.DrawMarker(context, role, observer + direction * (RayMarkerDistance / length),
-                            ray.IsPrimary ? 10 : 8, brush, halo);
-                }
+                // The target's own stroke, as on the timeline and in its line sample; a halo in the basemap's
+                // label-halo colour keeps it legible over roads, water and pale land. No shape on the ray.
+                var stroke = CelestialPalette.Stroke(colours, role, ray.IsPrimary, lineThickness);
+                DrawPath(context, ray.Geometry.Coordinates, new Pen(halo, stroke.Thickness + 2), currentViewport);
+                DrawPath(context, ray.Geometry.Coordinates, stroke, currentViewport);
             }
         }
-
-        /// <summary>Screen distance of a ray's identity marker from the pin: clear of the pin and its activity ring.</summary>
-        internal const double RayMarkerDistance = 44;
 
         // Beyond the weather visibility distance the edge is dotted as well as grey, so the limit reads without colour.
         private static readonly IDashStyle WeatherLimitedEdge = new Avalonia.Media.Immutable.ImmutableDashStyle([1.5, 2], 0);

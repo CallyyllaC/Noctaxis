@@ -237,10 +237,9 @@ public sealed class MapThemeTokenTests
         var view = new NoctaxisMapView(new Mapping.PlannerMapComposition(vector)) { Observer = new GeoCoordinate(53, -1) };
         var map = view.MapControlForTesting.Map!;
         var basemap = map.Layers.ToArray();
-        var minimap = new LocalTerrainMap { Width = 208, Height = 208 };
         var panel = new Border { Classes = { "mapChrome" }, Child = new TextBlock { Text = "Chrome" } };
         var button = new Button { Classes = { "mapChrome" }, Content = "Layers" };
-        var window = new Window { Width = 800, Height = 600, Content = new Grid { Children = { view, minimap, panel, button } } };
+        var window = new Window { Width = 800, Height = 600, Content = new Grid { Children = { view, panel, button } } };
         try
         {
             service.SetSupporterEntitlement(true);
@@ -262,12 +261,7 @@ public sealed class MapThemeTokenTests
                 Assert.Equal((Token(MapThemeTokens.PinFill), Token(MapThemeTokens.PinOutline), Token(MapThemeTokens.PinActivity)),
                     view.PinColoursForTesting);
                 Assert.Equal(Token(MapThemeTokens.ChromeText), Brush(view.AttributionControlForTesting.Foreground));
-                Assert.Equal(Token(MapThemeTokens.ChromeBackground), Brush(view.AttributionControlForTesting.Background));
-                Assert.Equal(Token(MapThemeTokens.PinFill), minimap.ObserverFill);
-                Assert.Equal(Token(MapThemeTokens.PinOutline), minimap.ObserverOutline);
-                Assert.Equal(Token(MapThemeTokens.ViewFill), minimap.ViewFill);
-                Assert.Equal(Token(MapThemeTokens.ViewStroke), minimap.ViewStroke);
-                Assert.Equal(Token(MapThemeTokens.Bearing), minimap.BearingColour);
+                Assert.Equal(Token(MapThemeTokens.ChromeBackground), Brush(view.AttributionStripForTesting.Background));
                 Assert.Equal(Token(MapThemeTokens.ChromeBackground), Brush(panel.Background));
                 Assert.Equal(Token(MapThemeTokens.ChromeBorder), Brush(panel.BorderBrush));
                 Assert.Equal(Token(MapThemeTokens.ChromeBackground), Brush(button.Background));

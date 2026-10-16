@@ -45,8 +45,17 @@ public sealed class AppearancePreferencesConverter : JsonConverter<AppearancePre
             return false;
         }
         string? Text(string name) => Property(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        T EnumValue<T>(string name, T fallback) where T : struct, Enum =>
-            Property(name, out var v) && Enum.TryParse<T>(v.ToString(), true, out var parsed) ? parsed : fallback;
+        T EnumValue<T>(string name, T fallback) where T : struct, Enum
+        {
+            if (!Property(name, out var v)) return fallback;
+            if (Enum.TryParse<T>(v.ToString(), true, out var parsed) && Enum.IsDefined(parsed)) return parsed;
+            // Not a value this version knows. The state store's enum converter, when present, records it
+            // so a file from a newer build is not silently overwritten; the fallback is used either way.
+            try { v.Deserialize<T>(options); }
+            catch (JsonException) { }
+            catch (NotSupportedException) { }
+            return fallback;
+        }
         var family = Text("ThemeFamilyId");
         var id = family ?? Text("SelectedThemeId") ?? "builtin.noctaxis";
         var scale = Property("TextScale", out var s) && s.ValueKind == JsonValueKind.Number && s.TryGetDouble(out var value) ? value : 1;

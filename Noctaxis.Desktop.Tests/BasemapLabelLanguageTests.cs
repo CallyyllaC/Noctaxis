@@ -189,6 +189,64 @@ public sealed class BasemapLabelLanguageTests
         composition.Map.Dispose();
     }
 
+    // ---- Roads and names per view ----------------------------------------------------------------
+
+    /// <summary>
+    /// The Picture-in-Picture map's roads and names are gated out of its own composition, not masked: its
+    /// reference pass is switched off and never fetched or drawn, while the main map, over the same shared
+    /// source, keeps its own. The shared style and language are untouched, and nothing is rebuilt.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task RoadsAndLabelsAreEachViewsOwnOverOneSharedSource()
+    {
+        var fetcher = new CountingFetcher(TownBytes(("name", "Keld")));
+        var basemap = new OpenFreeMapBasemap(fetcher);
+        var main = new Controls.NoctaxisMapView(new PlannerMapComposition(basemap)) { Width = 256, Height = 256 };
+        var pip = new Controls.NoctaxisMapView(new PlannerMapComposition(new OpenFreeMapBasemap(basemap.Source)))
+        {
+            Width = 256, Height = 256, IsPictureInPicture = true, ShowRoadsAndLabels = false
+        };
+        ThemedBasemapTileLayer Pass(Controls.NoctaxisMapView view, BasemapPass pass) =>
+            view.CompositionForTesting.Map.Layers.OfType<ThemedBasemapTileLayer>().Single(layer => layer.Pass == pass);
+        // The tiles a layer has ready to draw for the view it is in.
+        int Drawn(Controls.NoctaxisMapView view, BasemapPass pass) => view.CompositionForTesting.Map.Navigator.Viewport is { Resolution: > 0 } viewport
+            ? Pass(view, pass).GetFeatures(Mapsui.Extensions.ViewportExtensions.ToExtent(viewport), viewport.Resolution).Count() : 0;
+        var pipLayers = pip.CompositionForTesting.Map.Layers.ToArray();
+        var (style, labels) = (basemap.Source.StyleVersion, basemap.Source.LabelVersion);
+
+        var pipRuntime = pip.CompositionForTesting.Runtime;
+        Assert.False(pipRuntime[PlannerMapComposition.BasemapReferenceId].IsActive);
+        Assert.True(pipRuntime[PlannerMapComposition.BasemapReferenceId].IsVisible);
+        Assert.False(Pass(pip, BasemapPass.Reference).Enabled);
+        Assert.True(Pass(pip, BasemapPass.Geography).Enabled);
+        Assert.True(main.CompositionForTesting.Runtime[PlannerMapComposition.BasemapReferenceId].IsRenderable);
+        Assert.True(Pass(main, BasemapPass.Reference).Enabled);
+
+        // On screen, the gated pass is never fetched or drawn; the geography over the same source is.
+        var window = new Avalonia.Controls.Window { Width = 256, Height = 256, Content = pip };
+        try
+        {
+            window.Show();
+            for (var i = 0; i < 100 && Drawn(pip, BasemapPass.Geography) == 0; i++)
+            {
+                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+                await Task.Delay(20);
+            }
+            Assert.True(Drawn(pip, BasemapPass.Geography) > 0);
+            Assert.Equal(0, Drawn(pip, BasemapPass.Reference));
+        }
+        finally { window.Close(); }
+
+        // On again: the same layers, restored in place, with nothing restyled.
+        pip.ShowRoadsAndLabels = true;
+        Assert.True(Pass(pip, BasemapPass.Reference).Enabled);
+        Assert.Equal(pipLayers, pip.CompositionForTesting.Map.Layers.ToArray());
+        Assert.Equal((style, labels), (basemap.Source.StyleVersion, basemap.Source.LabelVersion));
+        Assert.Equal((0, 0), (Pass(pip, BasemapPass.Reference).Invalidations, Pass(main, BasemapPass.Reference).Invalidations));
+        Assert.True(Pass(main, BasemapPass.Reference).Enabled);
+        main.CompositionForTesting.Map.Dispose();
+    }
+
     // ---- Machine values --------------------------------------------------------------------------
 
     [Fact]

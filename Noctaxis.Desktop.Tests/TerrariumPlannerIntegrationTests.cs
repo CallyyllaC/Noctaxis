@@ -62,7 +62,6 @@ public sealed class TerrariumPlannerIntegrationTests
         Assert.Equal(0, horizon.CompletedCacheDiagnostics.Misses);
         Assert.Equal(TerrainElevationResolutionState.TerrainDisabledFallback, vm.TerrainElevationResolutionState);
         Assert.Equal(1.7, vm.Snapshot.Terrain.ObserverAbsoluteElevationMetres!.Value, 8);
-        Assert.Null(vm.TerrainDebugMap);
         Assert.Null(vm.TerrainDebugProfile);
         Assert.Empty(vm.Snapshot.Terrain.Samples);
 
@@ -79,7 +78,7 @@ public sealed class TerrariumPlannerIntegrationTests
 
         await AssertZoomDoesNotSample();
         await vm.ApplySettingsAsync(vm.Settings with { EnableTerrainCalculations = true, TerrainDebugOverlay = false });
-        await vm.WaitForTerrainDebugMapRefreshAsync();
+        await vm.WaitForPlannerRefreshAsync();
         Assert.True(terrain.Requests > 0);
         Assert.True(fixture.Requests > 0);
         Assert.Equal(TerrainElevationResolutionState.TerrainResolved, vm.TerrainElevationResolutionState);
@@ -90,8 +89,6 @@ public sealed class TerrariumPlannerIntegrationTests
         async Task AssertZoomDoesNotSample()
         {
             var requests = (terrain.Requests, cover.Requests, fixture.Requests, horizon.CompletedCacheDiagnostics.Misses);
-            var snapshot = vm.TerrainDebugMap;
-            var generation = vm.TerrainDebugMapGeneration;
             var view = new Noctaxis.Desktop.Controls.NoctaxisMapView { Observer = vm.Observer };
             view.MapControlForTesting.Map!.Layers.Clear();
             var window = new Avalonia.Controls.Window { Width = 600, Height = 400, Content = view };
@@ -103,8 +100,6 @@ public sealed class TerrariumPlannerIntegrationTests
                     await Task.Run(() => view.MapControlForTesting.Map.Navigator.CenterOnAndZoomTo(new Mapsui.MPoint(world.X, world.Y), resolution, 0));
                 Avalonia.Threading.Dispatcher.UIThread.RunJobs();
                 Assert.Equal(requests, (terrain.Requests, cover.Requests, fixture.Requests, horizon.CompletedCacheDiagnostics.Misses));
-                Assert.Same(snapshot, vm.TerrainDebugMap);
-                Assert.Equal(generation, vm.TerrainDebugMapGeneration);
             }
             finally { window.Close(); }
         }

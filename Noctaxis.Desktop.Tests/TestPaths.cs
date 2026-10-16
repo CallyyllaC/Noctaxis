@@ -41,3 +41,17 @@ internal static partial class TestMarkup
 
     public static System.Xml.Linq.XDocument LoadMainWindow() => System.Xml.Linq.XDocument.Parse(ReadMainWindow());
 }
+
+internal static class TestMaps
+{
+    /// <summary>
+    /// Keeps a Planner window's Picture-in-Picture map offline, as the harnesses keep the main map: its
+    /// basemap layers are switched off, so no test reaches the tile server.
+    /// </summary>
+    public static void OfflinePip(Noctaxis.Desktop.Views.MainWindow window)
+    {
+        if (window.PipForTesting is not { } pip) return;
+        foreach (var (id, layer) in pip.CompositionForTesting.NativeLayerOrder)
+            if (id is "basemap" or Noctaxis.Desktop.Mapping.PlannerMapComposition.BasemapReferenceId) layer.Enabled = false;
+    }
+}

@@ -1,7 +1,8 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Data;
 using Avalonia.Media;
+using Noctaxis.Desktop.Themes;
 
 namespace Noctaxis.Desktop.Controls;
 
@@ -17,11 +18,16 @@ public abstract class ChromeDrawingControl : Control
     public IBrush ChromeBackground { get => GetValue(ChromeBackgroundProperty); set => SetValue(ChromeBackgroundProperty, value); }
     public IBrush ChromeForeground { get => GetValue(ChromeForegroundProperty); set => SetValue(ChromeForegroundProperty, value); }
     public double ChromeFontSize { get => GetValue(ChromeFontSizeProperty); set => SetValue(ChromeFontSizeProperty, value); }
+    /// <summary>
+    /// The theme's colours and size are only defaults (<see cref="ThemeDefault"/>): a value set in markup (the
+    /// Camera frame's direction pad lies transparent over the picture) or by a style stays set when the theme's
+    /// resources are replaced.
+    /// </summary>
     protected ChromeDrawingControl()
     {
-        this.Bind(ChromeBackgroundProperty, new DynamicResourceExtension("SurfaceBackground"));
-        this.Bind(ChromeForegroundProperty, new DynamicResourceExtension("SecondaryText"));
-        this.Bind(ChromeFontSizeProperty, new DynamicResourceExtension("TextCaption"));
+        this.BindThemeDefault(ChromeBackgroundProperty, "SurfaceBackground");
+        this.BindThemeDefault(ChromeForegroundProperty, "SecondaryText");
+        this.BindThemeDefault(ChromeFontSizeProperty, "TextCaption");
     }
     static ChromeDrawingControl()
     {

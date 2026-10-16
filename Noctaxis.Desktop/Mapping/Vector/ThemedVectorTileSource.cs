@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using BruTile;
 using BruTile.Predefined;
 
@@ -49,7 +50,7 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
     public ITileSchema Schema { get; } =
         new GlobalSphericalMercator("png", YAxis.OSM, 0, MaximumDisplayZoom, "Noctaxis themed vector basemap");
     public string Name => "OpenFreeMap vector tiles, drawn in the Noctaxis theme";
-    public Attribution Attribution { get; } = new(OpenFreeMapBasemap.AttributionText, "https://openfreemap.org");
+    public Attribution Attribution { get; } = new(OpenFreeMapBasemap.AttributionText, MapAttributions.OpenFreeMap.Url!.AbsoluteUri);
 
     public BasemapStyle Style { get { lock (_gate) return _style; } }
     public long StyleVersion => Interlocked.Read(ref _styleVersion);
@@ -134,7 +135,9 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
                 _recency.AddFirst(key);
                 return existing;
             }
-            var created = LoadAsync(zoom, column, row);
+            var registration = new StrongBox<Task<VectorTile?>>();
+            var created = LoadAsync(zoom, column, row, registration);
+            registration.Value = created;
             _decoded[key] = created;
             _recency.AddFirst(key);
             while (_recency.Count > _decodedCapacity)
@@ -146,7 +149,7 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
         }
     }
 
-    private async Task<VectorTile?> LoadAsync(int zoom, int column, int row)
+    private async Task<VectorTile?> LoadAsync(int zoom, int column, int row, StrongBox<Task<VectorTile?>> registration)
     {
         // Always complete after GetDecodedAsync has registered this task, so an unavailable result
         // below removes the registration instead of racing ahead of it.
@@ -163,12 +166,23 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
         }
         catch (InvalidDataException)
         {
+            // Malformed input, from the server or the disk cache: forget the stored bytes so a retry fetches.
             _fetcher.Discard(zoom, column, row);
         }
-        // Unavailable tiles are not remembered, so a later request tries again.
-        if (tile is null)
-            lock (_gate)
-                if (_decoded.Remove((zoom, column, row))) _recency.Remove((zoom, column, row));
+        finally
+        {
+            // Unavailable tiles, and failures that are not malformed input (which still reach the caller), are
+            // not remembered, so a later request tries again. Only this load's own registration is removed:
+            // after an eviction the key may already belong to a newer load of the same tile.
+            if (tile is null)
+                lock (_gate)
+                    if (_decoded.TryGetValue((zoom, column, row), out var current) &&
+                        ReferenceEquals(current, registration.Value))
+                    {
+                        _decoded.Remove((zoom, column, row));
+                        _recency.Remove((zoom, column, row));
+                    }
+        }
         return tile;
     }
 }

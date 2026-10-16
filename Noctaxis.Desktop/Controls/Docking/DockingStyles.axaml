@@ -1,0 +1,213 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="clr-namespace:Noctaxis.Desktop.Localisation"
+        xmlns:docking="clr-namespace:Noctaxis.Desktop.Controls.Docking"
+        xmlns:domain="clr-namespace:Noctaxis.Core.Domain;assembly=Noctaxis.Core"
+        x:CompileBindings="False">
+  <Styles.Resources>
+    <!-- A drawing pin, filled while the panel is pinned and outlined while it is not, so the control
+         says which state it is in and not only what it will do. The same idea as the favourite star. -->
+    <StreamGeometry x:Key="PanelPinGlyph">M12,2 C9.8,2 8,3.8 8,6 C8,7.9 9.3,9.5 11,9.9 L11,13 L9,21 L12,22.5 L15,21 L13,13 L13,9.9 C14.7,9.5 16,7.9 16,6 C16,3.8 14.2,2 12,2 Z</StreamGeometry>
+  </Styles.Resources>
+
+  <!-- The chrome around every Planner panel. The title bar is the drag handle; every state it can be
+       dragged into is also a labelled command on the ••• menu, so a pointer gesture is never required. -->
+  <Style Selector="docking|PlannerPanelHost">
+    <Setter Property="Template">
+      <ControlTemplate TargetType="docking:PlannerPanelHost">
+        <Panel>
+          <Border x:Name="PART_Surface"
+                  Background="{DynamicResource SurfaceBackground}"
+                  BorderBrush="{DynamicResource SurfaceBorder}"
+                  BorderThickness="1" CornerRadius="6" Margin="3">
+            <Grid RowDefinitions="Auto,*">
+              <Border x:Name="PART_TitleBar" Classes="panelTitleBar">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="2">
+                  <TextBlock Text="{Binding Panel.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                             TextWrapping="Wrap" FontWeight="SemiBold" VerticalAlignment="Center"
+                             Margin="4,0,6,0" FontSize="{DynamicResource TextLabel}"/>
+
+                  <!-- Pin and unpin are one control with two states, never a state only hover reveals. -->
+                  <Button Grid.Column="1" Classes="panelChromeAction"
+                          DataContext="{Binding Panel, RelativeSource={RelativeSource TemplatedParent}}"
+                          Command="{Binding UnpinCommand}" IsVisible="{Binding IsPinned}"
+                          ToolTip.Tip="{Binding UnpinAccessibleName}"
+                          AutomationProperties.Name="{Binding UnpinAccessibleName}">
+                    <Path Data="{StaticResource PanelPinGlyph}" Stretch="Uniform" Width="12" Height="12"
+                          Fill="{DynamicResource Accent}" Stroke="{DynamicResource PrimaryText}" StrokeThickness="0.8"/>
+                  </Button>
+                  <Button Grid.Column="1" Classes="panelChromeAction"
+                          DataContext="{Binding Panel, RelativeSource={RelativeSource TemplatedParent}}"
+                          Command="{Binding PinCommand}" IsVisible="{Binding !IsPinned}"
+                          ToolTip.Tip="{Binding PinAccessibleName}"
+                          AutomationProperties.Name="{Binding PinAccessibleName}">
+                    <Path Data="{StaticResource PanelPinGlyph}" Stretch="Uniform" Width="12" Height="12"
+                          Fill="Transparent" Stroke="{DynamicResource SecondaryText}" StrokeThickness="1.6"/>
+                  </Button>
+
+                  <!-- Every placement, in words. This is the touch and keyboard route to all of them. -->
+                  <Button x:Name="PART_PanelMenu" Grid.Column="2" Classes="panelChromeAction"
+                          DataContext="{Binding Panel, RelativeSource={RelativeSource TemplatedParent}}"
+                          AutomationProperties.Name="{Binding MenuAccessibleName}">
+                    <TextBlock Text="•••" FontSize="{DynamicResource TextCaption}" LetterSpacing="1"/>
+                    <Button.Flyout>
+                      <MenuFlyout>
+                        <MenuItem Header="{loc:Text Planner_Panel_Pin_MenuItem}" Command="{Binding PinCommand}" IsVisible="{Binding !IsPinned}"/>
+                        <MenuItem Header="{loc:Text Planner_Panel_Unpin_MenuItem}" Command="{Binding UnpinCommand}" IsVisible="{Binding IsPinned}"/>
+                        <MenuItem Header="{loc:Text Planner_Panel_Float_MenuItem}" Command="{Binding FloatCommand}"/>
+                        <Separator/>
+                        <MenuItem Header="{loc:Text Planner_Panel_DockLeft_MenuItem}" Command="{Binding DockToCommand}" CommandParameter="{x:Static domain:PanelDockSide.Left}"/>
+                        <MenuItem Header="{loc:Text Planner_Panel_DockRight_MenuItem}" Command="{Binding DockToCommand}" CommandParameter="{x:Static domain:PanelDockSide.Right}"/>
+                        <MenuItem Header="{loc:Text Planner_Panel_DockTop_MenuItem}" Command="{Binding DockToCommand}" CommandParameter="{x:Static domain:PanelDockSide.Top}"/>
+                        <MenuItem Header="{loc:Text Planner_Panel_DockBottom_MenuItem}" Command="{Binding DockToCommand}" CommandParameter="{x:Static domain:PanelDockSide.Bottom}"/>
+                        <!-- How far this panel's dock runs past the docks beside it, said as the result
+                             rather than as a setting. Dropping a panel into a corner does the same thing. -->
+                        <MenuItem Header="{Binding SpanActionLabel}" Command="{Binding ToggleDockSpanCommand}" IsVisible="{Binding IsDocked}"/>
+                      </MenuFlyout>
+                    </Button.Flyout>
+                  </Button>
+                </Grid>
+              </Border>
+
+              <!-- The panel's own content, unchanged, scrolling inside whatever room the panel has. A panel
+                   whose content scrolls itself, such as one with a tab strip to keep in view, opts out
+                   with the selfScrolling class below. -->
+              <ScrollViewer x:Name="PART_ContentScroll" Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ContentPresenter x:Name="PART_ContentPresenter"
+                                  Content="{TemplateBinding Content}"
+                                  ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  Margin="10,8,10,10"/>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+
+          <!-- Resize grips. Both are deliberately wider than they look, so a finger can find them. -->
+          <Border x:Name="PART_DockGrip" Background="Transparent"
+                  DataContext="{Binding Panel, RelativeSource={RelativeSource TemplatedParent}}"
+                  IsVisible="{Binding IsDocked}"
+                  AutomationProperties.Name="{Binding ResizeAccessibleName}"/>
+          <Border x:Name="PART_FloatGrip" Classes="panelFloatGrip"
+                  DataContext="{Binding Panel, RelativeSource={RelativeSource TemplatedParent}}"
+                  IsVisible="{Binding IsFloating}"
+                  AutomationProperties.Name="{Binding ResizeAccessibleName}"/>
+        </Panel>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+
+  <!-- A floating panel is over the map rather than part of its frame, and it says so by casting a
+       shadow. High Contrast is not excepted: the panel's own border already carries the full weight. -->
+  <Style Selector="docking|PlannerPanelHost.floating /template/ Border#PART_Surface">
+    <Setter Property="BoxShadow" Value="0 8 24 0 #55000000"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource StrongBorder}"/>
+  </Style>
+
+  <!-- A panel whose content scrolls itself. The chrome's scroller stops scrolling, so it hands the
+       content the panel's own height rather than an unlimited one, and the content decides what stays
+       in view: the Inspector keeps its tab strip and scrolls only the tab beneath it. -->
+  <Style Selector="docking|PlannerPanelHost.selfScrolling /template/ ScrollViewer#PART_ContentScroll">
+    <Setter Property="VerticalScrollBarVisibility" Value="Disabled"/>
+  </Style>
+
+  <!-- The Inspector's tab strip: short labels at the page's text size, compact to look at and tall
+       enough to tap. The selected tab is the accent colour and semibold, with Fluent's own underline,
+       so which tab is open never rests on colour alone. -->
+  <Style Selector="TabControl.inspectorTabs">
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="TabControl.inspectorTabs > TabItem">
+    <Setter Property="FontSize" Value="{DynamicResource TextBody}"/>
+    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+    <Setter Property="MinHeight" Value="38"/>
+    <Setter Property="Padding" Value="10,6"/>
+    <Setter Property="Margin" Value="0"/>
+  </Style>
+  <Style Selector="TabControl.inspectorTabs > TabItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <Style Selector="Border.panelTitleBar">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Setter Property="CornerRadius" Value="5,5,0,0"/>
+    <Setter Property="Padding" Value="6,5"/>
+    <Setter Property="Cursor" Value="SizeAll"/>
+  </Style>
+
+  <!-- Small to look at, never small to hit: the minimum size is a touch target, not the glyph's size. -->
+  <Style Selector="Button.panelChromeAction">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="6,2"/>
+    <Setter Property="MinWidth" Value="32"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+  </Style>
+  <Style Selector="Button.panelChromeAction:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+  </Style>
+
+  <Style Selector="Border.panelFloatGrip">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Width" Value="18"/>
+    <Setter Property="Height" Value="18"/>
+    <Setter Property="HorizontalAlignment" Value="Right"/>
+    <Setter Property="VerticalAlignment" Value="Bottom"/>
+  </Style>
+
+  <!-- Where a dragged panel would dock if it were dropped now. -->
+  <Style Selector="Border.dockHint">
+    <Setter Property="Background" Value="{DynamicResource SelectionBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Opacity" Value="0.35"/>
+  </Style>
+
+  <!-- The tabs for unpinned panels. Each one carries the panel's own name at the page's text size, and
+       one tap opens it over the map. The name sits in a layout transform, so an edge can turn it: the
+       right edge turns it to read down the edge, keeping that strip a narrow column. -->
+  <Style Selector="ItemsControl.panelEdgeStrip">
+    <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+    <Setter Property="Padding" Value="3"/>
+    <Setter Property="ItemTemplate">
+      <DataTemplate>
+        <Button Classes="panelEdgeTab" Command="{Binding ToggleRevealCommand}"
+                AutomationProperties.Name="{Binding RevealAccessibleName}">
+          <LayoutTransformControl Classes="edgeTabLabel">
+            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="{DynamicResource TextLabel}"/>
+          </LayoutTransformControl>
+        </Button>
+      </DataTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.panelEdgeTab">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="5"/>
+    <Setter Property="Padding" Value="8,7"/>
+    <Setter Property="MinHeight" Value="34"/>
+    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+  </Style>
+  <Style Selector="ItemsControl.panelEdgeStrip.rightEdge LayoutTransformControl.edgeTabLabel">
+    <Setter Property="LayoutTransform" Value="rotate(90deg)"/>
+  </Style>
+  <Style Selector="ItemsControl.panelEdgeStrip.rightEdge LayoutTransformControl.edgeTabLabel > TextBlock">
+    <Setter Property="TextWrapping" Value="NoWrap"/>
+  </Style>
+  <!-- Turned, the name is centred in its tab, and the tab keeps its full touch target down the edge. -->
+  <Style Selector="ItemsControl.panelEdgeStrip.rightEdge Button.panelEdgeTab">
+    <Setter Property="Padding" Value="6,10"/>
+    <Setter Property="MinWidth" Value="32"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.panelEdgeTab:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+  </Style>
+</Styles>

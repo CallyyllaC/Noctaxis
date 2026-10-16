@@ -18,39 +18,6 @@ namespace Noctaxis.Core.Tests;
 public sealed class LocationAndCatalogueTests
 {
     [Fact]
-    public async Task DefaultResolution_PrefersLastCustomPosition()
-    {
-        var last = new GeoCoordinate(54.2, -2.4);
-        var resolver = new LocationResolver(new FakeDevice(null), NullLogger<LocationResolver>.Instance);
-        var result = await resolver.ResolveDefaultAsync(last, CancellationToken.None);
-        Assert.Equal(LocationResolutionSource.LastCustomPosition, result.Source);
-        Assert.Equal(last, result.Coordinate);
-    }
-
-    [Fact]
-    public async Task DeviceResolution_UsesDeviceAndFailureFallsBack()
-    {
-        var deviceResult = new LocationResolution(new GeoCoordinate(51, -1), LocationResolutionSource.OperatingSystemLocation, 25);
-        var resolver = new LocationResolver(new FakeDevice(deviceResult), NullLogger<LocationResolver>.Instance);
-        Assert.Equal(deviceResult, await resolver.ResolveDeviceOrFallbackAsync(null, CancellationToken.None));
-
-        var last = new GeoCoordinate(55, -3);
-        var failure = new LocationResolver(new ThrowingDevice(), NullLogger<LocationResolver>.Instance);
-        var fallback = await failure.ResolveDeviceOrFallbackAsync(last, CancellationToken.None);
-        Assert.Equal(LocationResolutionSource.LastCustomPosition, fallback.Source);
-        Assert.Equal(last, fallback.Coordinate);
-    }
-
-    [Fact]
-    public async Task RegionFallback_IsApproximateOrUsesNeutralFallback()
-    {
-        var resolver = new LocationResolver(new FakeDevice(null), NullLogger<LocationResolver>.Instance);
-        var result = await resolver.ResolveDefaultAsync(null, CancellationToken.None);
-        Assert.True(result.IsApproximate);
-        Assert.True(result.Source is LocationResolutionSource.SystemRegion or LocationResolutionSource.ApplicationFallback);
-    }
-
-    [Fact]
     public async Task OpenMeteoGeocoding_MapsRegionalContextAndCachesResults()
     {
         const string json = """{"results":[{"id":2643743,"name":"London","latitude":51.5085,"longitude":-0.1257,"elevation":25,"country":"United Kingdom","admin1":"England","timezone":"Europe/London"}]}""";
@@ -83,6 +50,45 @@ public sealed class LocationAndCatalogueTests
         Assert.Equal("England", first.RegionDescription);
         Assert.Equal(first, nearby);
         Assert.Equal(1, handler.Count);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task NominatimReverseGeocoding_StopsAskingForAnHourAfterARefusal(HttpStatusCode refusal)
+    {
+        // The public Nominatim limits apply to the whole application: a refused client must not keep asking.
+        var clock = new MutableClock(Instant.FromUtc(2024, 1, 1, 0, 0));
+        var handler = new StatusHandler(refusal);
+        var provider = new NominatimReverseGeocodingProvider(
+            new HttpClient(handler) { BaseAddress = new Uri("https://nominatim.openstreetmap.org/") }, clock,
+            NullLogger<NominatimReverseGeocodingProvider>.Instance);
+
+        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(51.5, -0.1), CancellationToken.None));
+        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(52.5, -1.1), CancellationToken.None));
+        Assert.Equal(1, handler.Count);
+
+        clock.Now += NominatimReverseGeocodingProvider.RefusalBackoff;
+        handler.Status = HttpStatusCode.NotFound;
+        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(53.5, -2.1), CancellationToken.None));
+        Assert.Equal(2, handler.Count);
+    }
+
+    private sealed class MutableClock(Instant now) : IClock
+    {
+        public Instant Now { get; set; } = now;
+        public Instant GetCurrentInstant() => Now;
+    }
+
+    private sealed class StatusHandler(HttpStatusCode status) : HttpMessageHandler
+    {
+        public HttpStatusCode Status { get; set; } = status;
+        public int Count { get; private set; }
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            Count++;
+            return Task.FromResult(new HttpResponseMessage(Status));
+        }
     }
 
     [Theory]
@@ -234,16 +240,6 @@ public sealed class LocationAndCatalogueTests
         Assert.False(normalised[10].IsVisible);
     }
 
-    [Theory]
-    [InlineData(DeviceLocationAvailabilityState.Available, true)]
-    [InlineData(DeviceLocationAvailabilityState.PermissionRequestable, true)]
-    [InlineData(DeviceLocationAvailabilityState.PermissionPermanentlyDenied, false)]
-    [InlineData(DeviceLocationAvailabilityState.Unsupported, false)]
-    public void DeviceAvailability_SeparatesRequestability(DeviceLocationAvailabilityState state, bool expected)
-    {
-        Assert.Equal(expected, new DeviceLocationAvailability(state).CanRequest);
-    }
-
     [Fact]
     public async Task Planning_DoesNotCalculateDisabledCatalogueObject()
     {
@@ -319,14 +315,6 @@ public sealed class LocationAndCatalogueTests
         Assert.Equal(supplied, environment.LastRequest);
     }
 
-    private sealed record FakeDevice(LocationResolution? Result) : IDeviceLocationProvider
-    {
-        public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => Task.FromResult(Result);
-    }
-    private sealed class ThrowingDevice : IDeviceLocationProvider
-    {
-        public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => throw new InvalidOperationException("Denied");
-    }
     private sealed class TestClock(Instant now) : IClock { public Instant GetCurrentInstant() => now; }
     private sealed class CountingHandler(string json) : HttpMessageHandler
     {

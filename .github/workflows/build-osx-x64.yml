@@ -1,0 +1,44 @@
+name: macOS x64 build
+
+# Builds the osx-x64 release package on a hosted runner of that operating system and processor, checks it
+# and starts it (platform-package.yml). Its status is this platform's README badge. Nothing is kept,
+# released or published: package.yml keeps packages for version tags and manual runs.
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths-ignore:
+      - docs/**
+      - images/**
+      - README.md
+      - ROADMAP.md
+      - CONTRIBUTING.md
+      - COMMERCIAL-LICENSING.md
+      - awoo.project.json
+  pull_request:
+    paths-ignore:
+      - docs/**
+      - images/**
+      - README.md
+      - ROADMAP.md
+      - CONTRIBUTING.md
+      - COMMERCIAL-LICENSING.md
+      - awoo.project.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a pull request replaces its run; runs for main and dev always finish, so their badges
+  # show a result rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  package:
+    uses: ./.github/workflows/platform-package.yml
+    with:
+      runner: macos-15-intel
+      rid: osx-x64

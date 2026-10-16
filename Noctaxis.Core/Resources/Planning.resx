@@ -24,4 +24,380 @@
   <data name="Planning_Visibility_DataUnavailable" xml:space="preserve">
     <value>Visibility data unavailable</value>
   </data>
+  <data name="Planning_Viability_Metric_CloudCover" xml:space="preserve">
+    <value>Cloud cover</value>
+  </data>
+  <data name="Planning_Viability_Metric_Darkness" xml:space="preserve">
+    <value>Darkness</value>
+  </data>
+  <data name="Planning_Viability_Metric_TargetAltitude" xml:space="preserve">
+    <value>Target altitude</value>
+  </data>
+  <data name="Planning_Viability_Metric_TerrainClearance" xml:space="preserve">
+    <value>Terrain clearance</value>
+  </data>
+  <data name="Planning_Viability_Metric_UsefulWindow" xml:space="preserve">
+    <value>Useful time</value>
+  </data>
+  <data name="Planning_Viability_Metric_Moon" xml:space="preserve">
+    <value>Moonlight</value>
+  </data>
+  <data name="Planning_Viability_Metric_FramePosition" xml:space="preserve">
+    <value>Target in frame</value>
+  </data>
+  <data name="Planning_Viability_Metric_FramingFit" xml:space="preserve">
+    <value>Framing fit</value>
+  </data>
+  <data name="Planning_Viability_Metric_ImageSampling" xml:space="preserve">
+    <value>Image sampling</value>
+  </data>
+  <data name="Planning_Viability_Rating_Excellent" xml:space="preserve">
+    <value>Excellent</value>
+  </data>
+  <data name="Planning_Viability_Rating_Good" xml:space="preserve">
+    <value>Good</value>
+  </data>
+  <data name="Planning_Viability_Rating_Fair" xml:space="preserve">
+    <value>Fair</value>
+  </data>
+  <data name="Planning_Viability_Rating_Poor" xml:space="preserve">
+    <value>Poor</value>
+  </data>
+  <data name="Planning_Viability_Rating_VeryPoor" xml:space="preserve">
+    <value>Very poor</value>
+  </data>
+  <data name="Planning_Viability_Rating_Unavailable" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Planning_Viability_Confidence_High" xml:space="preserve">
+    <value>High</value>
+  </data>
+  <data name="Planning_Viability_Confidence_Moderate" xml:space="preserve">
+    <value>Moderate</value>
+  </data>
+  <data name="Planning_Viability_Confidence_Low" xml:space="preserve">
+    <value>Low</value>
+  </data>
+  <data name="Planning_Viability_Severity_Good" xml:space="preserve">
+    <value>Good</value>
+  </data>
+  <data name="Planning_Viability_Severity_Caution" xml:space="preserve">
+    <value>Warning</value>
+  </data>
+  <data name="Planning_Viability_Severity_Critical" xml:space="preserve">
+    <value>Critical</value>
+  </data>
+  <data name="Planning_Viability_Status_Unavailable" xml:space="preserve">
+    <value>Unknown</value>
+  </data>
+  <data name="Planning_Viability_Status_NotApplicable" xml:space="preserve">
+    <value>Not applicable</value>
+  </data>
+  <data name="Planning_Viability_Cloud_NoForecast" xml:space="preserve">
+    <value>No cloud forecast is available, so cloud cover is unknown.</value>
+  </data>
+  <data name="Planning_Viability_Cloud_Loading" xml:space="preserve">
+    <value>The forecast is still loading.</value>
+  </data>
+  <data name="Planning_Viability_Cloud_Stale" xml:space="preserve">
+    <value>The forecast is out of date, so cloud cover is unknown.</value>
+  </data>
+  <data name="Planning_Viability_Cloud_NotForThisTime" xml:space="preserve">
+    <value>The forecast does not cover this time, so cloud cover is unknown.</value>
+  </data>
+  <data name="Planning_Viability_Cloud_NoCloudData" xml:space="preserve">
+    <value>The forecast has no cloud cover for this time.</value>
+  </data>
+  <data name="Planning_Viability_Cloud_Clear_Format" xml:space="preserve">
+    <value>{0:0}% cloud cover: clear skies are forecast.</value>
+    <comment>{0} is the total cloud cover, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Cloud_MostlyClear_Format" xml:space="preserve">
+    <value>{0:0}% cloud cover: mostly clear.</value>
+    <comment>{0} is the total cloud cover, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Cloud_Partly_Format" xml:space="preserve">
+    <value>{0:0}% cloud cover: cloud may reduce useful exposure time.</value>
+    <comment>{0} is the total cloud cover, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Cloud_Heavy_Format" xml:space="preserve">
+    <value>{0:0}% cloud cover: heavy cloud is likely to obscure the target.</value>
+    <comment>{0} is the total cloud cover, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Cloud_Overcast_Format" xml:space="preserve">
+    <value>{0:0}% cloud cover: the sky is forecast to be overcast.</value>
+    <comment>{0} is the total cloud cover, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Darkness_NotApplicable" xml:space="preserve">
+    <value>Darkness does not limit Sun or Moon photography.</value>
+  </data>
+  <data name="Planning_Viability_Darkness_Unavailable" xml:space="preserve">
+    <value>The Sun's position for this time is not available yet.</value>
+  </data>
+  <data name="Planning_Viability_Darkness_Astronomical_Format" xml:space="preserve">
+    <value>Astronomical darkness: Sun {0:0.0}° below the horizon.</value>
+    <comment>{0} is how far below the horizon the Sun is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Darkness_AstronomicalTwilight_Format" xml:space="preserve">
+    <value>Astronomical twilight: Sun {0:0.0}° below the horizon, so the sky is not quite fully dark.</value>
+    <comment>{0} is how far below the horizon the Sun is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Darkness_NauticalTwilight_Format" xml:space="preserve">
+    <value>Nautical twilight: Sun {0:0.0}° below the horizon, so the sky is too bright for faint detail.</value>
+    <comment>{0} is how far below the horizon the Sun is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Darkness_CivilTwilight_Format" xml:space="preserve">
+    <value>Civil twilight: Sun {0:0.0}° below the horizon, so the sky is too bright for deep-sky imaging.</value>
+    <comment>{0} is how far below the horizon the Sun is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Darkness_Daylight" xml:space="preserve">
+    <value>Daylight: the Sun is above the horizon.</value>
+  </data>
+  <data name="Planning_Viability_Altitude_Unavailable" xml:space="preserve">
+    <value>The target's position is not available.</value>
+  </data>
+  <data name="Planning_Viability_Altitude_BelowHorizon_Format" xml:space="preserve">
+    <value>Target is {0:0.0}° below the horizon.</value>
+    <comment>{0} is how far below the horizon the target is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Altitude_Low_Format" xml:space="preserve">
+    <value>Target is {0:0.0}° above the horizon: low, with more atmosphere and light pollution to image through.</value>
+    <comment>{0} is the target's altitude in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Altitude_Acceptable_Format" xml:space="preserve">
+    <value>Target is {0:0.0}° above the horizon, an acceptable altitude.</value>
+    <comment>{0} is the target's altitude in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Altitude_High_Format" xml:space="preserve">
+    <value>Target is {0:0.0}° above the horizon, providing favourable positioning.</value>
+    <comment>{0} is the target's altitude in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Altitude_SolarLow_Format" xml:space="preserve">
+    <value>Low in the sky at {0:0.0}°: haze and turbulence soften detail.</value>
+    <comment>{0} is the Sun's or Moon's altitude in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Altitude_SolarWellPlaced_Format" xml:space="preserve">
+    <value>{0:0.0}° above the horizon: well placed.</value>
+    <comment>{0} is the Sun's or Moon's altitude in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Terrain_Disabled" xml:space="preserve">
+    <value>Terrain calculations are turned off, so terrain is not assessed.</value>
+  </data>
+  <data name="Planning_Viability_Terrain_Loading" xml:space="preserve">
+    <value>Terrain is still loading.</value>
+  </data>
+  <data name="Planning_Viability_Terrain_Unavailable" xml:space="preserve">
+    <value>No terrain horizon is available for this place yet.</value>
+  </data>
+  <data name="Planning_Viability_Terrain_Hidden_Format" xml:space="preserve">
+    <value>Terrain hides the target: it is {0:0.0}° below the terrain horizon.</value>
+    <comment>{0} is how far below the terrain horizon the target is, in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Terrain_Marginal_Format" xml:space="preserve">
+    <value>The target clears the terrain by only {0:0.0}°.</value>
+    <comment>{0} is the clearance in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Terrain_Clear_Format" xml:space="preserve">
+    <value>The target clears the terrain by {0:0.0}°.</value>
+    <comment>{0} is the clearance in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Terrain_ClearWithLandscape_Format" xml:space="preserve">
+    <value>The target clears the terrain by {0:0.0}°; landscape fills up to {1:0}% of the frame.</value>
+    <comment>{0} is the clearance in degrees; {1} is the largest share of the frame's height covered by terrain, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Window_NotApplicable" xml:space="preserve">
+    <value>The useful time window is not scored for the Sun or Moon.</value>
+  </data>
+  <data name="Planning_Viability_Window_Calculating" xml:space="preserve">
+    <value>Calculating the useful time window…</value>
+  </data>
+  <data name="Planning_Viability_Window_Unavailable" xml:space="preserve">
+    <value>The useful time window could not be calculated.</value>
+  </data>
+  <data name="Planning_Viability_Window_ClosedNext_Format" xml:space="preserve">
+    <value>Not favourable at this time. The next window opens in {0:0.0} h and lasts {1:0.0} h.</value>
+    <comment>{0} is the hours until the next favourable window; {1} is its length in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_ClosedNone_Format" xml:space="preserve">
+    <value>No favourable time (dark, at least 30° up and clear of terrain) in the next {0:0} h.</value>
+    <comment>{0} is how far ahead was searched, in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_AtLeast_Format" xml:space="preserve">
+    <value>At least {0:0.0} h of favourable time from now.</value>
+    <comment>{0} is the favourable time in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_UntilTwilight_Format" xml:space="preserve">
+    <value>{0:0.0} h of favourable time remain before twilight.</value>
+    <comment>{0} is the favourable time in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_UntilLow_Format" xml:space="preserve">
+    <value>{0:0.0} h of favourable time remain before the target drops below 30°.</value>
+    <comment>{0} is the favourable time in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_UntilTerrain_Format" xml:space="preserve">
+    <value>{0:0.0} h of favourable time remain before terrain hides the target.</value>
+    <comment>{0} is the favourable time in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Window_TerrainNotConsidered" xml:space="preserve">
+    <value>Terrain is not included.</value>
+  </data>
+  <data name="Planning_Viability_Moon_NotApplicable" xml:space="preserve">
+    <value>Moonlight is not scored for the Sun or Moon.</value>
+  </data>
+  <data name="Planning_Viability_Moon_Unavailable" xml:space="preserve">
+    <value>The Moon's position for this time is not available yet.</value>
+  </data>
+  <data name="Planning_Viability_Moon_Down" xml:space="preserve">
+    <value>The Moon is below the horizon.</value>
+  </data>
+  <data name="Planning_Viability_Moon_LittleEffect_Format" xml:space="preserve">
+    <value>Moon {0:0}% lit, {1:0}° from the target: little effect.</value>
+    <comment>{0} is the Moon's illuminated fraction in per cent; {1} is its angular distance from the target in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Moon_ReducesContrast_Format" xml:space="preserve">
+    <value>Moon {0:0}% lit, {1:0}° from the target: moonlight may reduce contrast.</value>
+    <comment>{0} is the Moon's illuminated fraction in per cent; {1} is its angular distance from the target in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Frame_NoCamera" xml:space="preserve">
+    <value>There is no camera frame to check.</value>
+  </data>
+  <data name="Planning_Viability_Frame_Outside" xml:space="preserve">
+    <value>The target is outside the current camera frame.</value>
+  </data>
+  <data name="Planning_Viability_Frame_NearEdge" xml:space="preserve">
+    <value>The target is near the edge of the frame.</value>
+  </data>
+  <data name="Planning_Viability_Frame_Inside" xml:space="preserve">
+    <value>The target is inside the camera frame.</value>
+  </data>
+  <data name="Planning_Viability_Size_PointSource" xml:space="preserve">
+    <value>Stars are points of light, so their size is not assessed.</value>
+  </data>
+  <data name="Planning_Viability_Size_Unknown" xml:space="preserve">
+    <value>The catalogue has no reliable angular size for this target.</value>
+  </data>
+  <data name="Planning_Viability_Fit_Comfortable_Format" xml:space="preserve">
+    <value>The target fills {0:0}% of the frame and fits comfortably.</value>
+    <comment>{0} is how much of the frame the target fills, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Fit_Tight_Format" xml:space="preserve">
+    <value>The target fills {0:0}% of the frame: a tight fit with little margin.</value>
+    <comment>{0} is how much of the frame the target fills, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Fit_TooLarge_Format" xml:space="preserve">
+    <value>The target is about {0:0.0}× the size of the frame: it needs a wider lens or a mosaic.</value>
+    <comment>{0} is how many times larger than the frame the target is.</comment>
+  </data>
+  <data name="Planning_Viability_Sampling_NoFocalLength" xml:space="preserve">
+    <value>No focal length is set.</value>
+  </data>
+  <data name="Planning_Viability_Sampling_NoResolution" xml:space="preserve">
+    <value>Add your camera's sensor resolution in Equipment to estimate image sampling.</value>
+  </data>
+  <data name="Planning_Viability_Sampling_VeryLimited_Format" xml:space="preserve">
+    <value>The target is projected to occupy only {0:0} × {1:0} sensor pixels: very limited detail.</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Sampling_Small_Format" xml:space="preserve">
+    <value>The target is projected to occupy {0:0} × {1:0} sensor pixels: a small image.</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Sampling_Modest_Format" xml:space="preserve">
+    <value>The target is projected to occupy {0:0} × {1:0} sensor pixels: modest detail potential.</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Sampling_Good_Format" xml:space="preserve">
+    <value>The target is projected to occupy {0:0} × {1:0} sensor pixels: a good projected size.</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Sampling_Excellent_Format" xml:space="preserve">
+    <value>The target is projected to occupy {0:0} × {1:0} sensor pixels: an excellent projected size.</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Percent_Format" xml:space="preserve">
+    <value>{0:0}%</value>
+    <comment>{0} is a percentage.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Degrees_Format" xml:space="preserve">
+    <value>{0:0.0}°</value>
+    <comment>{0} is an angle in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Hours_Format" xml:space="preserve">
+    <value>{0:0.0} h</value>
+    <comment>{0} is a duration in hours.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Moon_Format" xml:space="preserve">
+    <value>{0:0}% lit · {1:0}° away</value>
+    <comment>{0} is the Moon's illuminated fraction in per cent; {1} is its distance from the target in degrees.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Offset_Format" xml:space="preserve">
+    <value>{0:0}% off centre</value>
+    <comment>{0} is how far towards the frame's edge the target is, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Fill_Format" xml:space="preserve">
+    <value>{0:0}% of frame</value>
+    <comment>{0} is how much of the frame the target fills, in per cent.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Size_Format" xml:space="preserve">
+    <value>{0:0.#}′ × {1:0.#}′</value>
+    <comment>{0} and {1} are the target's major and minor axes in arcminutes.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Pixels_Format" xml:space="preserve">
+    <value>{0:0} × {1:0} px</value>
+    <comment>{0} and {1} are the target's major and minor axes in sensor pixels.</comment>
+  </data>
+  <data name="Planning_Viability_Metric_LightPollution" xml:space="preserve">
+    <value>Light pollution</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_NotApplicable" xml:space="preserve">
+    <value>Light pollution is not scored for the Sun or Moon.</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_NotInstalled" xml:space="preserve">
+    <value>Unknown: install the light-pollution atlas in Settings › Data to assess sky brightness here.</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_Loading" xml:space="preserve">
+    <value>Reading the light-pollution atlas for this place…</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_OutsideCoverage" xml:space="preserve">
+    <value>Unknown: this place is outside the light-pollution atlas.</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_Unreadable" xml:space="preserve">
+    <value>Unknown: the light-pollution atlas could not be read for this place.</value>
+  </data>
+  <data name="Planning_Viability_LightPollution_Dark_Format" xml:space="preserve">
+    <value>Dark site: artificial light adds only {0:0}% to the natural sky glow.</value>
+    <comment>{0} is the artificial sky glow as a percentage of the natural sky brightness.</comment>
+  </data>
+  <data name="Planning_Viability_LightPollution_Rural_Format" xml:space="preserve">
+    <value>Rural sky: artificial light adds about {0:0}% to the natural sky glow.</value>
+    <comment>{0} is the artificial sky glow as a percentage of the natural sky brightness.</comment>
+  </data>
+  <data name="Planning_Viability_LightPollution_Some_Format" xml:space="preserve">
+    <value>Some light pollution: artificial light adds about {0:0}% to the natural sky glow, dimming faint detail.</value>
+    <comment>{0} is the artificial sky glow as a percentage of the natural sky brightness.</comment>
+  </data>
+  <data name="Planning_Viability_LightPollution_Suburban_Format" xml:space="preserve">
+    <value>Suburban sky glow: about {0:0.0}× the natural sky brightness, so faint nebulosity is harder to capture.</value>
+    <comment>{0} is the total sky brightness as a multiple of the natural sky.</comment>
+  </data>
+  <data name="Planning_Viability_LightPollution_BrightSuburban_Format" xml:space="preserve">
+    <value>Bright suburban sky: about {0:0.0}× the natural sky brightness. Narrowband filters or brighter targets will help.</value>
+    <comment>{0} is the total sky brightness as a multiple of the natural sky.</comment>
+  </data>
+  <data name="Planning_Viability_LightPollution_Urban_Format" xml:space="preserve">
+    <value>Urban sky glow: about {0:0}× the natural sky brightness. Broadband deep-sky imaging is very limited; narrowband can still work.</value>
+    <comment>{0} is the total sky brightness as a multiple of the natural sky.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Ratio_Format" xml:space="preserve">
+    <value>{0:0.0}× natural</value>
+    <comment>{0} is the total sky brightness as a multiple of the natural sky.</comment>
+  </data>
+  <data name="Planning_Viability_Value_Magnitudes_Format" xml:space="preserve">
+    <value>{0:0.00} mag</value>
+    <comment>{0} is the sky darkness lost to artificial light, in magnitudes.</comment>
+  </data>
+  <data name="Planning_Viability_Value_SkyBrightness_Format" xml:space="preserve">
+    <value>≈{0:0.0} mag/arcsec²</value>
+    <comment>{0} is the estimated zenith sky brightness.</comment>
+  </data>
 </root>

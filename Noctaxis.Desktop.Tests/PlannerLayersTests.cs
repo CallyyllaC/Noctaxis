@@ -34,8 +34,9 @@ public sealed class PlannerLayersTests
         foreach (var command in new[] { "OpenLightPollutionSourceCommand", "InstallLightPollutionCommand", "RemoveLightPollutionCommand" })
             Assert.Contains(command, data.ToString());
         var layers = document.Descendants().Single(x => x.Name.LocalName == "PlannerLayersControl");
-        Assert.Equal("Right", (string?)layers.Parent!.Attribute("HorizontalAlignment"));
-        Assert.Equal("Top", (string?)layers.Parent.Attribute("VerticalAlignment"));
+        // A tab fixed to the map's right edge, near its top.
+        Assert.Equal("Right", (string?)layers.Attribute("HorizontalAlignment"));
+        Assert.Equal("Top", (string?)layers.Attribute("VerticalAlignment"));
     }
     [Fact]
     public async Task DragEditsAreLiveButOnlyCommitsWriteAndSameValuesAreNoOps()
@@ -117,11 +118,10 @@ public sealed class PlannerLayersTests
             var button = controls.FindControl<Button>("LayersButton")!;
             var slider = controls.FindControl<Slider>("OpacitySlider")!;
             var toggle = controls.FindControl<CheckBox>("LightPollutionToggle")!;
-            var opacity = controls.FindControl<StackPanel>("OpacityControls")!;
             for (var i = 0; i < 3; i++)
             {
                 button.Flyout!.ShowAt(button); Dispatcher.UIThread.RunJobs();
-                Assert.True(toggle.IsChecked); Assert.True(opacity.IsVisible);
+                Assert.True(toggle.IsChecked); Assert.True(slider.IsEffectivelyEnabled);
                 Assert.Equal(35, slider.Value);
                 Assert.True(native.Enabled);
                 slider.Value = 60;
@@ -129,7 +129,9 @@ public sealed class PlannerLayersTests
                 toggle.IsChecked = false;
                 toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Assert.False(composition.Runtime["light-pollution"].IsVisible);
-                Assert.False(opacity.IsVisible); Assert.False(native.Enabled);
+                // Off: the slider stays where it was, dimmed, still holding its value.
+                Assert.True(slider.IsVisible); Assert.False(slider.IsEffectivelyEnabled); Assert.Equal(60, slider.Value);
+                Assert.False(native.Enabled);
                 root.Children.Remove(controls);
                 Assert.False(button.Flyout.IsOpen);
                 root.Children.Add(controls);

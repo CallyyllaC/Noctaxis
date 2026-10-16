@@ -135,7 +135,6 @@ public static class TerrainProfileDiagnostics
 
     public static string CreateDebugSnapshot(TerrainHorizonProfile profile, double bearingDegrees,
         double? targetAltitudeDegrees = null, long? generation = null,
-        TerrainDebugMapSnapshot? map = null, long? mapGeneration = null,
         double? weatherVisibilityDistanceMetres = null)
     {
         var bearing = NearestBearingSample(profile, bearingDegrees);
@@ -165,14 +164,6 @@ public static class TerrainProfileDiagnostics
             profile.Observer.Latitude, profile.Observer.Longitude);
         text.AppendLine($"Profile generation: {(generation.HasValue ? generation.Value.ToString(Invariant) : "Unavailable")}");
         text.AppendLine($"Profile generated: {profile.GeneratedAt}");
-        text.AppendLine();
-        text.AppendLine("Local terrain map");
-        text.AppendLine($"State: {map?.State.ToString() ?? "Resolving or unavailable"}");
-        text.AppendLine($"Generation: {(mapGeneration.HasValue ? mapGeneration.Value.ToString(Invariant) : "Unavailable")}");
-        text.AppendLine($"Range: {(map is null ? "Unavailable" : Value(map.RangeMetres) + " m radius")}");
-        text.AppendLine($"Grid resolution: {(map is null ? "Unavailable" : $"{map.Width} x {map.Height}")}");
-        text.AppendLine($"Terrarium tiles: {(map is null ? "Unavailable" : string.Join(", ", map.TerrariumTiles))}");
-        text.AppendLine($"Generated: {map?.GeneratedAt.ToString() ?? "Unavailable"}");
         text.AppendLine();
         text.AppendLine("Polar horizon profile");
         text.AppendLine($"Range: {Value(profile.MaximumAnalysisDistanceMetres)} m radius");

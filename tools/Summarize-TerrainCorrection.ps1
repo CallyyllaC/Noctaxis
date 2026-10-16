@@ -1,3 +1,4 @@
+#requires -Version 5.1
 $ErrorActionPreference = 'Stop'
 $artifactRoot = Join-Path $PSScriptRoot '../artifacts/viewport-investigation'
 $before = Get-Content -LiteralPath (Join-Path $artifactRoot 'native-kit-gpu2.json') -Raw | ConvertFrom-Json

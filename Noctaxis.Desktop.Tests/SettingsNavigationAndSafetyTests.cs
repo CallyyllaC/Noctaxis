@@ -23,9 +23,9 @@ public sealed partial class MainViewModelTests
 {
     private static readonly (string Header, string Title)[] SettingsCategoryTitles =
     [
-        ("Appearance", "Appearance and accessibility"), ("General", "General"), ("Equipment", "Equipment"),
+        ("General", "General"), ("Appearance", "Appearance and accessibility"), ("Equipment", "Equipment"),
         ("Planner map", "Planner map"), ("Weather", "Weather"), ("Celestial objects", "Celestial objects"),
-        ("Data", "Data and storage"), ("Supporter", "Supporter"), ("Diagnostics", "Diagnostics"),
+        ("Data", "Data and storage"), ("Supporter", "Supporter"),
     ];
 
     private async Task<(MainViewModel Vm, MainWindow Window, TabControl Categories)> OpenSettingsAsync(string theme, double textScale, double width)
@@ -52,13 +52,13 @@ public sealed partial class MainViewModelTests
     [InlineData("builtin.noctaxis", 1.5, 1100)]
     [InlineData("builtin.highcontrast", 2.0, 1440)]
     [InlineData("builtin.highcontrast", 2.0, 720)]
-    public async Task SettingsNavigation_IsARailOfNineCategoriesThatShowTheirContent(string theme, double textScale, double width)
+    public async Task SettingsNavigation_IsARailOfEightCategoriesThatShowTheirContent(string theme, double textScale, double width)
     {
         var (_, window, categories) = await OpenSettingsAsync(theme, textScale, width);
         try
         {
             Assert.Equal(Avalonia.Controls.Dock.Left, categories.TabStripPlacement);
-            var items = categories.GetVisualDescendants().OfType<TabItem>().ToArray();
+            var items = categories.GetVisualDescendants().OfType<TabItem>().Where(item => item.IsVisible).ToArray();
             Assert.Equal(SettingsCategoryTitles.Select(c => c.Header), items.Select(item => (string?)item.Header));
             // A vertical rail: one column, in order, beside (never above) the content.
             Assert.True(items.Zip(items.Skip(1)).All(pair => pair.Second.Bounds.Top >= pair.First.Bounds.Bottom - 0.5));
@@ -94,19 +94,19 @@ public sealed partial class MainViewModelTests
         var (_, window, categories) = await OpenSettingsAsync("builtin.noctaxis", 1.0, 1200);
         try
         {
-            var items = categories.GetVisualDescendants().OfType<TabItem>().ToArray();
+            var items = categories.GetVisualDescendants().OfType<TabItem>().Where(item => item.IsVisible).ToArray();
             items[0].Focus(NavigationMethod.Tab);
             Dispatcher.UIThread.RunJobs();
             Assert.True(items[0].IsFocused);
             var ring = items[0].GetVisualDescendants().OfType<Border>().Single(b => b.Name == "PART_LayoutRoot").BoxShadow;
             Assert.True(ring.Count > 0 && ring[0].IsInset, "keyboard focus draws a focus ring on the category");
-            foreach (var expected in new[] { "General", "Equipment", "Planner map" })
+            foreach (var expected in new[] { "Appearance", "Equipment", "Planner map" })
             {
                 window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
                 window.KeyReleaseQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
                 Dispatcher.UIThread.RunJobs();
                 Assert.Equal(expected, (string?)((TabItem)categories.SelectedItem!).Header);
-                Assert.Equal(expected, VisibleSettingsTitle(categories));
+                Assert.Equal(SettingsCategoryTitles.Single(category => category.Header == expected).Title, VisibleSettingsTitle(categories));
             }
             window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
             window.KeyReleaseQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
@@ -203,7 +203,7 @@ public sealed partial class MainViewModelTests
 
         vm.AddSettingsCelestialObjectCommand.Execute(catalogue.Get("M31"));
         await vm.RestoreCelestialDefaultsCommand.ExecuteAsync(null);
-        Assert.Equal("Restore default objects?", Assert.Single(dialogs.DestructiveRequests).Title);
+        Assert.Equal("Clear objects?", Assert.Single(dialogs.DestructiveRequests).Title);
         Assert.Contains(vm.CelestialObjects, item => item.TargetId == "openngc:NGC0224");
         dialogs.ConfirmDestructiveResult = true;
         await vm.RestoreCelestialDefaultsCommand.ExecuteAsync(null);

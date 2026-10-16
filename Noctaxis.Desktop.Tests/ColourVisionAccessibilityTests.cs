@@ -15,7 +15,7 @@ using Noctaxis.Desktop.Themes;
 namespace Noctaxis.Desktop.Tests;
 
 /// <summary>
-/// Colour-vision accessibility across every theme family, Light/Dark and colour-vision mode (48
+/// Colour-vision accessibility across every theme family, Light/Dark and colour-vision mode (56
 /// combinations). Each palette is judged as its intended viewer sees it: a colour-vision variant under
 /// simulation of its own deficiency, and the None palette with normal vision. Only meaningful semantic
 /// pairs are enforced; decorative colours are not.
@@ -46,8 +46,8 @@ public sealed class ColourVisionAccessibilityTests
     [Fact]
     public void EveryInstanceOfTheCountedMatrixIsCovered()
     {
-        Assert.Equal(48, Variants.Count());
-        Assert.Equal(6, BuiltInPalettes.Definitions.Count);
+        Assert.Equal(56, Variants.Count());
+        Assert.Equal(7, BuiltInPalettes.Definitions.Count);
     }
 
     [Theory, MemberData(nameof(Variants))]
@@ -81,7 +81,7 @@ public sealed class ColourVisionAccessibilityTests
     {
         var p = Resolve(id, mode, appearance);
         var (a, b, deltaE) = WorstPair(p, CelestialThemeTokens.Objects, mode);
-        // Objects also differ by dash pattern, marker and label, so colour is redundant; it must still separate clearly.
+        // Objects also differ by dash pattern and label, so colour is not the only cue; it must still separate clearly.
         Assert.True(deltaE >= 10, $"{id}/{appearance}/{mode}: {a}/{b} ΔE00 {deltaE:F1} under {mode}");
     }
 
@@ -196,11 +196,10 @@ public sealed class ColourVisionAccessibilityTests
     public static IEnumerable<object[]> Families => BuiltInPalettes.Definitions.Select(theme => new object[] { theme.Id });
 
     [Fact]
-    public void CelestialObjectsDifferByPatternAndMarkerAsWellAsColour()
+    public void CelestialObjectsDifferByPatternAsWellAsColour()
     {
         var roles = Enum.GetValues<CelestialRole>();
         Assert.Equal(CelestialThemeTokens.Objects.Count, roles.Length);
-        Assert.Equal(roles.Length, roles.Select(CelestialPalette.Marker).Distinct().Count());
         Assert.Equal(roles.Length, roles.Select(role => string.Join(",", CelestialPalette.Dash(role).Dashes!)).Distinct().Count());
         var sun = new AstralTarget("sun", "Sun", AstralTargetCategory.Solar, 0, 0, "J2000");
         var moon = new AstralTarget("moon", "Moon", AstralTargetCategory.Lunar, 0, 0, "J2000");

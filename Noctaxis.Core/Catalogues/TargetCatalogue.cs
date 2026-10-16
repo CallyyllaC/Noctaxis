@@ -226,7 +226,8 @@ public sealed class OpenNgcTargetCatalogue : ITargetCatalogue
             var notes = string.Join(" ", new[] { Field("OpenNGC notes"), Field("NED notes") }.Where(value => value.Length > 0));
             var target = new AstralTarget(stableId, displayName, MapType(type), ra, dec, "J2000",
                 notes.Length == 0 ? null : notes, messier ?? designation, FullConstellation(Field("Const")), aliases,
-                catalogueIds, magnitude, angularSize, $"OpenNGC CC-BY-SA-4.0; {Field("Sources")}");
+                catalogueIds, magnitude, angularSize, $"OpenNGC CC-BY-SA-4.0; {Field("Sources")}",
+                major is > 0 ? major : null, minor is > 0 ? minor : null);
             output.Add(target);
             names[name] = stableId;
         }

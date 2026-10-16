@@ -248,16 +248,16 @@ public sealed partial class MainViewModelTests
         try
         {
             window.Show(); Dispatcher.UIThread.RunJobs();
-            var bearing = window.FindControl<Slider>("CameraBearingSlider")!;
-            var pitch = window.FindControl<Slider>("CameraPitchSlider")!;
+            // Bearing and pitch are one instrument; its two values are the precise entry for each.
+            var direction = window.FindControl<CameraDirectionPad>("CameraDirection")!;
             var bearingNumber = window.FindControl<NumericUpDown>("CameraBearingInput")!;
             var pitchNumber = window.FindControl<NumericUpDown>("CameraPitchInput")!;
             Assert.False(bearingNumber.ShowButtonSpinner); Assert.False(pitchNumber.ShowButtonSpinner);
             Assert.Equal(new Thickness(0), bearingNumber.BorderThickness);
             Assert.Equal(new Thickness(0), pitchNumber.BorderThickness);
-            Assert.False(bearing.IsSnapToTickEnabled); Assert.False(pitch.IsSnapToTickEnabled);
-            Assert.Equal(0, bearing.Minimum); Assert.Equal(360, bearing.Maximum);
-            Assert.Equal(-90, pitch.Minimum); Assert.Equal(90, pitch.Maximum);
+            Assert.Equal(0m, bearingNumber.Minimum); Assert.Equal(360m, bearingNumber.Maximum);
+            Assert.Equal((decimal)CameraFramingSettings.MinimumCameraPitchDegrees, pitchNumber.Minimum);
+            Assert.Equal((decimal)CameraFramingSettings.MaximumCameraPitchDegrees, pitchNumber.Maximum);
             var generation = vm.PlannerRefresh.Generation; var environment = planning.EnvironmentRequests;
             var core = planning.SnapshotCalculations;
             _ = vm.TerrainFrameDepth;
@@ -270,7 +270,7 @@ public sealed partial class MainViewModelTests
                 var before = calculator.Count;
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
-                pitch.Value = value;
+                direction.Pitch = value;
                 var result = vm.CameraFramingVisibility;
                 performanceRows.Add(new { input = "pitch", value = (double)value,
                     milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
@@ -285,7 +285,7 @@ public sealed partial class MainViewModelTests
                 var before = calculator.Count;
                 var started = System.Diagnostics.Stopwatch.GetTimestamp();
                 var allocated = GC.GetAllocatedBytesForCurrentThread();
-                bearing.Value = value;
+                direction.Bearing = value;
                 _ = vm.TerrainFrameDepth;
                 performanceRows.Add(new { input = "bearing", value,
                     milliseconds = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
@@ -303,7 +303,7 @@ public sealed partial class MainViewModelTests
             Assert.Equal(writes + 2, store.WriteCount);
             Assert.Equal(45, store.State.Settings.EffectiveCameraFraming.CameraPitchDegrees);
             var cached = vm.CameraFramingVisibility;
-            await vm.ApplySettingsAsync(vm.Settings with { TerrainMinimapContext = 1.5 });
+            await vm.ApplySettingsAsync(vm.Settings with { PlannerPip = vm.Settings.EffectivePlannerPip with { FollowPin = false } });
             Assert.Same(cached, vm.CameraFramingVisibility);
             Assert.Equal(generation, vm.PlannerRefresh.Generation); Assert.Same(terrain, vm.Snapshot.Terrain);
             Assert.Equal(environment, planning.EnvironmentRequests); Assert.Equal(core, planning.SnapshotCalculations);
@@ -314,9 +314,9 @@ public sealed partial class MainViewModelTests
                 environmentRequests = planning.EnvironmentRequests - environment,
                 snapshotCalculations = planning.SnapshotCalculations - core, performanceRows
             }, new JsonSerializerOptions { WriteIndented = true }));
-            pitch.Value = 12.5; bearing.Value = 123.5;
+            direction.Pitch = 12.5; direction.Bearing = 123.5;
             Assert.Equal(12.5m, pitchNumber.Value); Assert.Equal(123.5m, bearingNumber.Value);
-            Assert.Equal(12.5, pitch.Value); Assert.Equal(123.5, bearing.Value);
+            Assert.Equal(12.5, direction.Pitch); Assert.Equal(123.5, direction.Bearing, 8);
             Assert.Equal(12.5, vm.CameraPitchDegrees); Assert.Equal(123.5, vm.CameraBearingDegrees, 8);
             await vm.WaitForCameraFramingPersistenceAsync();
             Assert.Equal(12.5, store.State.Settings.EffectiveCameraFraming.CameraPitchDegrees);
@@ -363,6 +363,12 @@ public sealed class TerrainLivePresentationTests
         Assert.Contains("x:Static controls:TerrainFrameView.NearBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.FarBrush", source);
         Assert.Contains("x:Static controls:TerrainFrameView.SkyBrush", source);
+        // The two lines are sampled with the frame's own colours, weights and dash, not look-alikes.
+        Assert.Contains("x:Static controls:TerrainFrameView.CentreLineBrush", source);
+        Assert.Contains("x:Static controls:TerrainFrameView.CentreLineThickness", source);
+        Assert.Contains("x:Static controls:TerrainFrameView.ThresholdLineBrush", source);
+        Assert.Contains("x:Static controls:TerrainFrameView.ThresholdLineThickness", source);
+        Assert.Contains($"StrokeDashArray=\"{string.Join(',', TerrainFrameView.CentreLineDash.Dashes!)}\"", source);
         Assert.DoesNotContain("Sky (blue)", source);
     }
 }

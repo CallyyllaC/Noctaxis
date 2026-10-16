@@ -1,0 +1,1157 @@
+{
+  "auditDate": "2026-10-03",
+  "configuration": "Release; net10.0; win-x64; framework-dependent; untrimmed; multi-file",
+  "command": "dotnet publish Noctaxis.Desktop/Noctaxis.Desktop.csproj -c Release -r win-x64 --self-contained false --artifacts-path artifacts/licensing-win-x64-20261003 -o artifacts/licensing-win-x64-20261003/publish -m:1 -p:PublishSingleFile=false -p:PublishTrimmed=false",
+  "thirdPartyDllCount": 76,
+  "orphanDlls": [],
+  "binaries": [
+    {
+      "file": "astronomy.dll",
+      "sha256": "9123f6d67a56b3982e395a516f672b5ea7bfda7e76f9b1e8d4097bd2173fae1a",
+      "packages": [
+        [
+          "CosineKitty.AstronomyEngine/2.1.19",
+          "lib/netstandard2.0/astronomy.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/AstronomyEngine-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Base.dll",
+      "sha256": "91eb28e9af3aaa79bbe63d19209b2bc5d723378db6732037decb8f20e8a77ce1",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Base.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Controls.ColorPicker.dll",
+      "sha256": "b8fedbf7d0cd5de58fa854b65b89aec14ecf1c8e967262de1b618bf9740b89d4",
+      "packages": [
+        [
+          "Avalonia.Controls.ColorPicker/12.1.0",
+          "lib/net10.0/Avalonia.Controls.ColorPicker.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Controls.dll",
+      "sha256": "61532fdc20b2b0b0ceb277182d9e7dd126215315f7383238ab46f9525a448682",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Controls.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.DesignerSupport.dll",
+      "sha256": "d917540e50c0cf8ccdb24dfe41f1ed5f232fca65269bf1d7f86d2cf51703d2b7",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.DesignerSupport.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Desktop.dll",
+      "sha256": "bb30870abbf7f60aa2ae0d9a1f92b940df982030cdf9548f7768565e001ea08d",
+      "packages": [
+        [
+          "Avalonia.Desktop/12.1.0",
+          "lib/net10.0/Avalonia.Desktop.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Dialogs.dll",
+      "sha256": "7d76158dedb7196a46b5942a8dee5e670c609ec38ab36f90d14853c0deb1b6c4",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Dialogs.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.dll",
+      "sha256": "676b7e93936ec7197e3221366104e89f0b8336b7916d599e031a7bc7b353b8cf",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Fonts.Inter.dll",
+      "sha256": "36a6aec52c30e43a655332195501982c4af642f388b687deb51a8cddd055ae5f",
+      "packages": [
+        [
+          "Avalonia.Fonts.Inter/12.1.0",
+          "lib/net10.0/Avalonia.Fonts.Inter.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt",
+        "ThirdParty/Inter-OFL.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.FreeDesktop.AtSpi.dll",
+      "sha256": "59e4c91657823a3620ee26b67eab711f987a307cf3f316ed2f6baa5bf10d5e2a",
+      "packages": [
+        [
+          "Avalonia.FreeDesktop.AtSpi/12.1.0",
+          "lib/net10.0/Avalonia.FreeDesktop.AtSpi.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.FreeDesktop.dll",
+      "sha256": "9c1d71ddb18c475b3848b6f070be61da934d60af1f517a7d6399de1ec65b83da",
+      "packages": [
+        [
+          "Avalonia.FreeDesktop/12.1.0",
+          "lib/net10.0/Avalonia.FreeDesktop.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.HarfBuzz.dll",
+      "sha256": "b3ff6150e64f14f816ebd4b1d5158fc89c5048d414ca90b38a6d8331067e2f89",
+      "packages": [
+        [
+          "Avalonia.HarfBuzz/12.1.0",
+          "lib/net10.0/Avalonia.HarfBuzz.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Markup.dll",
+      "sha256": "3c6b04f6287914919debf33bfb6eb3ec8e9b1ec2300804238f7485a4846f16a6",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Markup.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Markup.Xaml.dll",
+      "sha256": "cd3d37f82b28162cdb99b127a05c9cafa401848c1507e54266bd714d25b5b209",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Markup.Xaml.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Metal.dll",
+      "sha256": "442be8e98b19a496619fb5f8f54c5a6b8b99ec105e54940c6c7a94879a22eb11",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Metal.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.MicroCom.dll",
+      "sha256": "bb4c10481e708d4985a8fc97e761126c73689664010601dd6be466974ab15398",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.MicroCom.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Native.dll",
+      "sha256": "80a89a7dd5ff1b9f127d1a99ab94c0a1b372d91e37c0115d6e13c2739e634636",
+      "packages": [
+        [
+          "Avalonia.Native/12.1.0",
+          "lib/net10.0/Avalonia.Native.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.OpenGL.dll",
+      "sha256": "963f859a910f2c3ecde780a5f552135db109a89374707f8ee500e878c009a0c9",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.OpenGL.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Remote.Protocol.dll",
+      "sha256": "bd3be7c4f8eb98db8b9a022b629d1c313f1065bd1a002e6e44acfcd33381f1e1",
+      "packages": [
+        [
+          "Avalonia.Remote.Protocol/12.1.0",
+          "lib/net10.0/Avalonia.Remote.Protocol.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Skia.dll",
+      "sha256": "2f6b12ddbac1c90fe56c8daf8362dcc1e102f3de485ae6de16d35615481c240c",
+      "packages": [
+        [
+          "Avalonia.Skia/12.1.0",
+          "lib/net10.0/Avalonia.Skia.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Themes.Fluent.dll",
+      "sha256": "2c6c40407551dff2da5059142753fe8ca6c10c7956c31723328ea89ca5340aa1",
+      "packages": [
+        [
+          "Avalonia.Themes.Fluent/12.1.0",
+          "lib/net10.0/Avalonia.Themes.Fluent.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Vulkan.dll",
+      "sha256": "d6dcd5b102f108c22f0ac79936fe04932f5030b898347829cdb35eecffb38464",
+      "packages": [
+        [
+          "Avalonia/12.1.0",
+          "lib/net10.0/Avalonia.Vulkan.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Win32.Automation.dll",
+      "sha256": "18a7b82abb1217c84f8fc299479b2267beb5e384fdc240d40e38a27a76d73b6d",
+      "packages": [
+        [
+          "Avalonia.Win32/12.1.0",
+          "lib/net10.0/Avalonia.Win32.Automation.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.Win32.dll",
+      "sha256": "f59fde0a61f385effb94da9dcc97d91593a3355054d15ab8ac05ea6ea481b5b3",
+      "packages": [
+        [
+          "Avalonia.Win32/12.1.0",
+          "lib/net10.0/Avalonia.Win32.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Avalonia.X11.dll",
+      "sha256": "9a0f4471180a0f9a44f08000030a3cf699fe486dc124a8854ff701da0562f065",
+      "packages": [
+        [
+          "Avalonia.X11/12.1.0",
+          "lib/net10.0/Avalonia.X11.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Avalonia-LICENSE.txt",
+        "ThirdParty/Avalonia-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "av_libglesv2.dll",
+      "sha256": "53191a77fe783cd757ca7767077c2a64a662e7043777a5b4ab74980d4a0b73e3",
+      "packages": [
+        [
+          "Avalonia.Angle.Windows.Natives/2.1.27548.20260419",
+          "runtimes/win-x64/native/av_libglesv2.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/ANGLE-ASTC-LICENSE.txt",
+        "ThirdParty/ANGLE-Abseil-LICENSE.txt",
+        "ThirdParty/ANGLE-LICENSE.txt",
+        "ThirdParty/ANGLE-RapidJSON-LICENSE.txt",
+        "ThirdParty/ANGLE-xxHash-LICENSE.txt",
+        "ThirdParty/ANGLE-zlib-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "BitMiracle.LibTiff.NET.dll",
+      "sha256": "0cfdba77f76af11c4dfa0a465a9155f7e8aac5632b54118b9b20ba185c58cd50",
+      "packages": [
+        [
+          "BitMiracle.LibTiff.NET/2.4.660",
+          "lib/netstandard2.0/BitMiracle.LibTiff.NET.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/LibTiff.NET-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "BouncyCastle.Cryptography.dll",
+      "sha256": "ef92fc661e8d7ba8ec4d39a7cdfcdba41f14cb327f0d24fe79d0b5bb428899b5",
+      "packages": [
+        [
+          "BouncyCastle.Cryptography/2.7.0",
+          "lib/net6.0/BouncyCastle.Cryptography.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/BouncyCastle-LICENSE.md"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "BruTile.dll",
+      "sha256": "9f7eaae212602133c12e87c7ccdd5daeee34751b0976a11cb70b95eaf7422ab3",
+      "packages": [
+        [
+          "BruTile/6.0.0",
+          "lib/net9.0/BruTile.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/BruTile-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "BruTile.XmlSerializers.dll",
+      "sha256": "7ef2ea1d10354b43215685f65269bcf45c89e6ad75fa063420e3cd4af2f3ed0f",
+      "packages": [
+        [
+          "BruTile/6.0.0",
+          "lib/net9.0/BruTile.XmlSerializers.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/BruTile-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "CommunityToolkit.Mvvm.dll",
+      "sha256": "7d7eb5c066cfe883b439b1200bf5dcb387b1e5319dd2edbdaa9e23adfe416452",
+      "packages": [
+        [
+          "CommunityToolkit.Mvvm/8.4.0",
+          "lib/net8.0/CommunityToolkit.Mvvm.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/CommunityToolkit-LICENSE.md",
+        "ThirdParty/CommunityToolkit-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "ExCSS.dll",
+      "sha256": "6b166e638181eba3150f0d10379d1cc8362af6dfd518e9e9e194aa9a746293c2",
+      "packages": [
+        [
+          "ExCSS/4.3.1",
+          "lib/net8.0/ExCSS.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/ExCSS-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "HarfBuzzSharp.dll",
+      "sha256": "55e72ac23263f8e12484f3435e02ec22fac9eff6e6d169bb0a8c246be6b99d29",
+      "packages": [
+        [
+          "HarfBuzzSharp/8.3.1.3",
+          "lib/net8.0/HarfBuzzSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Hjg.Pngcs.dll",
+      "sha256": "fb9ca4a69d301895e0d54299127a083089efb2fd9603c25d7b78c29ed4ff1153",
+      "packages": [
+        [
+          "Hjg.Pngcs/1.1.5",
+          "lib/net9.0/Hjg.Pngcs.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/PngCs-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "libHarfBuzzSharp.dll",
+      "sha256": "145ade963eba427027d5e1381db5d51a0ef9e98e9fef9efbfa6074ca20da246f",
+      "packages": [
+        [
+          "HarfBuzzSharp.NativeAssets.Win32/8.3.1.3",
+          "runtimes/win-x64/native/libHarfBuzzSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-LICENSE.txt",
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "libSkiaSharp.dll",
+      "sha256": "7dec3ba900ab353491e6446f0083739924c6f8dd668832e2f09d38ebffdbbe1c",
+      "packages": [
+        [
+          "SkiaSharp.NativeAssets.Win32/3.119.4",
+          "runtimes/win-x64/native/libSkiaSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/D3D12MA-LICENSE.txt",
+        "ThirdParty/Skia-LICENSE.txt",
+        "ThirdParty/Skia-zlib-LICENSE.txt",
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-LICENSE.txt",
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-NOTICES.txt",
+        "ThirdParty/Wuffs-LICENSE.txt",
+        "ThirdParty/Wuffs-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Mapsui.dll",
+      "sha256": "1d14f24c62e86e3fa9bd6cbf0317348250ce3fc71bc95f8a4c08ec525ac3d14c",
+      "packages": [
+        [
+          "Mapsui/5.1.0",
+          "lib/net9.0/Mapsui.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Mapsui-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Mapsui.Nts.dll",
+      "sha256": "c31a9425421fddc11b31c111b6a137fedabaca6645888b1cc76f794bb9c99c5b",
+      "packages": [
+        [
+          "Mapsui.Nts/5.1.0",
+          "lib/net9.0/Mapsui.Nts.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Mapsui-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Mapsui.Rendering.Skia.dll",
+      "sha256": "76895f255dcb4a41199240e4d82e20e426feabaf2ceeb17643664a0993a28c0b",
+      "packages": [
+        [
+          "Mapsui.Rendering.Skia/5.1.0",
+          "lib/net9.0/Mapsui.Rendering.Skia.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Mapsui-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Mapsui.Tiling.dll",
+      "sha256": "948319941149d6700a56ba01c93a3002f89ee1973f8bc436f31e407bf390c11c",
+      "packages": [
+        [
+          "Mapsui.Tiling/5.1.0",
+          "lib/net9.0/Mapsui.Tiling.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Mapsui-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Mapsui.UI.Avalonia.dll",
+      "sha256": "a969389768f275ebcd458bcd77a3c0fe6187ecffc4e25fb031737f2f3df5533e",
+      "packages": [
+        [
+          "Mapsui.Avalonia12/5.1.0",
+          "lib/net9.0/Mapsui.UI.Avalonia.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Mapsui-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "MicroCom.Runtime.dll",
+      "sha256": "2538ec6f3c24e901a90e33c37788b9a4e4b6ae8158cab7328a00a00bb28eab9e",
+      "packages": [
+        [
+          "MicroCom.Runtime/0.11.6",
+          "lib/net8.0/MicroCom.Runtime.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/MicroCom-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Configuration.Abstractions.dll",
+      "sha256": "5def68e1c7d9c1fcf56153bb669e00d84c1ae17b35fb09c5a8ccf93e9b934d3e",
+      "packages": [
+        [
+          "Microsoft.Extensions.Configuration.Abstractions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Configuration.Abstractions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Configuration.Binder.dll",
+      "sha256": "0637a0ab2b5a77b000c0d96c46573dae8c04fa86ae1374b5a1f00855a712d6f9",
+      "packages": [
+        [
+          "Microsoft.Extensions.Configuration.Binder/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Configuration.Binder.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Configuration.dll",
+      "sha256": "94c3981084f713a51ad3d266145154d2468f59c4cd3e2bde82941bf84e97fb55",
+      "packages": [
+        [
+          "Microsoft.Extensions.Configuration/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Configuration.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Configuration.FileExtensions.dll",
+      "sha256": "53b08d23f5d10f747181efa67a8f7c6b0ccf8d066ba4762aaecb8fd400575362",
+      "packages": [
+        [
+          "Microsoft.Extensions.Configuration.FileExtensions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Configuration.FileExtensions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Configuration.Json.dll",
+      "sha256": "4871ee840a3b7829e46496bbeb853576392af6f4433a6e7b9feac284e4eec83c",
+      "packages": [
+        [
+          "Microsoft.Extensions.Configuration.Json/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Configuration.Json.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+      "sha256": "7c97c4463fe0fc11d1f22f4d160b2bd2288981adf1de2717a6ff3fb993ddf294",
+      "packages": [
+        [
+          "Microsoft.Extensions.DependencyInjection.Abstractions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.Abstractions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.DependencyInjection.dll",
+      "sha256": "d646a5cca5e8116ae46b43715297083fa8a38db636eab60e66eeef350d74cd5d",
+      "packages": [
+        [
+          "Microsoft.Extensions.DependencyInjection/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.DependencyInjection.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Diagnostics.Abstractions.dll",
+      "sha256": "9702b8737009bb5f6c943cf7a3ba5c0991c7e4eb58a9e952d54835bb596fe563",
+      "packages": [
+        [
+          "Microsoft.Extensions.Diagnostics.Abstractions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Diagnostics.Abstractions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Diagnostics.dll",
+      "sha256": "254ac42dffe70293034b42042ca6365d5fdf53315be333ca73d0a8441b8df9bf",
+      "packages": [
+        [
+          "Microsoft.Extensions.Diagnostics/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Diagnostics.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.FileProviders.Abstractions.dll",
+      "sha256": "7ee935aadd8afe2f731d655ef54479ed6206e6d2aa52bfd1889cdf170b0f9399",
+      "packages": [
+        [
+          "Microsoft.Extensions.FileProviders.Abstractions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.FileProviders.Abstractions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.FileProviders.Physical.dll",
+      "sha256": "2334a0e21426801fed5152e55a7312a2dbfc94be06dbdd2af446b34a22c5ecfa",
+      "packages": [
+        [
+          "Microsoft.Extensions.FileProviders.Physical/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.FileProviders.Physical.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.FileSystemGlobbing.dll",
+      "sha256": "5efc5e88d19ca4cdb7f3347483591a5cd025d617843edf2b4edf5701102bb6bf",
+      "packages": [
+        [
+          "Microsoft.Extensions.FileSystemGlobbing/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.FileSystemGlobbing.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Http.dll",
+      "sha256": "5849e175dff57441da4fa76bf8ce366eefe11d1d983ab9728ec6605b86c690c5",
+      "packages": [
+        [
+          "Microsoft.Extensions.Http/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Http.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Logging.Abstractions.dll",
+      "sha256": "a76a735b63e6ef3b0bf41ff92423cbd16103b8952e8306140a9bd650346034dc",
+      "packages": [
+        [
+          "Microsoft.Extensions.Logging.Abstractions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Logging.Abstractions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Logging.Configuration.dll",
+      "sha256": "52cbb4793651e6db0f5e9b1300661a8e0a8f76c15c9123e42c39aff35d571e24",
+      "packages": [
+        [
+          "Microsoft.Extensions.Logging.Configuration/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Logging.Configuration.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Logging.Console.dll",
+      "sha256": "61756c721ed0381d01bcc1a94206e23ba75a98227a61815f9981bc81b6fa59f0",
+      "packages": [
+        [
+          "Microsoft.Extensions.Logging.Console/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Logging.Console.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Logging.dll",
+      "sha256": "2c034725abd90afe30a1426e6477cb0693bc79170e1dfdb3cef7146e296a1f71",
+      "packages": [
+        [
+          "Microsoft.Extensions.Logging/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Logging.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Options.ConfigurationExtensions.dll",
+      "sha256": "f5078a206f8d54d03e15b32cbae7bfb2d95348719b1f3cf4a9bea32ced1c8b7b",
+      "packages": [
+        [
+          "Microsoft.Extensions.Options.ConfigurationExtensions/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Options.ConfigurationExtensions.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Options.dll",
+      "sha256": "58048d710cf2a88d3dea7c933d0b1408464d5aa4245ef736d3d47e6df6ba4db3",
+      "packages": [
+        [
+          "Microsoft.Extensions.Options/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Options.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Microsoft.Extensions.Primitives.dll",
+      "sha256": "6aaf929343fd02415d6cb5d903816c2f1c831b194bfe7a15789879093d0fa6b7",
+      "packages": [
+        [
+          "Microsoft.Extensions.Primitives/10.0.0",
+          "lib/net10.0/Microsoft.Extensions.Primitives.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/DotNet-LICENSE.txt",
+        "ThirdParty/Microsoft-NOTICES.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "NetTopologySuite.dll",
+      "sha256": "98fa6bae8b75b5f9445236679883fa27750d990aec11e985b85b57a30c37a858",
+      "packages": [
+        [
+          "NetTopologySuite/2.6.0",
+          "lib/netstandard2.1/NetTopologySuite.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/NetTopologySuite-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "NetTopologySuite.Features.dll",
+      "sha256": "9b9d025e65ed1c984489f7609a2347f225ee8e43c376137605608d50acf3a106",
+      "packages": [
+        [
+          "NetTopologySuite.Features/2.1.0",
+          "lib/netstandard2.0/NetTopologySuite.Features.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/NetTopologySuite.Features-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "NetTopologySuite.IO.GeoJSON4STJ.dll",
+      "sha256": "f5f8ad19538eb4883dba1035c3434d549876b9909614385b18c3711eb85be349",
+      "packages": [
+        [
+          "NetTopologySuite.IO.GeoJSON4STJ/4.0.0",
+          "lib/netstandard2.0/NetTopologySuite.IO.GeoJSON4STJ.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/NetTopologySuite.GeoJSON-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "NodaTime.dll",
+      "sha256": "cafa84a12852e81a8dd848f3b652747bb7b7895d0f6a7fe6bb7fc275929b7363",
+      "packages": [
+        [
+          "NodaTime/3.3.3",
+          "lib/net8.0/NodaTime.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/NodaTime-LICENSE.txt",
+        "ThirdParty/NodaTime-NOTICE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "OpenCvSharp.dll",
+      "sha256": "a26fd4bfff04fe2a351b3b0b417cc9847ef8e10721a8e484e3b33850f510b509",
+      "packages": [
+        [
+          "OpenCvSharp4/4.13.0.20260627",
+          "lib/net8.0/OpenCvSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/OpenCvSharp-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "OpenCvSharpExtern.dll",
+      "sha256": "1fa122bdb8e94175e7719fb8aa8f2ab211268a756f5d0c7a13c710ed79ae30cd",
+      "packages": [
+        [
+          "OpenCvSharp4.runtime.win.slim/4.13.0.20260627",
+          "runtimes/win-x64/native/OpenCvSharpExtern.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/OpenCV-COPYRIGHT.txt",
+        "ThirdParty/OpenCV-LICENSE.txt",
+        "ThirdParty/OpenCV/Flatbuffers-LICENSE.txt",
+        "ThirdParty/OpenCV/ITT-BSD-3-Clause.txt",
+        "ThirdParty/OpenCV/Intel-IPP-EULA.rtf",
+        "ThirdParty/OpenCV/OpenEXR-LICENSE.txt",
+        "ThirdParty/OpenCV/OpenJPEG-LICENSE.txt",
+        "ThirdParty/OpenCV/Protobuf-LICENSE.txt",
+        "ThirdParty/OpenCV/SoftFloat-LICENSE.txt",
+        "ThirdParty/OpenCV/libjpeg-turbo/LICENSE.md",
+        "ThirdParty/OpenCV/libjpeg-turbo/README.ijg",
+        "ThirdParty/OpenCV/libpng-LICENSE.txt",
+        "ThirdParty/OpenCV/libtiff-LICENSE.txt",
+        "ThirdParty/OpenCV/libwebp-COPYING.txt",
+        "ThirdParty/OpenCV/libwebp-PATENTS.txt",
+        "ThirdParty/OpenCV/zlib-LICENSE.txt",
+        "ThirdParty/OpenCvSharp-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "ShimSkiaSharp.dll",
+      "sha256": "1fa86454bb4d771889928ba3c1b49142249497c028993dd6ccd6c8eee14171d0",
+      "packages": [
+        [
+          "ShimSkiaSharp/3.2.1",
+          "lib/net8.0/ShimSkiaSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SvgSkia-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "SkiaSharp.dll",
+      "sha256": "aaaaa18c68ba1f3a3408b00dff28b11d5705198e17ba9d3aa59222bfd35407c8",
+      "packages": [
+        [
+          "SkiaSharp/3.119.4",
+          "lib/net10.0/SkiaSharp.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "SkiaSharp.HarfBuzz.dll",
+      "sha256": "993ac40cb1619ef2a007fcd3bef8c270be499bd476244ff5c72c4ffb384cb4b5",
+      "packages": [
+        [
+          "SkiaSharp.HarfBuzz/3.119.2",
+          "lib/net8.0/SkiaSharp.HarfBuzz.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SkiaSharp-HarfBuzzSharp-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Svg.Custom.dll",
+      "sha256": "46ab810eeb7b5f2495e4a3549845c5ef0bd065d0c8d75784b32c99490f81d638",
+      "packages": [
+        [
+          "Svg.Custom/3.2.1",
+          "lib/net8.0/Svg.Custom.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Svg.Custom-DTD-NOTICE.txt",
+        "ThirdParty/Svg.Custom-MS-PL.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Svg.Model.dll",
+      "sha256": "ffd637a676ddad9808f0ced8f35497f23be3080a2a2a8719606a7632b978540c",
+      "packages": [
+        [
+          "Svg.Model/3.2.1",
+          "lib/net8.0/Svg.Model.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SvgSkia-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Svg.Skia.dll",
+      "sha256": "e746b6f50663d642be7785da4101e43d5f0f6e4218249719663d0576978903f3",
+      "packages": [
+        [
+          "Svg.Skia/3.2.1",
+          "lib/net8.0/Svg.Skia.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/SvgSkia-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Tmds.DBus.Protocol.dll",
+      "sha256": "60a1c5255731d8ac843cab53108be8ba1ed02759ce3db0da5b49939ebe97bd8a",
+      "packages": [
+        [
+          "Tmds.DBus.Protocol/0.94.1",
+          "lib/net9.0/Tmds.DBus.Protocol.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/Tmds.DBus-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    },
+    {
+      "file": "Topten.RichTextKit.dll",
+      "sha256": "0e51a0116013e2e32134f0edbbf55f8e2b95a3f471d95b63b0ed4c262cc75224",
+      "packages": [
+        [
+          "Topten.RichTextKit/0.4.167",
+          "lib/net5.0/Topten.RichTextKit.dll"
+        ]
+      ],
+      "licenceFiles": [
+        "ThirdParty/RichTextKit-LICENSE.txt"
+      ],
+      "status": "Unchanged upstream asset; package provenance and applicable licence/notice mapping verified"
+    }
+  ],
+  "finalVerification": {
+    "thirdPartyHashesMatch": true,
+    "orphanDlls": [],
+    "identicalLicensingFileCopies": 62,
+    "provenanceFilesVerified": 45,
+    "publishInclusion": "Successful --no-build --no-restore publish using earlier successful build outputs",
+    "latestSourceRebuild": "Blocked by concurrent unrelated compilation errors in InfoButton.cs and SettingsViewModels.cs; application source not changed by audit"
+  }
+}

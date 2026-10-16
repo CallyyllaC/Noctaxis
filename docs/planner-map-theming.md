@@ -14,7 +14,7 @@ vector data that Noctaxis draws itself.
 | Part | Implementation |
 |---|---|
 | Data | OpenFreeMap vector tiles, OpenMapTiles schema, OSM data, max zoom 14. The versioned tile URL is read from `https://tiles.openfreemap.org/planet` (TileJSON). |
-| Fetch/cache | `OpenFreeMapTileFetcher`: gzip-aware and de-duplicated. Tiles and the last TileJSON are kept in `BasemapCache/openfreemap/<tileset version>/`, so viewed areas draw offline. The previous tileset is removed once a newer one is seen. 404 means an absent tile (bare land); other failures are retried later. |
+| Fetch/cache | `OpenFreeMapTileFetcher`: gzip-aware and de-duplicated. Tiles and the last TileJSON are kept in `BasemapCache/openfreemap/<tileset version>/` in the cache folder, so viewed areas draw offline. When a newer tileset is seen, up to two older versions are retained (1 GiB together, oldest removed first) and a tile missing from the current version is read from them while offline. 404 means an absent tile (bare land); other failures are retried later. |
 | Decode | `VectorTile`: a small in-repo Mapbox Vector Tile (protobuf) decoder. Mapsui 5.1, Mapsui.Tiling/Nts and BruTile 6 have no vector-tile decoding or style evaluation, so no package could provide it. |
 | Draw | `BasemapTileRenderer`: SkiaSharp at 2x pixel density, from a `BasemapStyle` (semantic roles only, no family names). Zooms beyond 14 enlarge the matching part of the z14 tile. |
 | Deliver | `ThemedVectorTileSource` (BruTile `ILocalTileSource`) inside `ThemedBasemapTileLayer` (Mapsui `TileLayer`) at the Basemap slot, so ordering and overlays are exactly as before. |
@@ -48,7 +48,7 @@ and the scouting-card export use OSM independently and are unchanged.
 | `MapViewFill`, `MapViewStroke`, `MapBearing` | Minimap field-of-view wedge and bearing line | no |
 
 Colour-vision variants re-author only the roles that lose a hue distinction for their deficiency
-(water, vegetation and built-up areas, and two symbols); see `docs/colour-vision-accessibility.md`.
+(water, vegetation and built-up areas, and two symbols); see `docs/accessibility.md`.
 Celestial rays, framing edges and the environmental cone take their colours from the celestial roles
 (`CelestialThemeTokens`), which follow the theme and colour-vision mode.
 
@@ -59,6 +59,7 @@ Family intent for the dark basemaps:
 - **Foxfire:** neutral charcoal land with muted copper trunk roads and cool cyan borders.
 - **Deep Space:** indigo roads and starlight-gold POIs.
 - **Moonlit:** slate throughout.
+- **Pigeon:** neutral slate land and roads, violet borders and teal POIs, with an orange (pigeon-eye) bearing.
 
 Light basemaps use pale land with darker roads (casings carry them) and dark labels. High Contrast
 prioritises legibility: black/white land, amber (dark) or near-black (light) major roads, and

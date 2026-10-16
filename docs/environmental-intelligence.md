@@ -60,7 +60,7 @@ by observer. Bearing, FOV, time, weather and map viewport changes reuse it.
 
 ## Shared source-tile cache
 
-Static environmental source tiles live below the standard Noctaxis application-data root:
+Static environmental source tiles live below the Noctaxis cache folder (`%LOCALAPPDATA%/Noctaxis/Cache` on Windows; see [architecture](architecture.md#persistence-storage-and-single-instance)):
 
 ```text
 EnvironmentalData/

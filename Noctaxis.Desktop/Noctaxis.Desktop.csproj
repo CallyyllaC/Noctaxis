@@ -30,6 +30,20 @@
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
     <EmbeddedResource Include="Styles\noctaxis_galaxy_style_v1.json" />
-    <Content Include="ThirdParty\Matplotlib-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="ThirdParty\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\LICENSE" Link="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\AWOO-SUPPORTER-SYSTEM.md" Link="AWOO-SUPPORTER-SYSTEM.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\Noctaxis.Core\Data\OpenNGC-LICENSE.txt" Link="ThirdParty\OpenNGC-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Release packages (docs/releasing.md). The native libraries' own debug symbols (libSkiaSharp.pdb,
+       libHarfBuzzSharp.pdb: about 100 MB on Windows) are left out of a publish; Noctaxis' own symbols stay,
+       so a crash log still has line numbers. -->
+  <Target Name="NoctaxisOmitNativeSymbolsFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Extension)' == '.pdb' and $([System.String]::Copy('%(Filename)').StartsWith('lib'))" />
+    </ItemGroup>
+  </Target>
 </Project>

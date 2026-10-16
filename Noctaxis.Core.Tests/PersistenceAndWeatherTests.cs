@@ -66,8 +66,29 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         Assert.Equal("#9A6F9E", (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming.TerrainObstructionColour);
     }
 
+    /// <summary>
+    /// Camera pitch runs from 45° down to straight up. Anything steeper down reads as -45°, and every pitch
+    /// inside the range, 0° included, is kept exactly as it was.
+    /// </summary>
+    [Fact]
+    public void CameraPitchRunsFromFortyFiveDegreesDownToStraightUp()
+    {
+        Assert.Equal(-45, CameraFramingSettings.MinimumCameraPitchDegrees);
+        Assert.Equal(90, CameraFramingSettings.MaximumCameraPitchDegrees);
+        double Pitch(double value) => new CameraFramingSettings(CameraPitchDegrees: value).Normalised().CameraPitchDegrees;
+        Assert.Equal(-45, Pitch(-45));
+        Assert.Equal(90, Pitch(90));
+        Assert.Equal(-45, Pitch(-45.5));
+        Assert.Equal(-45, Pitch(-90));
+        Assert.Equal(90, Pitch(120));
+        foreach (var kept in new[] { -44.5, -20, 0, 12.25, 89.9 }) Assert.Equal(kept, Pitch(kept));
+        Assert.Equal(0, Pitch(double.NaN));
+    }
+
     [Theory]
-    [InlineData(-90, 0)] [InlineData(90, 50)] [InlineData(23.5, 12)]
+    [InlineData(-45, 0)] [InlineData(90, 50)] [InlineData(23.5, 12)] [InlineData(-30, 5)]
+    // Saved by a build whose pitch went down to -90°: read as the new limit, -45°.
+    [InlineData(-90, 5)] [InlineData(-60, 5)]
     [InlineData(-100, -5)] [InlineData(100, 80)]
     public async Task CameraFrameSettingsRoundTripAndClamp(double pitch, double threshold)
     {
@@ -76,7 +97,7 @@ public sealed class PersistenceAndWeatherTests : IDisposable
             CameraPitchDegrees: pitch, MinimumTerrainFrameCoveragePercent: threshold)), [],
             PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
         var framing = (await store.LoadAsync(CancellationToken.None)).Settings.EffectiveCameraFraming;
-        Assert.Equal(Math.Clamp(pitch, -90, 90), framing.CameraPitchDegrees);
+        Assert.Equal(Math.Clamp(pitch, CameraFramingSettings.MinimumCameraPitchDegrees, CameraFramingSettings.MaximumCameraPitchDegrees), framing.CameraPitchDegrees);
         Assert.Equal(Math.Clamp(threshold, 0, 50), framing.MinimumTerrainFrameCoveragePercent);
         var path = Path.Combine(store.StorageDirectory, "state.json");
         var json = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(path))!;
@@ -217,6 +238,74 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     }
 
     [Theory]
+    [InlineData(FileShare.None)]
+    [InlineData(FileShare.Delete)]
+    public async Task UnreadableStateFile_IsReportedUnavailableAndNeitherReplacedNorQuarantined(FileShare holderShare)
+    {
+        // V-01: another process holding state.json is not corruption. FileShare.Delete only blocks a
+        // reader on Windows; elsewhere the file is readable and there is nothing to test.
+        if (holderShare == FileShare.Delete && !OperatingSystem.IsWindows()) return;
+        var now = Instant.FromUtc(2024, 1, 1, 0, 0);
+        var location = new SavedLocation(Guid.NewGuid(), "Dark ridge", new GeoCoordinate(51, -1), "UTC");
+        await CreateStore(now).SaveAsync(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        var path = Path.Combine(_directory, "state.json");
+        var store = new JsonUserDataStore(new TestPaths(_directory), NullLogger<JsonUserDataStore>.Instance, () => now,
+            [TimeSpan.FromMilliseconds(10), TimeSpan.FromMilliseconds(10)]);
+
+        using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, holderShare))
+        {
+            var failure = await Assert.ThrowsAsync<UserStateUnavailableException>(
+                () => store.LoadAsync(CancellationToken.None));
+            Assert.Equal(path, failure.StatePath);
+        }
+
+        Assert.Empty(Directory.GetFiles(_directory, "state.json.corrupt-*"));
+        Assert.Equal(location, Assert.Single((await store.LoadAsync(CancellationToken.None)).Locations));
+    }
+
+    [Fact]
+    public async Task BrieflyHeldStateFile_IsReadOnRetry()
+    {
+        var now = Instant.FromUtc(2024, 1, 1, 0, 0);
+        var location = new SavedLocation(Guid.NewGuid(), "Dark ridge", new GeoCoordinate(51, -1), "UTC");
+        await CreateStore(now).SaveAsync(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        var store = new JsonUserDataStore(new TestPaths(_directory), NullLogger<JsonUserDataStore>.Instance, () => now,
+            [TimeSpan.FromMilliseconds(300), TimeSpan.FromMilliseconds(300), TimeSpan.FromSeconds(2)]);
+        var holder = new FileStream(Path.Combine(_directory, "state.json"), FileMode.Open, FileAccess.ReadWrite, FileShare.None);
+
+        var loading = store.LoadAsync(CancellationToken.None);
+        await Task.Delay(100);
+        await holder.DisposeAsync();
+
+        Assert.Equal(location, Assert.Single((await loading).Locations));
+    }
+
+    [Fact]
+    public async Task Save_KeepsThePreviousStateAsRollingBackup()
+    {
+        var now = Instant.FromUtc(2024, 1, 1, 0, 0);
+        var store = CreateStore(now);
+        var backup = Path.Combine(_directory, "state.json.bak");
+        var first = new SavedLocation(Guid.NewGuid(), "First", new GeoCoordinate(51, -1), "UTC");
+        var second = new SavedLocation(Guid.NewGuid(), "Second", new GeoCoordinate(52, -1), "UTC");
+        await store.SaveAsync(new PersistedState(4, new AppSettings(), [first],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+        Assert.False(File.Exists(backup));
+
+        await store.SaveAsync(new PersistedState(4, new AppSettings(), [first, second],
+            PlanningSession.Default(now, "UTC"), null), CancellationToken.None);
+
+        Assert.Equal(2, (await store.LoadAsync(CancellationToken.None)).Locations.Count);
+        var previous = Directory.CreateDirectory(Path.Combine(_directory, "previous")).FullName;
+        File.Copy(backup, Path.Combine(previous, "state.json"));
+        var restored = await new JsonUserDataStore(new TestPaths(previous), NullLogger<JsonUserDataStore>.Instance, () => now)
+            .LoadAsync(CancellationToken.None);
+        Assert.Equal(first, Assert.Single(restored.Locations));
+    }
+
+    [Theory]
     [InlineData("Session")]
     [InlineData("Lens")]
     public async Task IncompletePersistence_IsQuarantinedAndDefaultsRecover(string missingMember)
@@ -284,12 +373,12 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         var cache = new GeographicWeatherCache(clock);
         var origin = new GeoCoordinate(51.5, -0.1);
         var conditions = Conditions(now);
-        cache.Store(origin, conditions);
+        cache.Store(origin, "fields", conditions);
 
-        Assert.True(cache.TryGet(new GeoCoordinate(51.51, -0.1), now, 2, out _));
-        Assert.False(cache.TryGet(new GeoCoordinate(51.6, -0.1), now, 2, out _));
+        Assert.True(cache.TryGet(new GeoCoordinate(51.51, -0.1), now, 2, "fields", out _));
+        Assert.False(cache.TryGet(new GeoCoordinate(51.6, -0.1), now, 2, "fields", out _));
         clock.Now = now + Duration.FromMinutes(10);
-        Assert.False(cache.TryGet(origin, now, 2, out _));
+        Assert.False(cache.TryGet(origin, now, 2, "fields", out _));
         Assert.InRange(Angles.GreatCircleDistanceMetres(origin, new GeoCoordinate(51.51, -0.1)), 1_100, 1_120);
     }
 
@@ -367,11 +456,15 @@ public sealed class PersistenceAndWeatherTests : IDisposable
     }
 
     // Hourly rows whose temperature and cloud cover are the hour offset, so tests can tell them apart.
-    private static string HourlyForecastJson(Instant start, int hours)
+    private static string HourlyForecastJson(Instant start, int hours, int[]? cloud = null)
     {
         var times = string.Join(',', Enumerable.Range(0, hours)
             .Select(hour => (start + Duration.FromHours(hour)).ToUnixTimeSeconds()));
         var values = string.Join(',', Enumerable.Range(0, hours));
+        if (cloud is not null)
+            return "{\"hourly\":{\"time\":[" + times + "],\"temperature_2m\":[" + values +
+                   "],\"cloud_cover\":[" + string.Join(',', cloud) + "],\"weather_code\":[" +
+                   string.Join(',', Enumerable.Repeat(0, hours)) + "]}}";
         var codes = string.Join(',', Enumerable.Repeat(0, hours));
         return "{\"hourly\":{\"time\":[" + times + "],\"temperature_2m\":[" + values +
                "],\"cloud_cover\":[" + values + "],\"weather_code\":[" + codes + "]}}";
@@ -384,7 +477,7 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         var clock = new TestClock(now);
         var cache = new GeographicWeatherCache(clock);
         var location = new GeoCoordinate(50.62, -2.27);
-        cache.Store(location, Conditions(now) with { TemperatureCelsius = 1 });
+        cache.Store(location, DefaultFieldsKey, Conditions(now) with { TemperatureCelsius = 1 });
         var handler = new CountingHandler(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Samples", "open-meteo-hourly.json")));
         var client = new HttpClient(handler) { BaseAddress = new Uri("https://api.open-meteo.com/v1/") };
         var provider = new OpenMeteoWeatherProvider(client, cache, clock, NullLogger<OpenMeteoWeatherProvider>.Instance);
@@ -396,27 +489,98 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         var fresh = await provider.GetWeatherAsync(new WeatherRequest(location, now, fields, 5, true), CancellationToken.None);
         Assert.Equal(14, fresh.Conditions!.TemperatureCelsius);
         Assert.Equal(1, handler.Count);
-        Assert.True(cache.TryGet(location, now, 0, out var replacement));
+        Assert.True(cache.TryGet(location, now, 0, DefaultFieldsKey, out var replacement));
         Assert.Equal(14, replacement.TemperatureCelsius);
     }
 
     [Fact]
-    public async Task ScoutingCard_GeneratesPngWithVersionedMetadata()
+    public async Task CachedWeather_SelectsTheSameHourAsTheForecast()
     {
-        var instant = Instant.FromUtc(2024, 6, 21, 21, 0);
-        var snapshot = Snapshot(instant);
-        var clock = new TestClock(instant + Duration.FromMinutes(1));
-        var exporter = new ScoutingCardExporter(new TimeZoneResolver(), clock);
-        var png = await exporter.RenderPngAsync(snapshot,
-            new ScoutingCardExportContext("Test ridge", null, new WeatherSettings(), "Metric"), CancellationToken.None);
+        // D03 (phase-0 audit): 10:00 cloud 10, 11:00 cloud 90. After 10:00 was mapped and cached, a request for
+        // 10:50 must get 11:00, the hour the forecast itself selects, and still without another download.
+        var start = Instant.FromUtc(2026, 10, 14, 10, 0);
+        var clock = new TestClock(start);
+        var provider = CreateForecastProvider(clock, HourlyForecastJson(start, 2, [10, 90]), out var handler, out _);
+        var location = new GeoCoordinate(51.5, -0.1);
+        var fields = WeatherSettings.DefaultFields;
 
-        Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, png.Take(8));
-        var metadata = PngMetadataWriter.ReadText(png, ScoutingCardExporter.MetadataKey);
-        Assert.NotNull(metadata);
-        Assert.Contains("Andromeda Galaxy", metadata);
-        using var document = JsonDocument.Parse(metadata);
-        Assert.Equal(ScoutingCardExporter.ExportSchemaVersion, document.RootElement.GetProperty("exportSchemaVersion").GetInt32());
-        Assert.True(document.RootElement.TryGetProperty("enabledWeatherFields", out _));
+        var ten = await provider.GetWeatherAsync(new WeatherRequest(location, start, fields, 5), CancellationToken.None);
+        var tenFifty = await provider.GetWeatherAsync(
+            new WeatherRequest(location, start + Duration.FromMinutes(50), fields, 5), CancellationToken.None);
+
+        Assert.Equal((start, 10d), (ten.Conditions!.ForecastInstant, ten.Conditions.CloudCoverPercent!.Value));
+        Assert.Equal((start + Duration.FromHours(1), 90d),
+            (tenFifty.Conditions!.ForecastInstant, tenFifty.Conditions.CloudCoverPercent!.Value));
+        Assert.Equal(1, handler.Count);
+    }
+
+    [Fact]
+    public async Task CachedWeather_AgreesWithTheForecastAtEveryMinuteAcrossSeveralCachedHours()
+    {
+        var start = Instant.FromUtc(2026, 10, 14, 0, 0);
+        var clock = new TestClock(start);
+        var json = HourlyForecastJson(start, 6);
+        var hourly = JsonSerializer.Deserialize<OpenMeteoResponse>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Hourly!;
+        var provider = CreateForecastProvider(clock, json, out var handler, out _);
+        var location = new GeoCoordinate(51.5, -0.1);
+        var fields = WeatherSettings.DefaultFields;
+        // Every hour is cached first, so each later answer could come from a neighbouring cached hour.
+        for (var hour = 0; hour < 6; hour++)
+            await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(hour), fields, 5), CancellationToken.None);
+
+        for (var minute = 0; minute <= 300; minute++)
+        {
+            var at = start + Duration.FromMinutes(minute);
+            Assert.True(OpenMeteoMapper.TryMap(hourly, at, start, out var expected));
+            var cached = await provider.GetWeatherAsync(new WeatherRequest(location, at, fields, 5), CancellationToken.None);
+            Assert.True(expected.ForecastInstant == cached.Conditions!.ForecastInstant, $"minute {minute}");
+            Assert.Equal(expected.TemperatureCelsius, cached.Conditions.TemperatureCelsius);
+        }
+        Assert.Equal(1, handler.Count);
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(29, true)]
+    [InlineData(30, true)]   // At exactly half past, the earlier hour, as the forecast search keeps the first.
+    [InlineData(31, false)]
+    [InlineData(-29, true)]
+    [InlineData(-30, false)]
+    [InlineData(-31, false)]
+    public void SelectsHour_IsTheForecastsOwnNearestHourRule(int minutesAfterHour, bool selected)
+    {
+        var hour = Instant.FromUtc(2026, 10, 14, 10, 0);
+        var at = hour + Duration.FromMinutes(minutesAfterHour);
+        Assert.Equal(selected, OpenMeteoMapper.SelectsHour(hour, at));
+        var hourly = new OpenMeteoHourly
+        {
+            Time = [(hour - Duration.FromHours(1)).ToUnixTimeSeconds(), hour.ToUnixTimeSeconds(), (hour + Duration.FromHours(1)).ToUnixTimeSeconds()]
+        };
+        Assert.True(OpenMeteoMapper.TryMap(hourly, at, hour, out var mapped));
+        Assert.Equal(selected, mapped.ForecastInstant == hour);
+    }
+
+    [Fact]
+    public async Task CachedWeather_IsNotReusedForADifferentSetOfRequestedFields()
+    {
+        var start = Instant.FromUtc(2026, 10, 14, 10, 0);
+        var clock = new TestClock(start);
+        var provider = CreateForecastProvider(clock, HourlyForecastJson(start, 4), out var handler, out _);
+        var location = new GeoCoordinate(51.5, -0.1);
+        IReadOnlyList<WeatherField> fields = [WeatherField.TotalCloudCover, WeatherField.Temperature];
+        await provider.GetWeatherAsync(new WeatherRequest(location, start, fields, 5), CancellationToken.None);
+        await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(1), fields, 5), CancellationToken.None);
+        Assert.Equal(1, handler.Count);
+
+        // The cached 11:00 conditions lack dew point: a request that asks for it is not answered from them.
+        await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(1),
+            [.. fields, WeatherField.DewPoint], 5), CancellationToken.None);
+        Assert.Equal(2, handler.Count);
+        // The original request is still answered from its own cached hour.
+        var again = await provider.GetWeatherAsync(new WeatherRequest(location, start + Duration.FromHours(1), fields, 5),
+            CancellationToken.None);
+        Assert.Equal(2, handler.Count);
+        Assert.Equal(start + Duration.FromHours(1), again.Conditions!.ForecastInstant);
     }
 
     [Fact]
@@ -428,6 +592,9 @@ public sealed class PersistenceAndWeatherTests : IDisposable
         Assert.Equal(resolver.MachineTimeZoneId, resolver.GetEffectiveId("Invalid/Zone"));
         Assert.Contains(resolver.MachineTimeZoneId, resolver.AvailableIds);
     }
+
+    private static readonly string DefaultFieldsKey =
+        OpenMeteoWeatherProvider.VariablesKey(OpenMeteoVariables.For(WeatherSettings.DefaultFields));
 
     private static WeatherConditions Conditions(Instant instant) => new(instant, 12, 4, 5, 3, 2, 0, "None", 3, 240, 5, 14, 65, 8, 25, "Clear", instant);
 

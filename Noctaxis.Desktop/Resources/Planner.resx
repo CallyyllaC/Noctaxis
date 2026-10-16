@@ -7,29 +7,26 @@
   <data name="Planner_Camera_AngularCompositionGuide_Description" xml:space="preserve">
     <value>Angular composition guide; not a simulation of terrain perspective.</value>
   </data>
-  <data name="Planner_Camera_CameraBearing_AccessibleName" xml:space="preserve">
-    <value>Camera bearing</value>
-  </data>
-  <data name="Planner_Camera_CameraBearing_Label" xml:space="preserve">
-    <value>Camera bearing (°)</value>
-  </data>
   <data name="Planner_Camera_CameraBearingPreciseValue_AccessibleName" xml:space="preserve">
     <value>Camera bearing precise value</value>
-  </data>
-  <data name="Planner_Camera_CameraFraming_Header" xml:space="preserve">
-    <value>Camera and framing</value>
-  </data>
-  <data name="Planner_Camera_CameraPitch_AccessibleName" xml:space="preserve">
-    <value>Camera pitch</value>
-  </data>
-  <data name="Planner_Camera_CameraPitch_Label" xml:space="preserve">
-    <value>Camera pitch (°)</value>
   </data>
   <data name="Planner_Camera_CameraPitchPreciseValue_AccessibleName" xml:space="preserve">
     <value>Camera pitch precise value</value>
   </data>
+  <data name="Planner_Camera_Bearing_Label" xml:space="preserve">
+    <value>Bearing</value>
+  </data>
+  <data name="Planner_Camera_Direction_Help" xml:space="preserve">
+    <value>Drag across the instrument to aim the camera: across turns it, up and down tilts it. The arrows and the arrow keys nudge it 1° at a time, 0.1° with Shift held. Bearing is measured clockwise from north and turns all the way round, through 0°. Pitch is 0° at the horizon and positive looking upward, from 45° down to straight up.</value>
+  </data>
+  <data name="Planner_Camera_Direction_Label" xml:space="preserve">
+    <value>Camera direction</value>
+  </data>
   <data name="Planner_Camera_FieldView_Label" xml:space="preserve">
     <value>Field of view</value>
+  </data>
+  <data name="Planner_Camera_FieldViewHelp_AccessibleName" xml:space="preserve">
+    <value>About field of view</value>
   </data>
   <data name="Planner_Camera_FocalLength_AccessibleName" xml:space="preserve">
     <value>Focal length</value>
@@ -40,6 +37,9 @@
   </data>
   <data name="Planner_Camera_FocalLength_Label" xml:space="preserve">
     <value>Focal length</value>
+  </data>
+  <data name="Planner_Camera_FrameWheel_Help" xml:space="preserve">
+    <value>Scroll over the frame to adjust the focal length.</value>
   </data>
   <data name="Planner_Camera_Label" xml:space="preserve">
     <value>Camera</value>
@@ -56,8 +56,8 @@
   <data name="Planner_Camera_Orientation_Label" xml:space="preserve">
     <value>Orientation</value>
   </data>
-  <data name="Planner_Camera_PitchConvention_Description" xml:space="preserve">
-    <value>0° horizontal · positive looks upward</value>
+  <data name="Planner_Camera_Pitch_Label" xml:space="preserve">
+    <value>Pitch</value>
   </data>
   <data name="Planner_Camera_Portrait_Option" xml:space="preserve">
     <value>Portrait</value>
@@ -66,6 +66,18 @@
     <value>Prime · {0:0.#} mm</value>
     <comment>{0} is the focal length in millimetres.</comment>
   </data>
+  <data name="Planner_Camera_TiltDown_AccessibleName" xml:space="preserve">
+    <value>Tilt down</value>
+  </data>
+  <data name="Planner_Camera_TiltUp_AccessibleName" xml:space="preserve">
+    <value>Tilt up</value>
+  </data>
+  <data name="Planner_Camera_TurnLeft_AccessibleName" xml:space="preserve">
+    <value>Turn left</value>
+  </data>
+  <data name="Planner_Camera_TurnRight_AccessibleName" xml:space="preserve">
+    <value>Turn right</value>
+  </data>
   <data name="Planner_Camera_ZoomLens_Format" xml:space="preserve">
     <value>Zoom · {0:0.#}–{1:0.#} mm</value>
     <comment>{0} and {1} are the shortest and longest focal lengths in millimetres.</comment>
@@ -73,19 +85,31 @@
   <data name="Planner_CopyPNG_Button" xml:space="preserve">
     <value>Copy PNG</value>
   </data>
-  <data name="Planner_Date_Label" xml:space="preserve">
-    <value>Date</value>
-  </data>
-  <data name="Planner_Export_Cancelled_Format" xml:space="preserve">
-    <value>Export cancelled: {0}</value>
-    <comment>{0} is the reason the weather could not be fetched.</comment>
-  </data>
   <data name="Planner_Export_Failed_Format" xml:space="preserve">
     <value>Export failed: {0}</value>
     <comment>{0} is the error message.</comment>
   </data>
+  <data name="Planner_Location_Near_Format" xml:space="preserve">
+    <value>Near {0}</value>
+    <comment>The planning location's name from a place lookup. {0} is the nearby place.</comment>
+  </data>
+  <data name="Planner_Status_PositionFailed" xml:space="preserve">
+    <value>The position could not be calculated. The details are in the Noctaxis log.</value>
+  </data>
+  <data name="Planner_Export_NotReady" xml:space="preserve">
+    <value>The plan is still being calculated. Try again in a moment.</value>
+    <comment>Shown when an export is asked for before the plan has been calculated.</comment>
+  </data>
+  <data name="Planner_Export_FailedUnexpectedly" xml:space="preserve">
+    <value>The plan image could not be made. The details are in the Noctaxis log.</value>
+    <comment>Shown when making the plan image fails for an unexpected reason.</comment>
+  </data>
+  <data name="Planner_Export_ClipboardUnavailable" xml:space="preserve">
+    <value>The system clipboard is unavailable.</value>
+    <comment>Shown after "Export failed: " when Copy PNG finds no clipboard.</comment>
+  </data>
   <data name="Planner_Export_Ready" xml:space="preserve">
-    <value>Scouting card ready</value>
+    <value>Plan image ready</value>
   </data>
   <data name="Planner_Export_RefreshingWeather" xml:space="preserve">
     <value>Refreshing weather for export…</value>
@@ -99,20 +123,8 @@
   <data name="Planner_Framing_LimitsHidden" xml:space="preserve">
     <value>Visibility limits hidden</value>
   </data>
-  <data name="Planner_Horizon_CurrentLocation_Label" xml:space="preserve">
-    <value>Current location</value>
-  </data>
   <data name="Planner_Horizon_Loading" xml:space="preserve">
     <value>Loading terrain horizon…</value>
-  </data>
-  <data name="Planner_Horizon_ObserverDatum_Loading" xml:space="preserve">
-    <value>Observer datum: Loading</value>
-  </data>
-  <data name="Planner_Horizon_ObserverDatum_Normal" xml:space="preserve">
-    <value>Observer datum: Normal</value>
-  </data>
-  <data name="Planner_Horizon_ObserverDatum_Unavailable" xml:space="preserve">
-    <value>Observer datum: Unavailable</value>
   </data>
   <data name="Planner_Horizon_Obstruction_Clear" xml:space="preserve">
     <value>Clear</value>
@@ -138,17 +150,20 @@
   <data name="Planner_Horizon_State_Unavailable" xml:space="preserve">
     <value>Unavailable</value>
   </data>
-  <data name="Planner_Horizon_TerrainData_Label" xml:space="preserve">
-    <value>Terrain data</value>
+  <data name="Planner_Inspector_AccessibleName" xml:space="preserve">
+    <value>Inspector sections</value>
   </data>
-  <data name="Planner_Horizon_TerrainHorizon_Header" xml:space="preserve">
-    <value>Terrain horizon</value>
+  <data name="Planner_Inspector_Equipment_Tab" xml:space="preserve">
+    <value>Equipment</value>
   </data>
-  <data name="Planner_Horizon_TerrainHorizon_Label" xml:space="preserve">
-    <value>Terrain horizon</value>
+  <data name="Planner_Inspector_Targets_Tab" xml:space="preserve">
+    <value>Targets</value>
   </data>
-  <data name="Planner_Horizon_TerrainObstruction_Label" xml:space="preserve">
-    <value>Terrain obstruction</value>
+  <data name="Planner_Inspector_Title" xml:space="preserve">
+    <value>Inspector</value>
+  </data>
+  <data name="Planner_Inspector_Weather_Tab" xml:space="preserve">
+    <value>Weather</value>
   </data>
   <data name="Planner_Label" xml:space="preserve">
     <value>PLANNER</value>
@@ -174,18 +189,9 @@
   <data name="Planner_Layers_MapLayers_AccessibleName" xml:space="preserve">
     <value>Map layers</value>
   </data>
-  <data name="Planner_Layers_MapLayers_Heading" xml:space="preserve">
-    <value>Map layers</value>
-  </data>
   <data name="Planner_Layers_Opacity_Format" xml:space="preserve">
     <value>{0:F0}%</value>
     <comment>Layer opacity as a whole percentage. {0} is the number.</comment>
-  </data>
-  <data name="Planner_Layers_Opacity_Label" xml:space="preserve">
-    <value>Opacity</value>
-  </data>
-  <data name="Planner_Layers_Overlays_Label" xml:space="preserve">
-    <value>Overlays</value>
   </data>
   <data name="Planner_Layers_SaveFailed" xml:space="preserve">
     <value>Layer preferences could not be saved. Reopen Layers and try again.</value>
@@ -205,15 +211,9 @@
   <data name="Planner_Layers_TerrainReliefOpacity_AccessibleName" xml:space="preserve">
     <value>Terrain relief opacity</value>
   </data>
-  <data name="Planner_LocalTime_Label" xml:space="preserve">
-    <value>Local time</value>
-  </data>
   <data name="Planner_Location_CurrentLocation_Name" xml:space="preserve">
     <value>Current location</value>
     <comment>Default name of the planning location before it is saved or named.</comment>
-  </data>
-  <data name="Planner_Location_DeleteSavedLocation_Button" xml:space="preserve">
-    <value>Delete saved location</value>
   </data>
   <data name="Planner_Location_EffectiveAltitude_Format" xml:space="preserve">
     <value>Effective camera altitude: {0} ASL (ground + {1} camera height)</value>
@@ -221,9 +221,6 @@
   </data>
   <data name="Planner_Location_EffectiveAltitude_Resolving" xml:space="preserve">
     <value>Effective camera altitude: resolving terrain surface…</value>
-  </data>
-  <data name="Planner_Location_GroundElevationAboveSea_Label" xml:space="preserve">
-    <value>Ground elevation above sea level</value>
   </data>
   <data name="Planner_Location_GroundSource_Resolving" xml:space="preserve">
     <value>Resolving terrain surface elevation…</value>
@@ -234,15 +231,6 @@
   <data name="Planner_Location_GroundSource_TerrainDisabled_Format" xml:space="preserve">
     <value>Terrain disabled · {0} MSL fallback</value>
     <comment>{0} is the assumed ground elevation with its unit: 0 m, or 0 ft under Imperial. MSL is mean sea level.</comment>
-  </data>
-  <data name="Planner_Location_Latitude_Label" xml:space="preserve">
-    <value>Latitude</value>
-  </data>
-  <data name="Planner_Location_LocationName_Label" xml:space="preserve">
-    <value>Location name</value>
-  </data>
-  <data name="Planner_Location_Longitude_Label" xml:space="preserve">
-    <value>Longitude</value>
   </data>
   <data name="Planner_Location_MapProviderInvalid" xml:space="preserve">
     <value>The location or map provider is invalid.</value>
@@ -262,23 +250,23 @@
     <value>Could not open Maps: {0}</value>
     <comment>{0} is the reason.</comment>
   </data>
-  <data name="Planner_Location_PlanningCoordinates_Heading" xml:space="preserve">
-    <value>Planning coordinates</value>
-  </data>
-  <data name="Planner_Location_PlanningLocation_Header" xml:space="preserve">
-    <value>Planning location</value>
-  </data>
   <data name="Planner_Location_ResetTerrainElevation_Button" xml:space="preserve">
     <value>Reset to terrain elevation</value>
   </data>
-  <data name="Planner_Location_ResolvedPhysicalSurface_Tooltip" xml:space="preserve">
-    <value>Resolved physical surface elevation relative to mean sea level</value>
+  <data name="Planner_Location_SaveLocation_Button" xml:space="preserve">
+    <value>Save location</value>
   </data>
-  <data name="Planner_Location_SaveUpdateLocation_Button" xml:space="preserve">
-    <value>Save or update location</value>
+  <data name="Planner_Map_Licence_Format" xml:space="preserve">
+    <value>Licence: {0}</value>
   </data>
-  <data name="Planner_Location_SearchPlace_Label" xml:space="preserve">
-    <value>Search for a place</value>
+  <data name="Planner_Map_Licences_AccessibleName" xml:space="preserve">
+    <value>Map data and licences</value>
+  </data>
+  <data name="Planner_Map_Licences_Heading" xml:space="preserve">
+    <value>Map data &amp; licences</value>
+  </data>
+  <data name="Planner_Map_OpenLinkFailed_Format" xml:space="preserve">
+    <value>Could not open {0}: {1}</value>
   </data>
   <data name="Planner_Map_SaveCurrentPin_MenuItem" xml:space="preserve">
     <value>Save current pin location</value>
@@ -320,8 +308,76 @@
   <data name="Planner_Now_Button" xml:space="preserve">
     <value>Now</value>
   </data>
-  <data name="Planner_PlanningPinPreview_Label" xml:space="preserve">
-    <value>Planning pin preview</value>
+  <data name="Planner_Panel_DockBottom_MenuItem" xml:space="preserve">
+    <value>Dock to the bottom</value>
+  </data>
+  <data name="Planner_Panel_DockLeft_MenuItem" xml:space="preserve">
+    <value>Dock to the left</value>
+  </data>
+  <data name="Planner_Panel_DockRight_MenuItem" xml:space="preserve">
+    <value>Dock to the right</value>
+  </data>
+  <data name="Planner_Panel_DockTop_MenuItem" xml:space="preserve">
+    <value>Dock to the top</value>
+  </data>
+  <data name="Planner_Panel_Float_MenuItem" xml:space="preserve">
+    <value>Float over the map</value>
+  </data>
+  <data name="Planner_Panel_Menu_AccessibleName_Format" xml:space="preserve">
+    <value>{0} panel actions</value>
+  </data>
+  <data name="Planner_Panel_Move_AccessibleName_Format" xml:space="preserve">
+    <value>Move {0}</value>
+  </data>
+  <data name="Planner_Panel_Pin_AccessibleName_Format" xml:space="preserve">
+    <value>Pin {0} open</value>
+  </data>
+  <data name="Planner_Panel_Pin_MenuItem" xml:space="preserve">
+    <value>Pin open</value>
+  </data>
+  <data name="Planner_Panel_Reveal_AccessibleName_Format" xml:space="preserve">
+    <value>Open {0}</value>
+  </data>
+  <data name="Planner_Panel_Resize_AccessibleName_Format" xml:space="preserve">
+    <value>Resize {0}</value>
+  </data>
+  <data name="Planner_Panel_RunFullHeight_MenuItem" xml:space="preserve">
+    <value>Run the full height</value>
+  </data>
+  <data name="Planner_Panel_RunFullWidth_MenuItem" xml:space="preserve">
+    <value>Run the full width</value>
+  </data>
+  <data name="Planner_Panel_StopAtEnds_MenuItem" xml:space="preserve">
+    <value>Stop at the top and bottom panels</value>
+  </data>
+  <data name="Planner_Panel_StopAtSides_MenuItem" xml:space="preserve">
+    <value>Stop at the side panels</value>
+  </data>
+  <data name="Planner_Panel_Timeline_Title" xml:space="preserve">
+    <value>Timeline</value>
+  </data>
+  <data name="Planner_Panel_Unpin_AccessibleName_Format" xml:space="preserve">
+    <value>Unpin {0} to the edge</value>
+  </data>
+  <data name="Planner_Panel_Unpin_MenuItem" xml:space="preserve">
+    <value>Unpin to the edge</value>
+  </data>
+  <data name="Planner_PinOverlay_Altitude_Tooltip_Format" xml:space="preserve">
+    <value>{0}
+Ground elevation: {1}
+{2}</value>
+  </data>
+  <data name="Planner_Pip_FollowPin_AccessibleName" xml:space="preserve">
+    <value>Follow pin</value>
+  </data>
+  <data name="Planner_Pip_FollowPin_HelpText" xml:space="preserve">
+    <value>Keep the Picture-in-Picture map centred on the planning pin.</value>
+  </data>
+  <data name="Planner_Pip_Switch_AccessibleName" xml:space="preserve">
+    <value>Switch maps</value>
+  </data>
+  <data name="Planner_Pip_Switch_HelpText" xml:space="preserve">
+    <value>Swap the main map and the Picture-in-Picture map: their centre, zoom and layers.</value>
   </data>
   <data name="Planner_PreviousDay_Button" xml:space="preserve">
     <value>Previous day</value>
@@ -381,8 +437,26 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Target_Clearance_Label" xml:space="preserve">
     <value>Clearance</value>
   </data>
-  <data name="Planner_Target_CurrentTargetDetails_Header" xml:space="preserve">
-    <value>Current target details</value>
+  <data name="Planner_Target_Events_DoesNotRise" xml:space="preserve">
+    <value>Does not rise</value>
+  </data>
+  <data name="Planner_Target_Events_DoesNotSet" xml:space="preserve">
+    <value>Does not set</value>
+  </data>
+  <data name="Planner_Target_Events_DownAllDay" xml:space="preserve">
+    <value>Down all day</value>
+  </data>
+  <data name="Planner_Target_Events_NotOnThisDate" xml:space="preserve">
+    <value>Not on this date</value>
+  </data>
+  <data name="Planner_Target_Events_UpAllDay" xml:space="preserve">
+    <value>Up all day</value>
+  </data>
+  <data name="Planner_Target_FocusedTargetDetails_Header" xml:space="preserve">
+    <value>Focused target details</value>
+  </data>
+  <data name="Planner_Target_FollowWithCamera_Option" xml:space="preserve">
+    <value>Follow with camera</value>
   </data>
   <data name="Planner_Target_Horizon_BelowAstronomical" xml:space="preserve">
     <value>Below astronomical horizon</value>
@@ -405,6 +479,9 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Target_LocalHorizon_Label" xml:space="preserve">
     <value>Local horizon</value>
   </data>
+  <data name="Planner_Target_NotCalculated" xml:space="preserve">
+    <value>No position calculated yet.</value>
+  </data>
   <data name="Planner_Target_Rise_Label" xml:space="preserve">
     <value>Rise</value>
   </data>
@@ -417,29 +494,56 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Target_Visibility_Label" xml:space="preserve">
     <value>Visibility</value>
   </data>
+  <data name="Planner_Targets_Focus_Button" xml:space="preserve">
+    <value>Focus</value>
+  </data>
+  <data name="Planner_Targets_Focused_Label" xml:space="preserve">
+    <value>Focused</value>
+  </data>
+  <data name="Planner_Targets_Heading" xml:space="preserve">
+    <value>Targets</value>
+  </data>
+  <data name="Planner_Targets_Help" xml:space="preserve">
+    <value>The focused target is drawn with a thick solid line. Every other target has its own colour and dash pattern, shown beside its name, and is labelled on the timeline at its highest point. With a colour-vision mode on, the patterns are drawn heavier. Focus a target to aim the camera at it.</value>
+  </data>
+  <data name="Planner_Targets_HelpButton_AccessibleName" xml:space="preserve">
+    <value>About targets</value>
+  </data>
   <data name="Planner_Targets_LineMarkerUsed_Tooltip" xml:space="preserve">
-    <value>Line and marker used for this object on the timeline and map</value>
+    <value>Line used for this object on the timeline and map</value>
+  </data>
+  <data name="Planner_Targets_Pattern_Solid" xml:space="preserve">
+    <value>Solid line</value>
+  </data>
+  <data name="Planner_Targets_Pattern_LongDash" xml:space="preserve">
+    <value>Long dashes</value>
+  </data>
+  <data name="Planner_Targets_Pattern_Dotted" xml:space="preserve">
+    <value>Dotted line</value>
+  </data>
+  <data name="Planner_Targets_Pattern_DashDot" xml:space="preserve">
+    <value>Dash and dot</value>
+  </data>
+  <data name="Planner_Targets_Pattern_ShortDash" xml:space="preserve">
+    <value>Short dashes</value>
+  </data>
+  <data name="Planner_Targets_Pattern_DashDotDot" xml:space="preserve">
+    <value>Dash and two dots</value>
+  </data>
+  <data name="Planner_Targets_Pattern_ExtraLongDash" xml:space="preserve">
+    <value>Extra-long dashes</value>
+  </data>
+  <data name="Planner_Targets_Pattern_PairedDash" xml:space="preserve">
+    <value>Paired dashes</value>
   </data>
   <data name="Planner_Targets_Moon_ShortLabel" xml:space="preserve">
     <value>Moon</value>
   </data>
-  <data name="Planner_Targets_Primary_Label" xml:space="preserve">
-    <value>Primary</value>
-  </data>
-  <data name="Planner_Targets_PrimaryTargetThick_Description" xml:space="preserve">
-    <value>Primary target: thick solid line. Each other object has its own dash pattern and marker, labelled at its highest point on the timeline.</value>
-  </data>
-  <data name="Planner_Targets_RemoveObject_Tooltip" xml:space="preserve">
-    <value>Remove object</value>
-  </data>
-  <data name="Planner_Targets_SelectedTargets_Header" xml:space="preserve">
-    <value>Selected targets</value>
-  </data>
-  <data name="Planner_Targets_SetPrimary_Button" xml:space="preserve">
-    <value>Set primary</value>
-  </data>
   <data name="Planner_Targets_Sun_ShortLabel" xml:space="preserve">
     <value>Sun</value>
+  </data>
+  <data name="Planner_Targets_VisibleCountShort_Format" xml:space="preserve">
+    <value>Visible {0} / {1}</value>
   </data>
   <data name="Planner_Targets_VisibleCount_Format" xml:space="preserve">
     <value>Visible objects: {0} / {1}</value>
@@ -454,15 +558,20 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Terrain_Frame_GroundFacing" xml:space="preserve">
     <value>Ground-facing · frame below horizontal horizon</value>
   </data>
-  <data name="Planner_Terrain_Label" xml:space="preserve">
-    <value>Terrain</value>
+  <data name="Planner_Terrain_Horizon_Label" xml:space="preserve">
+    <value>Horizon</value>
   </data>
-  <data name="Planner_Terrain_Minimap_North" xml:space="preserve">
-    <value>N ↑</value>
+  <data name="Planner_Terrain_Horizon_Tooltip" xml:space="preserve">
+    <value>The angle of the terrain horizon above level, along the camera's bearing, as seen from the camera's position.</value>
   </data>
-  <data name="Planner_Terrain_Minimap_Radius_Format" xml:space="preserve">
-    <value>{0} radius</value>
-    <comment>{0} is the distance from the centre of the terrain minimap to its edge, with its unit.</comment>
+  <data name="Planner_Terrain_Obstruction_Label" xml:space="preserve">
+    <value>Obstruction</value>
+  </data>
+  <data name="Planner_Terrain_Obstruction_Tooltip" xml:space="preserve">
+    <value>How far along the camera's bearing the first terrain blocks the view. Clear means nothing does.</value>
+  </data>
+  <data name="Planner_Terrain_Legend_AccessibleName" xml:space="preserve">
+    <value>Camera frame legend</value>
   </data>
   <data name="Planner_Terrain_Near_Label" xml:space="preserve">
     <value>Near</value>
@@ -470,33 +579,15 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Terrain_Sky_Label" xml:space="preserve">
     <value>Sky</value>
   </data>
-  <data name="Planner_Terrain_TerrainFrame_Label" xml:space="preserve">
-    <value>Terrain frame</value>
+  <data name="Planner_Terrain_CameraFrame_Label" xml:space="preserve">
+    <value>Camera frame</value>
   </data>
   <data name="Planner_Terrain_Threshold_Label" xml:space="preserve">
     <value>Threshold</value>
   </data>
-  <data name="Planner_Terrain_ToggleInspector_Button" xml:space="preserve">
-    <value>Toggle inspector</value>
-  </data>
-  <data name="Planner_Timeline_AltitudeAxis_Label" xml:space="preserve">
-    <value>ALTITUDE  +90°</value>
-  </data>
   <data name="Planner_Timeline_Date_Format" xml:space="preserve">
     <value>{0:dd MMM yyyy}</value>
-    <comment>The planning date beside the nearby-date slider. {0} is the date.</comment>
-  </data>
-  <data name="Planner_Timeline_DayEnd_Label" xml:space="preserve">
-    <value>24:00</value>
-  </data>
-  <data name="Planner_Timeline_DayStart_Label" xml:space="preserve">
-    <value>00:00</value>
-  </data>
-  <data name="Planner_Timeline_LocalTime_Label" xml:space="preserve">
-    <value>LOCAL TIME</value>
-  </data>
-  <data name="Planner_Timeline_Marker_Now" xml:space="preserve">
-    <value>NOW</value>
+    <comment>The planning date in the Planner's bar. {0} is the date.</comment>
   </data>
   <data name="Planner_Timeline_Marker_Rise" xml:space="preserve">
     <value>R</value>
@@ -510,9 +601,6 @@ Astronomical {6}–{7}</value>
     <value>T</value>
     <comment>One-letter marker for the target&apos;s transit time on the altitude chart.</comment>
   </data>
-  <data name="Planner_Timeline_NearbyDate_Label" xml:space="preserve">
-    <value>Nearby date</value>
-  </data>
   <data name="Planner_Weather_AstronomicalDarkness_Format" xml:space="preserve">
     <value>Astronomical darkness before {0} / after {1}</value>
     <comment>{0} astronomical dawn, {1} astronomical dusk.</comment>
@@ -524,6 +612,13 @@ Astronomical {6}–{7}</value>
   <data name="Planner_Weather_CivilTwilight_Format" xml:space="preserve">
     <value>Civil twilight {0}–{1}</value>
     <comment>{0} dawn, {1} dusk.</comment>
+  </data>
+  <data name="Planner_Weather_CompassPoints" xml:space="preserve">
+    <value>N,NNE,NE,ENE,E,ESE,SE,SSE,S,SSW,SW,WSW,W,WNW,NW,NNW</value>
+    <comment>The 16 compass points from north, clockwise, separated by commas.</comment>
+  </data>
+  <data name="Planner_Weather_Conditions_Heading" xml:space="preserve">
+    <value>Conditions</value>
   </data>
   <data name="Planner_Weather_Cloud_Format" xml:space="preserve">
     <value>Cloud {0}</value>
@@ -539,24 +634,45 @@ Humidity {11} · Dew {12} · Visibility {13}</value>
   <data name="Planner_Weather_DewPoint_Format" xml:space="preserve">
     <value>Dew point {0}</value>
   </data>
-  <data name="Planner_Weather_Heading" xml:space="preserve">
-    <value>Weather</value>
+  <data name="Planner_Weather_GustsCompact_Format" xml:space="preserve">
+    <value>Gusts {0}</value>
   </data>
   <data name="Planner_Weather_HighCloud_Format" xml:space="preserve">
     <value>High cloud {0}</value>
   </data>
+  <data name="Planner_Weather_HighLayer_Format" xml:space="preserve">
+    <value>High {0}</value>
+  </data>
   <data name="Planner_Weather_Humidity_Format" xml:space="preserve">
     <value>Humidity {0}</value>
+  </data>
+  <data name="Planner_Weather_HumidityCompact_Format" xml:space="preserve">
+    <value>{0} humidity</value>
+  </data>
+  <data name="Planner_Weather_Light_Heading" xml:space="preserve">
+    <value>Light</value>
   </data>
   <data name="Planner_Weather_LowCloud_Format" xml:space="preserve">
     <value>Low cloud {0}</value>
   </data>
+  <data name="Planner_Weather_LowLayer_Format" xml:space="preserve">
+    <value>Low {0}</value>
+  </data>
   <data name="Planner_Weather_MediumCloud_Format" xml:space="preserve">
     <value>Medium cloud {0}</value>
+  </data>
+  <data name="Planner_Weather_MidLayer_Format" xml:space="preserve">
+    <value>Mid {0}</value>
   </data>
   <data name="Planner_Weather_MoonIllumination_Format" xml:space="preserve">
     <value>Moon illumination {0:F0}%</value>
     <comment>{0} is the illuminated percentage.</comment>
+  </data>
+  <data name="Planner_Weather_Moon_Heading" xml:space="preserve">
+    <value>Moon</value>
+  </data>
+  <data name="Planner_Weather_MoonLitCompact_Format" xml:space="preserve">
+    <value>{0:F0}% lit</value>
   </data>
   <data name="Planner_Weather_MoonPhase_Format" xml:space="preserve">
     <value>Moon phase {0}</value>
@@ -573,6 +689,9 @@ Humidity {11} · Dew {12} · Visibility {13}</value>
   </data>
   <data name="Planner_Weather_NoValues" xml:space="preserve">
     <value>No weather values</value>
+  </data>
+  <data name="Planner_Weather_Precipitation_Label" xml:space="preserve">
+    <value>Precipitation</value>
   </data>
   <data name="Planner_Weather_Precipitation_Format" xml:space="preserve">
     <value>Precipitation {0}</value>
@@ -596,13 +715,18 @@ Humidity {11} · Dew {12} · Visibility {13}</value>
   <data name="Planner_Weather_Refreshing" xml:space="preserve">
     <value>Refreshing weather…</value>
   </data>
+  <data name="Planner_Weather_Sky_Heading" xml:space="preserve">
+    <value>Sky</value>
+  </data>
+  <data name="Planner_Weather_Source" xml:space="preserve">
+    <value>Weather data: Open-Meteo</value>
+  </data>
   <data name="Planner_Weather_Stale_Prefix" xml:space="preserve">
     <value>STALE · </value>
     <comment>Shown before the weather values when the forecast is out of date. Keep the trailing space.</comment>
   </data>
-  <data name="Planner_Weather_Summary_Format" xml:space="preserve">
-    <value>Open-Meteo · {0}</value>
-    <comment>{0} is the weather summary, for example &quot;Partly cloudy&quot;.</comment>
+  <data name="Planner_Weather_TwilightHelp_AccessibleName" xml:space="preserve">
+    <value>Twilight times</value>
   </data>
   <data name="Planner_Weather_Sunrise_Format" xml:space="preserve">
     <value>Sunrise {0}</value>
@@ -616,8 +740,8 @@ Humidity {11} · Dew {12} · Visibility {13}</value>
   <data name="Planner_Weather_Visibility_Format" xml:space="preserve">
     <value>Visibility {0}</value>
   </data>
-  <data name="Planner_Weather_WeatherConditions_Header" xml:space="preserve">
-    <value>Weather conditions</value>
+  <data name="Planner_Weather_Wind_Label" xml:space="preserve">
+    <value>Wind</value>
   </data>
   <data name="Planner_Weather_WindDirection_Format" xml:space="preserve">
     <value>Wind direction {0}</value>
@@ -627,5 +751,270 @@ Humidity {11} · Dew {12} · Visibility {13}</value>
   </data>
   <data name="Planner_Weather_WindSpeed_Format" xml:space="preserve">
     <value>Wind speed {0}</value>
+  </data>
+  <data name="Planner_Date_AccessibleName_Format" xml:space="preserve">
+    <value>Date, {0}</value>
+    <comment>The date button in the Planner's time bar, which opens a calendar. {0} is the date as shown.</comment>
+  </data>
+  <data name="Planner_Date_Picker_AccessibleName" xml:space="preserve">
+    <value>Choose a date</value>
+  </data>
+  <data name="Planner_Time_AccessibleName_Format" xml:space="preserve">
+    <value>Local time, {0}</value>
+    <comment>The time button in the Planner's time bar, which opens a time picker. {0} is the time as shown.</comment>
+  </data>
+  <data name="Planner_Time_Picker_AccessibleName" xml:space="preserve">
+    <value>Choose a local time</value>
+  </data>
+  <data name="Planner_PreviousTime_AccessibleName" xml:space="preserve">
+    <value>Previous 30 minutes</value>
+  </data>
+  <data name="Planner_NextTime_AccessibleName" xml:space="preserve">
+    <value>Next 30 minutes</value>
+  </data>
+  <data name="Planner_TimeZone_AccessibleName_Format" xml:space="preserve">
+    <value>Time zone, {0}</value>
+    <comment>{0} is the time zone's short name, such as GMT or BST.</comment>
+  </data>
+  <data name="Planner_TimeZone_Detail_Format" xml:space="preserve">
+    <value>{0}, {1}. The planning time zone is set in Settings.</value>
+    <comment>{0} is the time zone's identifier, such as Europe/London; {1} its offset, such as UTC+1.</comment>
+  </data>
+  <data name="Planner_Export_Button" xml:space="preserve">
+    <value>Export</value>
+  </data>
+  <data name="Planner_Pip_Resize_AccessibleName" xml:space="preserve">
+    <value>Resize Picture-in-Picture map</value>
+  </data>
+  <data name="Planner_CameraFrame_Resize_AccessibleName" xml:space="preserve">
+    <value>Resize Camera frame</value>
+  </data>
+  <data name="Planner_Overlay_Resize_HelpText" xml:space="preserve">
+    <value>Drag, or use the arrow keys, to change its width.</value>
+  </data>
+  <data name="Planner_Location_Copy_AccessibleName" xml:space="preserve">
+    <value>Copy planning location</value>
+  </data>
+  <data name="Planner_Location_Copied_Status" xml:space="preserve">
+    <value>Location copied</value>
+  </data>
+  <data name="Planner_Timeline_Selection_Format" xml:space="preserve">
+    <value>{0:dd MMM} {1:HH:mm}</value>
+    <comment>The Timeline scrubber's value for assistive technology: {0} the date, {1} the time of the moment chosen.</comment>
+  </data>
+  <data name="Planner_Timeline_Midnight_Format" xml:space="preserve">
+    <value>{0:dd MMM}</value>
+    <comment>The date at midnight on the Timeline's hour scale. {0} is the new day's date.</comment>
+  </data>
+  <data name="Planner_Timeline_Marker_RealNow" xml:space="preserve">
+    <value>now</value>
+    <comment>The faint mark for the real present moment on the Timeline, distinct from the plan's chosen moment.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_Sunrise" xml:space="preserve">
+    <value>Sunrise</value>
+    <comment>Timeline cue at the moment the Sun rises.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_Sunset" xml:space="preserve">
+    <value>Sunset</value>
+    <comment>Timeline cue at the moment the Sun sets.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_AstronomicalDarknessBegins" xml:space="preserve">
+    <value>Astro dark</value>
+    <comment>Timeline cue where astronomical darkness begins (the Sun 18° below the horizon). Keep short.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_AstronomicalDarknessEnds" xml:space="preserve">
+    <value>Astro dawn</value>
+    <comment>Timeline cue where astronomical darkness ends. Keep short.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_Moonrise" xml:space="preserve">
+    <value>Moonrise</value>
+    <comment>Timeline cue at moonrise, shown while the Moon's own path is hidden.</comment>
+  </data>
+  <data name="Planner_Timeline_Event_Moonset" xml:space="preserve">
+    <value>Moonset</value>
+    <comment>Timeline cue at moonset, shown while the Moon's own path is hidden.</comment>
+  </data>
+  <data name="Planner_Timeline_EventLabel_Format" xml:space="preserve">
+    <value>{0} {1}</value>
+    <comment>A Timeline event cue with its time, e.g. "Sunset 18:37". {0} is the event's name, {1} its time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_Sunrise_Format" xml:space="preserve">
+    <value>Sunrise {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_Sunset_Format" xml:space="preserve">
+    <value>Sunset {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_AstronomicalDarknessBegins_Format" xml:space="preserve">
+    <value>Astronomical darkness begins {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_AstronomicalDarknessEnds_Format" xml:space="preserve">
+    <value>Astronomical darkness ends {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_Moonrise_Format" xml:space="preserve">
+    <value>Moonrise {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_EventSpoken_Moonset_Format" xml:space="preserve">
+    <value>Moonset {0}</value>
+    <comment>Read by assistive technology. {0} is the time.</comment>
+  </data>
+  <data name="Planner_Timeline_ChartDescription_Format" xml:space="preserve">
+    <value>{0}. {1}</value>
+    <comment>The Timeline chart for assistive technology: {0} is the chosen moment, {1} the event cues with their times.</comment>
+  </data>
+  <data name="Planner_Timeline_Scrubber_AccessibleName" xml:space="preserve">
+    <value>Time on the timeline</value>
+  </data>
+  <data name="Planner_Import_Button" xml:space="preserve">
+    <value>Import</value>
+  </data>
+  <data name="Planner_Import_Open_Button" xml:space="preserve">
+    <value>Open plan image…</value>
+  </data>
+  <data name="Planner_Import_Clipboard_Button" xml:space="preserve">
+    <value>Load from clipboard</value>
+  </data>
+  <data name="Planner_Import_OpenDialog_Title" xml:space="preserve">
+    <value>Open plan image</value>
+  </data>
+  <data name="Planner_Import_DropHint" xml:space="preserve">
+    <value>Drop a plan image to open it</value>
+  </data>
+  <data name="Planner_Import_Done" xml:space="preserve">
+    <value>Plan imported</value>
+  </data>
+  <data name="Planner_Import_TargetMissing_Format" xml:space="preserve">
+    <value>Plan imported. {0} is not in your targets, so nothing is focused.</value>
+    <comment>{0} the plan's target identifier.</comment>
+  </data>
+  <data name="Planner_Import_NotReady" xml:space="preserve">
+    <value>The Planner is still starting. Try again in a moment.</value>
+  </data>
+  <data name="Planner_Import_NothingToImport" xml:space="preserve">
+    <value>There is no image to import.</value>
+  </data>
+  <data name="Planner_Import_ClipboardImageWithoutPlan" xml:space="preserve">
+    <value>The clipboard image does not contain Noctaxis plan data. Copy the plan PNG file instead, or open it with Open plan image…</value>
+  </data>
+  <data name="Planner_Import_MultipleFiles" xml:space="preserve">
+    <value>Drop one plan image at a time.</value>
+  </data>
+  <data name="Planner_Import_MultipleClipboardFiles" xml:space="preserve">
+    <value>The clipboard holds several files. Copy one plan image at a time.</value>
+  </data>
+  <data name="Planner_Import_UnreadableFile" xml:space="preserve">
+    <value>That file could not be read.</value>
+  </data>
+  <data name="Planner_Import_NotAnImage" xml:space="preserve">
+    <value>That is not an image Noctaxis can read.</value>
+  </data>
+  <data name="Planner_Import_UnsupportedImageFormat" xml:space="preserve">
+    <value>Only PNG plan images can be imported.</value>
+  </data>
+  <data name="Planner_Import_NoPlan" xml:space="preserve">
+    <value>This image has no Noctaxis plan in it.</value>
+  </data>
+  <data name="Planner_Import_Malformed" xml:space="preserve">
+    <value>The plan in this image is damaged.</value>
+  </data>
+  <data name="Planner_Import_UnsupportedSchema" xml:space="preserve">
+    <value>This plan was made by a newer version of Noctaxis. Update Noctaxis to open it.</value>
+  </data>
+  <data name="Planner_Import_InvalidCoordinates" xml:space="preserve">
+    <value>The plan's location is not valid.</value>
+  </data>
+  <data name="Planner_Import_InvalidTime" xml:space="preserve">
+    <value>The plan's time is not valid.</value>
+  </data>
+  <data name="Planner_Import_InvalidCamera" xml:space="preserve">
+    <value>The plan's camera direction is not valid.</value>
+  </data>
+  <data name="Planner_Import_LegacyScoutingCard" xml:space="preserve">
+    <value>This is a scouting card from an earlier version of Noctaxis. It records what the card showed, not a plan, so it cannot be opened. Export the plan again from the Planner.</value>
+  </data>
+  <data name="Planner_Export_FocusRequired" xml:space="preserve">
+    <value>Focus a target to export a plan.</value>
+  </data>
+  <data name="Planner_Export_TargetPending" xml:space="preserve">
+    <value>The focused target is still being calculated. Try again in a moment.</value>
+  </data>
+  <data name="Planner_Viability_Label" xml:space="preserve">
+    <value>Shot viability</value>
+  </data>
+  <data name="Planner_Viability_RatingSuffix_Format" xml:space="preserve">
+    <value>· {0}</value>
+    <comment>Follows the score in the Camera frame's header when there is room. {0} is the rating, for example Good.</comment>
+  </data>
+  <data name="Planner_Viability_Summary_None" xml:space="preserve">
+    <value>—</value>
+    <comment>Shown in place of a score when nothing can be assessed.</comment>
+  </data>
+  <data name="Planner_Viability_Title_Format" xml:space="preserve">
+    <value>Shot viability · {0}/100 · {1}</value>
+    <comment>{0} is the score out of 100; {1} is its rating, for example Good.</comment>
+  </data>
+  <data name="Planner_Viability_Subject_Format" xml:space="preserve">
+    <value>{0} at the planned time, with the current camera and framing.</value>
+    <comment>{0} is the focused target's name.</comment>
+  </data>
+  <data name="Planner_Viability_NoTarget" xml:space="preserve">
+    <value>Focus a target to assess the shot.</value>
+  </data>
+  <data name="Planner_Viability_Coverage_Format" xml:space="preserve">
+    <value>Assessed {0:0}% of the factors that apply · {1} confidence</value>
+    <comment>{0} is the share of the applicable factors' weight that could be assessed, in per cent; {1} is High, Moderate or Low.</comment>
+  </data>
+  <data name="Planner_Viability_Policy_Format" xml:space="preserve">
+    <value>Scoring policy {0}</value>
+    <comment>{0} is the scoring policy's identifier, for example shot-viability-v1.</comment>
+  </data>
+  <data name="Planner_Viability_Advisory" xml:space="preserve">
+    <value>Viability scores are advisory estimates. They do not restrict planning or exporting.</value>
+  </data>
+  <data name="Planner_Viability_Unavailable_AccessibleName" xml:space="preserve">
+    <value>Shot viability not assessed. Show details</value>
+  </data>
+  <data name="Planner_Viability_Row_AccessibleName_Format" xml:space="preserve">
+    <value>{0}: {1}. {2}</value>
+    <comment>{0} is the factor's name; {1} is its severity, for example Caution; {2} is its explanation.</comment>
+  </data>
+  <data name="Planner_Viability_About_AccessibleName" xml:space="preserve">
+    <value>About shot viability</value>
+  </data>
+  <data name="Planner_Viability_AccessibleName_Format" xml:space="preserve">
+    <value>Shot viability {0} out of 100, {1}. {2}. Show details</value>
+    <comment>{0} is the score out of 100; {1} is its rating; {2} names its critical issues and warnings, for example "1 critical issue and 2 warnings".</comment>
+  </data>
+  <data name="Planner_Viability_Issues_None" xml:space="preserve">
+    <value>No warnings</value>
+  </data>
+  <data name="Planner_Viability_Issues_Critical_One" xml:space="preserve">
+    <value>1 critical issue</value>
+  </data>
+  <data name="Planner_Viability_Issues_Critical_Many_Format" xml:space="preserve">
+    <value>{0} critical issues</value>
+    <comment>{0} is the number of critical issues.</comment>
+  </data>
+  <data name="Planner_Viability_Issues_Warning_One" xml:space="preserve">
+    <value>1 warning</value>
+  </data>
+  <data name="Planner_Viability_Issues_Warning_Many_Format" xml:space="preserve">
+    <value>{0} warnings</value>
+    <comment>{0} is the number of warnings.</comment>
+  </data>
+  <data name="Planner_Viability_Issues_Join_Format" xml:space="preserve">
+    <value>{0} and {1}</value>
+    <comment>{0} names the critical issues; {1} names the warnings.</comment>
+  </data>
+  <data name="Planner_Export_ReadyWithoutFreshWeather" xml:space="preserve">
+    <value>Plan image ready. Fresh weather was unavailable; the sheet notes what it shows.</value>
+  </data>
+  <data name="Planner_Export_WeatherTimedOut" xml:space="preserve">
+    <value>the weather service did not respond in time</value>
+    <comment>Completes "Weather unavailable: …" on the plan image.</comment>
   </data>
 </root>

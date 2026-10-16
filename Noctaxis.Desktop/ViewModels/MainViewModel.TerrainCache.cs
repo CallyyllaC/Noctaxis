@@ -30,6 +30,7 @@ public partial class MainViewModel
         var usage = cache.Usage;
         TerrainCacheUsageText = Strings.Format("Settings_Data_TerrainCache_Usage_Format",
             usage.Bytes / (1024d * 1024), usage.LimitBytes / (1024d * 1024 * 1024), usage.Entries);
+        ShowTerrainCacheCapacity(usage.Bytes, usage.LimitBytes, usage.Entries);
     }
 
     [RelayCommand]
@@ -40,7 +41,6 @@ public partial class MainViewModel
         try
         {
             _refreshCancellation?.Cancel();
-            _terrainDebugMapCancellation?.Cancel();
             await _terrainDiskCache.ClearAsync();
             UpdateTerrainCacheUsage();
             TerrainCacheStatus = Strings.Get("Settings_Data_TerrainCache_Cleared");

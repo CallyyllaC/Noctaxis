@@ -48,7 +48,14 @@ public sealed class GeoTiffRaster
     public int Height => Metadata.Height;
     public long ApproximateMemoryBytes => (long)_values.Length * sizeof(double);
 
-    public static GeoTiffRaster Load(string path)
+    /// <summary>
+    /// The most pixels <see cref="Load"/> expands by default: the largest raster any caller accepts (a 4096 x 4096 WSF
+    /// chunk, 128 MiB as doubles). A file's declared size is checked against it before anything is allocated, so a
+    /// small compressed file cannot claim a grid that exhausts memory.
+    /// </summary>
+    public const int DefaultMaximumPixels = 4096 * 4096;
+
+    public static GeoTiffRaster Load(string path, int maximumPixels = DefaultMaximumPixels)
     {
         EnsureGeoTiffTagsRegistered();
         using var tiff = Tiff.Open(path, "r") ?? throw new InvalidDataException("GeoTIFF could not be opened.");
@@ -56,8 +63,11 @@ public sealed class GeoTiffRaster
         if (metadata.Width <= 0 || metadata.Height <= 0 || metadata.SamplesPerPixel != 1 ||
             metadata.BitsPerSample is not (8 or 16 or 32 or 64))
             throw new InvalidDataException("Unsupported environmental GeoTIFF layout.");
+        if ((long)metadata.Width * metadata.Height > maximumPixels)
+            throw new InvalidDataException(
+                $"GeoTIFF of {metadata.Width} x {metadata.Height} exceeds the {maximumPixels}-pixel limit.");
 
-        var values = new double[checked(metadata.Width * metadata.Height)];
+        var values = new double[metadata.Width * metadata.Height];
         if (tiff.IsTiled()) ReadTiles(tiff, metadata.Width, metadata.Height,
             metadata.BitsPerSample, metadata.SampleFormat, values);
         else ReadScanlines(tiff, metadata.Width, metadata.Height,

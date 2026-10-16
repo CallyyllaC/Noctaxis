@@ -173,6 +173,100 @@ public sealed class TerrainResultCacheTests
         Assert.Equal(4, horizon.CompletedCacheDiagnostics.Count);
     }
 
+    [Fact]
+    public async Task OfflineHorizonIsReusedOnlyBrieflyAndRebuiltAfterRecovery()
+    {
+        // V-03: a horizon built while terrain was unreachable must not be served for the whole session.
+        var time = new ManualTime();
+        var ground = new FlakyGround { Online = false };
+        var service = new HorizonService(ground, NullLogger<HorizonService>.Instance, 1, time);
+
+        var offline = await service.GetProfileAsync(Observer(0), Request, default);
+        Assert.False(offline.HasTerrainCoverage);
+        Assert.True(HorizonService.IsDegraded(offline));
+        // Within its short lifetime the degraded profile is still shared, so refreshes do not rebuild it.
+        Assert.Same(offline, await service.GetProfileAsync(Observer(0), Request, default));
+
+        ground.Online = true;
+        time.Advance(HorizonService.DegradedProfileLifetime);
+        var recovered = await service.GetProfileAsync(Observer(0), Request, default);
+        Assert.NotSame(offline, recovered);
+        Assert.True(recovered.HasTerrainCoverage);
+        Assert.False(HorizonService.IsDegraded(recovered));
+
+        // A complete profile keeps the permanent behaviour: it is reused regardless of age.
+        time.Advance(TimeSpan.FromHours(6));
+        Assert.Same(recovered, await service.GetProfileAsync(Observer(0), Request, default));
+    }
+
+    [Fact]
+    public async Task OfflineSnapshotIsRebuiltAfterRecoveryButPermanentAbsenceIsKept()
+    {
+        var time = new ManualTime();
+        var ground = new FlakyGround { Online = false };
+        var horizon = new HorizonService(ground, NullLogger<HorizonService>.Instance, 1, time);
+        var settlement = new StatedSettlement(EnvironmentalDataState.TileAbsent);
+        var service = new PlannerEnvironmentService(horizon, settlement,
+            NullLogger<PlannerEnvironmentService>.Instance, time: time);
+
+        var offline = await service.GetSnapshotAsync(Observer(0), Request, default);
+        Assert.False(offline.HorizonProfile.HasTerrainCoverage);
+        Assert.Same(offline, await service.GetSnapshotAsync(Observer(0), Request, default));
+
+        ground.Online = true;
+        time.Advance(HorizonService.DegradedProfileLifetime);
+        var recovered = await service.GetSnapshotAsync(Observer(0), Request, default);
+        Assert.NotSame(offline, recovered);
+        Assert.True(recovered.HorizonProfile.HasTerrainCoverage);
+
+        // Settlement the source reports as absent is permanent, so this snapshot is not degraded.
+        var calls = settlement.Calls;
+        time.Advance(TimeSpan.FromHours(6));
+        Assert.Same(recovered, await service.GetSnapshotAsync(Observer(0), Request, default));
+        Assert.Equal(calls, settlement.Calls);
+
+        // Settlement that could not be reached is transient, even with complete terrain.
+        settlement.State = EnvironmentalDataState.SourceUnavailable;
+        var unreachable = await service.GetSnapshotAsync(Observer(1), Request, default);
+        Assert.Same(unreachable, await service.GetSnapshotAsync(Observer(1), Request, default));
+        settlement.State = EnvironmentalDataState.TileAbsent;
+        time.Advance(HorizonService.DegradedProfileLifetime);
+        Assert.NotSame(unreachable, await service.GetSnapshotAsync(Observer(1), Request, default));
+    }
+
+    private sealed class ManualTime : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        public void Advance(TimeSpan by) => _now += by;
+        public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    private sealed class FlakyGround : ITerrainElevationProvider
+    {
+        public volatile bool Online;
+        public Task<EnvironmentalValue<double>> GetElevationAsync(GeoCoordinate coordinate, CancellationToken token) =>
+            Task.FromResult(Online
+                ? new EnvironmentalValue<double>(EnvironmentalDataState.Available, 10, "fixture", "1", "fixture")
+                : new EnvironmentalValue<double>(EnvironmentalDataState.Unavailable, default, "fixture", "1", "offline"));
+        public Task<ElevationBatchResult> GetElevationsAsync(IReadOnlyList<GeoCoordinate> coordinates, CancellationToken token) =>
+            Task.FromResult(Online
+                ? new ElevationBatchResult(EnvironmentalDataState.Available,
+                    Enumerable.Repeat<double?>(10, coordinates.Count).ToArray(), "fixture", "1", "fixture")
+                : new ElevationBatchResult(EnvironmentalDataState.Unavailable,
+                    new double?[coordinates.Count], "fixture", "1", "offline"));
+    }
+
+    private sealed class StatedSettlement(EnvironmentalDataState state) : ISettlementDataProvider
+    {
+        public int Calls;
+        public EnvironmentalDataState State { get; set; } = state;
+        public Task<EnvironmentalValue<SettlementRaster>> GetSettlementAsync(GeoRasterRequest request, CancellationToken token)
+        {
+            Calls++;
+            return Task.FromResult(new EnvironmentalValue<SettlementRaster>(State, default, "fixture", "1", State.ToString()));
+        }
+    }
+
     private sealed class Ground : ITerrainElevationProvider
     {
         public long Samples;

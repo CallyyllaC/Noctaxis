@@ -61,6 +61,9 @@
   <data name="Settings_Appearance_Theme_LockedSupporter" xml:space="preserve">
     <value>Locked · Supporter</value>
   </data>
+  <data name="Settings_Appearance_Theme_Standard" xml:space="preserve">
+    <value>Standard</value>
+  </data>
   <data name="Settings_Appearance_Theme_Supporter" xml:space="preserve">
     <value>Supporter</value>
   </data>
@@ -72,6 +75,10 @@
   </data>
   <data name="Settings_Appearance_ThemeName_supporter_moonlit" xml:space="preserve">
     <value>Moonlit</value>
+  </data>
+  <data name="Settings_Appearance_ThemeName_supporter_pigeon" xml:space="preserve">
+    <value>Pigeon</value>
+    <comment>A supporter theme named after the rock pigeon, dedicated to the first supporter. A name, so keep the bird's name in translation.</comment>
   </data>
   <data name="Settings_Appearance_Tritanopia_Option" xml:space="preserve">
     <value>Tritanopia</value>
@@ -110,9 +117,6 @@
   <data name="Settings_Celestial_Limit_AddedHidden" xml:space="preserve">
     <value>Object added hidden because eight objects are already visible.</value>
   </data>
-  <data name="Settings_Celestial_Limit_HideAnother" xml:space="preserve">
-    <value>Hide another object before making this target visible.</value>
-  </data>
   <data name="Settings_Celestial_Limit_Maximum" xml:space="preserve">
     <value>A maximum of eight celestial objects can be visible at once.</value>
   </data>
@@ -141,10 +145,7 @@
     <value>Reset filters</value>
   </data>
   <data name="Settings_Celestial_RestoreDefaultObjects_Button" xml:space="preserve">
-    <value>Restore default objects</value>
-  </data>
-  <data name="Settings_Celestial_SearchBundledOpenngc_Description" xml:space="preserve">
-    <value>Search the bundled OpenNGC catalogue to choose the objects available in the Planner.</value>
+    <value>Clear objects</value>
   </data>
   <data name="Settings_Celestial_SearchCelestialCatalogue_AccessibleName" xml:space="preserve">
     <value>Search celestial catalogue</value>
@@ -173,9 +174,6 @@
   </data>
   <data name="Settings_Data_DeletesAllCached_Tooltip" xml:space="preserve">
     <value>Deletes all cached terrain; it is downloaded again when needed</value>
-  </data>
-  <data name="Settings_Data_InstallRepairReinstall_Button" xml:space="preserve">
-    <value>Install / Repair / Reinstall</value>
   </data>
   <data name="Settings_Data_LightPollution_Cancelled" xml:space="preserve">
     <value>Installation cancelled</value>
@@ -279,7 +277,7 @@
     <comment>Counts of saved-location images.</comment>
   </data>
   <data name="Settings_Data_MaximumCacheSizeGib_Label" xml:space="preserve">
-    <value>Maximum cache size (GiB)</value>
+    <value>Maximum cache size</value>
   </data>
   <data name="Settings_Data_MaximumTerrainCacheSize_AccessibleName" xml:space="preserve">
     <value>Maximum terrain cache size in gibibytes</value>
@@ -333,13 +331,13 @@
     <comment>{0} is the error message.</comment>
   </data>
   <data name="Settings_Data_TerrainMapzenTilezen_Description" xml:space="preserve">
-    <value>Terrain (Mapzen/Tilezen Terrarium), land cover (ESA WorldCover) and settlement (WSF) data are downloaded on demand and shared between nearby locations. Noctaxis stays usable when a source is unavailable.</value>
+    <value>Terrain (Mapzen/Tilezen Terrarium), land cover (ESA WorldCover) and settlement (WSF) data are downloaded as needed and shared between nearby locations.</value>
   </data>
   <data name="Settings_Diagnostics_AdvancedSourceDetails_Header" xml:space="preserve">
     <value>Advanced source details</value>
   </data>
   <data name="Settings_Diagnostics_BearingDistanceSampled_Description" xml:space="preserve">
-    <value>Bearing and distance of the sampled horizon, separate from the geographic Planner minimap.</value>
+    <value>Bearing and distance of the sampled horizon.</value>
   </data>
   <data name="Settings_Diagnostics_CachePerformance_Header" xml:space="preserve">
     <value>Cache / performance</value>
@@ -354,7 +352,7 @@
     <value>Enable terrain diagnostics</value>
   </data>
   <data name="Settings_Diagnostics_RequiresTerrainCalculations_Description" xml:space="preserve">
-    <value>Requires terrain calculations (Planner map). The Planner minimap works independently.</value>
+    <value>Requires terrain calculations (Planner map).</value>
   </data>
   <data name="Settings_Diagnostics_SelectedBearing_Heading" xml:space="preserve">
     <value>Selected bearing</value>
@@ -446,10 +444,7 @@
     <value>New lens</value>
   </data>
   <data name="Settings_Equipment_PrimeLens" xml:space="preserve">
-    <value>Prime lens</value>
-  </data>
-  <data name="Settings_Equipment_PrimeLensHas_Description" xml:space="preserve">
-    <value>A prime lens has the same minimum and maximum focal length.</value>
+    <value>Prime</value>
   </data>
   <data name="Settings_Equipment_RemoveCamera_AccessibleName" xml:space="preserve">
     <value>Remove camera</value>
@@ -458,7 +453,7 @@
     <value>Remove lens</value>
   </data>
   <data name="Settings_Equipment_SensorDimensionsMillimetres_Description" xml:space="preserve">
-    <value>Sensor dimensions in millimetres set the field of view.</value>
+    <value>A camera's sensor size, with the lens's focal length, sets the field of view. Resolution is optional; with it, Noctaxis shows the sensor's pixel pitch.</value>
   </data>
   <data name="Settings_Equipment_SensorHeightMillimetres_AccessibleName" xml:space="preserve">
     <value>Sensor height in millimetres</value>
@@ -488,10 +483,7 @@
     <value>Equipment changes are saved once every profile is complete.</value>
   </data>
   <data name="Settings_Equipment_ZoomLens" xml:space="preserve">
-    <value>Zoom lens</value>
-  </data>
-  <data name="Settings_General_AffectsDraggingTime_Description" xml:space="preserve">
-    <value>Affects dragging the time slider only; exact times can still be typed.</value>
+    <value>Zoom</value>
   </data>
   <data name="Settings_General_ExternalMapProvider_AccessibleName" xml:space="preserve">
     <value>External map provider</value>
@@ -506,7 +498,25 @@
     <value>Measurement system</value>
   </data>
   <data name="Settings_General_MeasurementSystems_Description" xml:space="preserve">
-    <value>Metric: °C, km/h, kilometres, metres, millimetres. UK Mixed: °C, mph, miles, metres, millimetres. Imperial: °F, mph, miles, feet, inches. Focal lengths, sensor sizes and angles keep their usual units.</value>
+    <value>Metric
+• °C
+• km/h
+• kilometres and metres
+• millimetres
+
+UK Mixed
+• °C
+• mph
+• miles and metres
+• millimetres
+
+Imperial
+• °F
+• mph
+• miles and feet
+• inches
+
+Focal lengths, sensor sizes and angles keep their usual units.</value>
   </data>
   <data name="Settings_General_Metric_Option" xml:space="preserve">
     <value>Metric</value>
@@ -518,10 +528,7 @@
     <value>Language</value>
   </data>
   <data name="Settings_General_Language_Description" xml:space="preserve">
-    <value>Used for Noctaxis text and for place names on the map where the map data has them. Numbers, dates and times follow your system's regional format. English (United Kingdom) is the only language available at present.</value>
-  </data>
-  <data name="Settings_General_Language_Heading" xml:space="preserve">
-    <value>Language</value>
+    <value>Used for Noctaxis text and for place names on the map where the map data has them. Numbers, dates and times follow your system's regional format.</value>
   </data>
   <data name="Settings_General_Language_Label" xml:space="preserve">
     <value>Application language</value>
@@ -533,7 +540,7 @@
     <value>Planning time zone</value>
   </data>
   <data name="Settings_General_SystemFollowsOperating_Description" xml:space="preserve">
-    <value>“system” follows the operating system. Each launch starts at the current time, rounded to the nearest hour.</value>
+    <value>System follows the time zone set on your computer.</value>
   </data>
   <data name="Settings_General_Tab" xml:space="preserve">
     <value>General</value>
@@ -542,10 +549,10 @@
     <value>Time</value>
   </data>
   <data name="Settings_General_TimeSliderSnapInterval_AccessibleName" xml:space="preserve">
-    <value>Time slider snap interval in minutes</value>
+    <value>Timeline snap interval in minutes</value>
   </data>
   <data name="Settings_General_TimeSliderSnapInterval_Label" xml:space="preserve">
-    <value>Time slider snap interval (minutes)</value>
+    <value>Timeline snap interval</value>
   </data>
   <data name="Settings_General_Title" xml:space="preserve">
     <value>General</value>
@@ -553,9 +560,6 @@
   <data name="Settings_General_UK_Option" xml:space="preserve">
     <value>UK Mixed</value>
     <comment>The measurement system whose saved identifier is UK: miles and miles per hour, otherwise metric.</comment>
-  </data>
-  <data name="Settings_General_Units_Heading" xml:space="preserve">
-    <value>Units</value>
   </data>
   <data name="Settings_Language_Name_en_GB" xml:space="preserve">
     <value>English (United Kingdom)</value>
@@ -579,6 +583,12 @@
   <data name="Settings_Name_ForecastReuseDistance" xml:space="preserve">
     <value>Forecast reuse distance</value>
   </data>
+  <data name="Settings_Name_InvertHorizontalDrag" xml:space="preserve">
+    <value>Invert horizontal drag</value>
+  </data>
+  <data name="Settings_Name_InvertVerticalDrag" xml:space="preserve">
+    <value>Invert vertical drag</value>
+  </data>
   <data name="Settings_Name_LightPollutionColourMap" xml:space="preserve">
     <value>Light pollution colour map</value>
   </data>
@@ -586,7 +596,16 @@
     <value>Measurement system</value>
   </data>
   <data name="Settings_Name_MinimumTerrainFrameCoverage" xml:space="preserve">
-    <value>Minimum terrain frame coverage</value>
+    <value>Minimum terrain coverage</value>
+  </data>
+  <data name="Settings_Name_PlannerPip" xml:space="preserve">
+    <value>Picture-in-Picture map</value>
+  </data>
+  <data name="Settings_Name_PlannerPipRoadsAndLabels" xml:space="preserve">
+    <value>Picture-in-Picture roads &amp; labels</value>
+  </data>
+  <data name="Settings_Name_PlannerPipEnhanceContrast" xml:space="preserve">
+    <value>Picture-in-Picture contrast</value>
   </data>
   <data name="Settings_Name_TerrainCacheSize" xml:space="preserve">
     <value>Maximum terrain cache size</value>
@@ -596,9 +615,6 @@
   </data>
   <data name="Settings_Name_TerrainDiagnostics" xml:space="preserve">
     <value>Terrain diagnostics</value>
-  </data>
-  <data name="Settings_Name_TerrainMinimapContext" xml:space="preserve">
-    <value>Terrain minimap context</value>
   </data>
   <data name="Settings_Name_TerrainObstructionColour" xml:space="preserve">
     <value>Terrain obstruction colour</value>
@@ -631,7 +647,7 @@
     <value>0% draws boundaries only; higher values shade the visible frame.</value>
   </data>
   <data name="Settings_PlannerMap_CameraOverlayOpacity_Label" xml:space="preserve">
-    <value>Camera overlay opacity (%)</value>
+    <value>Camera overlay opacity</value>
   </data>
   <data name="Settings_PlannerMap_CameraOverlayOpacityPercent_AccessibleName" xml:space="preserve">
     <value>Camera overlay opacity percent</value>
@@ -639,14 +655,23 @@
   <data name="Settings_PlannerMap_ColourMap_Label" xml:space="preserve">
     <value>Colour map</value>
   </data>
+  <data name="Settings_PlannerMap_EnablePip_Option" xml:space="preserve">
+    <value>Show the Picture-in-Picture map</value>
+  </data>
   <data name="Settings_PlannerMap_EnableTerrainCalculations_Option" xml:space="preserve">
     <value>Enable terrain calculations</value>
   </data>
-  <data name="Settings_PlannerMap_FramingOverlayAppearance_Header" xml:space="preserve">
-    <value>Framing overlay appearance</value>
+  <data name="Settings_PlannerMap_InvertDrag_Description" xml:space="preserve">
+    <value>Reverses drag direction without changing bearing/pitch values.</value>
   </data>
-  <data name="Settings_PlannerMap_HowMuchSurrounding_Description" xml:space="preserve">
-    <value>How much surrounding terrain the minimap shows, relative to the main map.</value>
+  <data name="Settings_PlannerMap_InvertDrag_Info_AccessibleName" xml:space="preserve">
+    <value>About drag direction</value>
+  </data>
+  <data name="Settings_PlannerMap_InvertHorizontalDrag_Option" xml:space="preserve">
+    <value>Invert horizontal drag</value>
+  </data>
+  <data name="Settings_PlannerMap_InvertVerticalDrag_Option" xml:space="preserve">
+    <value>Invert vertical drag</value>
   </data>
   <data name="Settings_PlannerMap_LightPollutionColourMap_AccessibleName" xml:space="preserve">
     <value>Light pollution colour map</value>
@@ -658,10 +683,10 @@
     <value>Maximum opacity of the terrain tint; higher makes obstruction more prominent.</value>
   </data>
   <data name="Settings_PlannerMap_MinimumTerrainFrameCoverage_AccessibleName" xml:space="preserve">
-    <value>Minimum terrain frame coverage percent</value>
+    <value>Minimum terrain coverage of the camera frame, percent</value>
   </data>
   <data name="Settings_PlannerMap_MinimumTerrainFrameCoverage_Label" xml:space="preserve">
-    <value>Minimum terrain frame coverage (%)</value>
+    <value>Ignore terrain in the bottom of the frame</value>
   </data>
   <data name="Settings_PlannerMap_Palette_Cividis_Description" xml:space="preserve">
     <value>Blue-to-yellow palette designed to remain useful for many users with colour-vision deficiencies.</value>
@@ -693,6 +718,27 @@
   <data name="Settings_PlannerMap_ShowWeatherTerrainVisibility_Option" xml:space="preserve">
     <value>Show weather and terrain visibility limits</value>
   </data>
+  <data name="Settings_PlannerMap_Panels_Heading" xml:space="preserve">
+    <value>Panels</value>
+  </data>
+  <data name="Settings_PlannerMap_Pip_Description" xml:space="preserve">
+    <value>A second, smaller map over the top-left of the main map, following the pin by default. To change what it shows, switch it into the main map, change it there and switch it back. Turning it off saves the work of drawing it.</value>
+  </data>
+  <data name="Settings_PlannerMap_Pip_Heading" xml:space="preserve">
+    <value>Picture-in-Picture map</value>
+  </data>
+  <data name="Settings_PlannerMap_PipRoadsAndLabels_Option" xml:space="preserve">
+    <value>Show roads &amp; labels</value>
+  </data>
+  <data name="Settings_PlannerMap_PipEnhanceContrast_Option" xml:space="preserve">
+    <value>Enhance PiP contrast</value>
+  </data>
+  <data name="Settings_PlannerMap_ResetPlannerLayout_Button" xml:space="preserve">
+    <value>Reset Planner layout</value>
+  </data>
+  <data name="Settings_PlannerMap_ResetPlannerLayout_Tooltip" xml:space="preserve">
+    <value>Puts every panel back where Noctaxis starts, at once. Nothing but the panel arrangement changes.</value>
+  </data>
   <data name="Settings_PlannerMap_Tab" xml:space="preserve">
     <value>Planner map</value>
   </data>
@@ -700,17 +746,7 @@
     <value>Terrain</value>
   </data>
   <data name="Settings_PlannerMap_TerrainCoveringLess_Description" xml:space="preserve">
-    <value>Terrain covering less of the camera frame than this is ignored.</value>
-  </data>
-  <data name="Settings_PlannerMap_TerrainMinimapContext_AccessibleName" xml:space="preserve">
-    <value>Terrain minimap context</value>
-  </data>
-  <data name="Settings_PlannerMap_TerrainMinimapContext_Format" xml:space="preserve">
-    <value>{0:0.00}×</value>
-    <comment>Minimap context as a multiple of the main map. {0} is the number.</comment>
-  </data>
-  <data name="Settings_PlannerMap_TerrainMinimapContext_Label" xml:space="preserve">
-    <value>Terrain minimap context</value>
+    <value>Foreground terrain that reaches no higher than this share of the Camera frame, from its bottom edge, does not count as blocking the view. The Camera frame draws this as its threshold line, and the map's visibility limits ignore terrain below it.</value>
   </data>
   <data name="Settings_PlannerMap_TerrainObstructionColour_AccessibleName" xml:space="preserve">
     <value>Terrain obstruction colour</value>
@@ -846,22 +882,13 @@
     <comment>{0} is the unit symbol: km or mi.</comment>
   </data>
   <data name="Settings_Weather_ForecastReusedWithin_Description" xml:space="preserve">
-    <value>A forecast is reused within this distance for up to ten minutes. Manual refreshes and exports always fetch a new one.</value>
-  </data>
-  <data name="Settings_Weather_ForecastsComeOpen_Description" xml:space="preserve">
-    <value>Forecasts come from Open-Meteo (no API key). Astronomy values are calculated by Noctaxis.</value>
+    <value>Forecasts come from Open-Meteo. One is reused for nearby places within this distance for up to ten minutes; a manual refresh or an export always fetches a new one.</value>
   </data>
   <data name="Settings_Weather_Group_Moon" xml:space="preserve">
     <value>Moon</value>
   </data>
-  <data name="Settings_Weather_Group_SunAndDarkness" xml:space="preserve">
-    <value>Sun &amp; darkness</value>
-  </data>
-  <data name="Settings_Weather_Group_Weather" xml:space="preserve">
-    <value>Weather</value>
-  </data>
   <data name="Settings_Weather_RequestedOpenMeteo_Description" xml:space="preserve">
-    <value>Requested from Open-Meteo, shown in the Planner and included in exports.</value>
+    <value>What the Planner's Weather panel shows and exports include. Forecast values you turn off are not requested from Open-Meteo. Visibility is always requested, because the map's visibility limits need it. Sun and Moon times are calculated by Noctaxis.</value>
   </data>
   <data name="Settings_Weather_Tab" xml:space="preserve">
     <value>Weather</value>
@@ -870,6 +897,166 @@
     <value>Weather</value>
   </data>
   <data name="Settings_Weather_WeatherValues_Heading" xml:space="preserve">
-    <value>Weather values</value>
+    <value>Shown in the Planner</value>
+  </data>
+  <data name="Settings_Appearance_ColourVision_Info_AccessibleName" xml:space="preserve">
+    <value>About colour vision mode</value>
+  </data>
+  <data name="Settings_Appearance_TextSize_Info_AccessibleName" xml:space="preserve">
+    <value>About text size</value>
+  </data>
+  <data name="Settings_Celestial_Filters_Info" xml:space="preserve">
+    <value>Search the bundled OpenNGC catalogue by name, alias or designation (M31, NGC 224).
+
+Object type: galaxies, nebulae, clusters and so on.
+Constellation: where in the sky the object lies.
+Designation: the catalogue it is numbered in, such as Messier (M), NGC or IC.</value>
+  </data>
+  <data name="Settings_Celestial_Filters_Info_AccessibleName" xml:space="preserve">
+    <value>About the catalogue filters</value>
+  </data>
+  <data name="Settings_Common_Percent_Unit" xml:space="preserve">
+    <value>%</value>
+  </data>
+  <data name="Settings_Data_Atlas_Info_AccessibleName" xml:space="preserve">
+    <value>About the light pollution atlas</value>
+  </data>
+  <data name="Settings_Data_CacheSize_Info_AccessibleName" xml:space="preserve">
+    <value>About the cache size</value>
+  </data>
+  <data name="Settings_Data_GiB_Unit" xml:space="preserve">
+    <value>GiB</value>
+  </data>
+  <data name="Settings_Data_LightPollution_Install_Button" xml:space="preserve">
+    <value>Install</value>
+  </data>
+  <data name="Settings_Data_LightPollution_Reinstall_Button" xml:space="preserve">
+    <value>Reinstall</value>
+  </data>
+  <data name="Settings_Data_LightPollution_Repair_Button" xml:space="preserve">
+    <value>Repair</value>
+  </data>
+  <data name="Settings_Data_SavedMapImages_Info_AccessibleName" xml:space="preserve">
+    <value>About saved map images</value>
+  </data>
+  <data name="Settings_Data_TerrainCache_Capacity_AccessibleName" xml:space="preserve">
+    <value>Terrain cache used</value>
+  </data>
+  <data name="Settings_Data_TerrainCache_Capacity_Format" xml:space="preserve">
+    <value>{0} used of {1} · {2:N0} files</value>
+  </data>
+  <data name="Settings_Data_TerrainCache_GiB_Format" xml:space="preserve">
+    <value>{0:0.00} GiB</value>
+  </data>
+  <data name="Settings_Data_TerrainCache_Limit_Format" xml:space="preserve">
+    <value>{0:0.##} GiB</value>
+  </data>
+  <data name="Settings_Data_TerrainCache_MiB_Format" xml:space="preserve">
+    <value>{0:N0} MiB</value>
+  </data>
+  <data name="Settings_Data_TerrainSources_Info_AccessibleName" xml:space="preserve">
+    <value>About terrain and map data</value>
+  </data>
+  <data name="Settings_Equipment_CameraHeight_Info_AccessibleName" xml:space="preserve">
+    <value>About camera height</value>
+  </data>
+  <data name="Settings_Equipment_Cameras_Info_AccessibleName" xml:space="preserve">
+    <value>About camera profiles</value>
+  </data>
+  <data name="Settings_Equipment_PixelPitch_Format" xml:space="preserve">
+    <value>Pixel pitch {0:0.00} µm</value>
+  </data>
+  <data name="Settings_Equipment_ResolutionHeight_AccessibleName" xml:space="preserve">
+    <value>Resolution height in pixels (optional)</value>
+  </data>
+  <data name="Settings_Equipment_ResolutionHeight_Label" xml:space="preserve">
+    <value>Resolution height (px, optional)</value>
+  </data>
+  <data name="Settings_Equipment_ResolutionIncomplete" xml:space="preserve">
+    <value>Enter both width and height to use the resolution.</value>
+  </data>
+  <data name="Settings_Equipment_ResolutionWidth_AccessibleName" xml:space="preserve">
+    <value>Resolution width in pixels (optional)</value>
+  </data>
+  <data name="Settings_Equipment_ResolutionWidth_Label" xml:space="preserve">
+    <value>Resolution width (px, optional)</value>
+  </data>
+  <data name="Settings_General_LanguageAndUnits_Heading" xml:space="preserve">
+    <value>Language and units</value>
+  </data>
+  <data name="Settings_General_Language_Info_AccessibleName" xml:space="preserve">
+    <value>About language</value>
+  </data>
+  <data name="Settings_General_Minutes_Unit" xml:space="preserve">
+    <value>min</value>
+  </data>
+  <data name="Settings_General_SystemTimeZone_Option" xml:space="preserve">
+    <value>System</value>
+  </data>
+  <data name="Settings_General_TimeZone_Info_AccessibleName" xml:space="preserve">
+    <value>About the planning time zone</value>
+  </data>
+  <data name="Settings_General_Units_Info_AccessibleName" xml:space="preserve">
+    <value>About units</value>
+  </data>
+  <data name="Settings_PlannerMap_CameraOverlayOpacity_Info_AccessibleName" xml:space="preserve">
+    <value>About camera overlay opacity</value>
+  </data>
+  <data name="Settings_PlannerMap_ColourMap_Info_AccessibleName" xml:space="preserve">
+    <value>About the colour map</value>
+  </data>
+  <data name="Settings_PlannerMap_Pip_Info_AccessibleName" xml:space="preserve">
+    <value>About the Picture-in-Picture map</value>
+  </data>
+  <data name="Settings_PlannerMap_TerrainCoverage_Info_AccessibleName" xml:space="preserve">
+    <value>About ignoring foreground terrain</value>
+  </data>
+  <data name="Settings_PlannerMap_TerrainTint_Info_AccessibleName" xml:space="preserve">
+    <value>About terrain tint strength</value>
+  </data>
+  <data name="Settings_PlannerMap_Terrain_Info_AccessibleName" xml:space="preserve">
+    <value>About terrain calculations</value>
+  </data>
+  <data name="Settings_Weather_ForecastReuseDistance_Label" xml:space="preserve">
+    <value>Reuse forecasts within</value>
+  </data>
+  <data name="Settings_Weather_ForecastReuse_Info_AccessibleName" xml:space="preserve">
+    <value>About reusing forecasts</value>
+  </data>
+  <data name="Settings_Weather_Group_Conditions" xml:space="preserve">
+    <value>Conditions</value>
+  </data>
+  <data name="Settings_Weather_Group_Light" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="Settings_Weather_Group_Sky" xml:space="preserve">
+    <value>Sky</value>
+  </data>
+  <data name="Settings_Weather_Topic_Clouds" xml:space="preserve">
+    <value>Clouds</value>
+  </data>
+  <data name="Settings_Weather_Topic_HumidityDewPoint" xml:space="preserve">
+    <value>Humidity and dew point</value>
+  </data>
+  <data name="Settings_Weather_Topic_MoonPhase" xml:space="preserve">
+    <value>Phase and illumination</value>
+  </data>
+  <data name="Settings_Weather_Topic_MoonRiseSet" xml:space="preserve">
+    <value>Moonrise and moonset</value>
+  </data>
+  <data name="Settings_Weather_Topic_Precipitation" xml:space="preserve">
+    <value>Precipitation</value>
+  </data>
+  <data name="Settings_Weather_Topic_SunriseSunset" xml:space="preserve">
+    <value>Sunrise and sunset</value>
+  </data>
+  <data name="Settings_Weather_Topic_Twilight" xml:space="preserve">
+    <value>Twilight</value>
+  </data>
+  <data name="Settings_Weather_Topic_Wind" xml:space="preserve">
+    <value>Wind</value>
+  </data>
+  <data name="Settings_Weather_WeatherValues_Info_AccessibleName" xml:space="preserve">
+    <value>About what the Planner shows</value>
   </data>
 </root>

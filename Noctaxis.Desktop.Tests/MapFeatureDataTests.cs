@@ -128,6 +128,39 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
+    public async Task OverpassClient_StopsQueryingForAWhileAfterARateLimit()
+    {
+        // The public instances are shared: after HTTP 429, a bulk run must not keep asking.
+        var time = new ManualTime();
+        var handler = new SequenceHandler(
+            _ => new HttpResponseMessage(HttpStatusCode.TooManyRequests),
+            _ => JsonResponse(UsableFeatureJson));
+        using var client = new HttpClient(handler);
+        var service = new OverpassMapFeatureDataService(client,
+            new OverpassMapFeatureOptions(new Uri("https://overpass.test/api/interpreter"), "test-overpass"),
+            NullLogger<OverpassMapFeatureDataService>.Instance, time);
+
+        var limited = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
+        var waiting = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
+
+        Assert.Equal("rate_limited", limited.Outcome.FailureCode);
+        Assert.Equal("rate_limited", waiting.Outcome.FailureCode);
+        Assert.Equal(1, handler.RequestCount);
+
+        time.Advance(OverpassMapFeatureDataService.RateLimitBackoff);
+        var resumed = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
+        Assert.Equal(MapFeatureFetchStatus.Complete, resumed.Status);
+        Assert.Equal(2, handler.RequestCount);
+    }
+
+    private sealed class ManualTime : TimeProvider
+    {
+        private DateTimeOffset _now = new(2026, 10, 16, 12, 0, 0, TimeSpan.Zero);
+        public void Advance(TimeSpan by) => _now += by;
+        public override DateTimeOffset GetUtcNow() => _now;
+    }
+
+    [Fact]
     public async Task OverpassClient_PostsBoundedQueryAndMapsResponse()
     {
         var handler = new SequenceHandler(_ => JsonResponse(UsableFeatureJson));

@@ -41,7 +41,7 @@ that name.
 | --- | --- | --- |
 | Core | `Data.resx` | Light-pollution data installation status |
 | Core | `Equipment.resx` | Camera and lens validation, default equipment names |
-| Core | `Export.resx` | Scouting card text |
+| Core | `Export.resx` | Plan image sheet text |
 | Core | `Places.resx` | Place search and reverse geocoding messages |
 | Core | `Planning.resx` | Planning status and framing visibility text |
 | Core | `Terrain.resx` | Terrain status and cache messages |
@@ -203,8 +203,8 @@ display. This is the mapping, and the only place it may be changed:
 
 | Quantity | Stored in | Metric | UK Mixed | Imperial | Shown |
 | --- | --- | --- | --- | --- | --- |
-| Air temperature, dew point | °C | °C | °C | °F | Planner weather, scouting card |
-| Wind speed, gusts | m/s | km/h | mph | mph | Planner weather, scouting card |
+| Air temperature, dew point | °C | °C | °C | °F | Planner weather, plan image |
+| Wind speed, gusts | m/s | km/h | mph | mph | Planner weather, plan image |
 | Visibility | km | km | mi | mi | Planner weather; framing status ("Weather visibility: …") |
 | Precipitation amount | mm | mm | mm | in | Planner weather |
 | Long distance over the ground | km | km | mi | mi | Forecast reuse distance (Settings → Weather); terrain obstruction distance; minimap radius and scale bar |

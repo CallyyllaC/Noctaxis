@@ -37,6 +37,18 @@ public sealed class TerrainReliefTileSource : ILocalTileSource
     internal const double ShadowGain = 1.1;
     internal const double HighlightGain = 1.5;
     internal const double MaximumAlpha = .7;
+
+    /// <summary>
+    /// How strongly shaded relief is drawn: how far a slope's shading darkens or lightens, and the most it may
+    /// cover. <see cref="Normal"/> is the Planner's usual relief; <see cref="Enhanced"/> separates the tones a
+    /// little more for a small view (the Picture-in-Picture map). It applies when a tile is drawn from the shared
+    /// shaded grid, so it costs nothing else: no elevation is loaded and nothing is shaded again.
+    /// </summary>
+    public readonly record struct ReliefTone(double ShadowGain, double HighlightGain, double MaximumAlpha)
+    {
+        public static ReliefTone Normal { get; } = new(TerrainReliefTileSource.ShadowGain, TerrainReliefTileSource.HighlightGain, TerrainReliefTileSource.MaximumAlpha);
+        public static ReliefTone Enhanced { get; } = new(1.45, 1.95, .82);
+    }
     private const int TileSize = TerrainRelief.TileSize;
     private readonly ITerrariumTileSource _elevation;
     private readonly BoundedDecodedRasterCache<ReliefKey, float[]> _relief;
@@ -70,7 +82,7 @@ public sealed class TerrainReliefTileSource : ILocalTileSource
     /// unavailable, or <paramref name="wanted"/> reports the map no longer needs the tile. Null is not
     /// remembered by the map, so the tile is requested again when it is next in view.
     /// </summary>
-    internal async Task<byte[]?> RenderAsync(TileInfo tileInfo, Func<bool>? wanted)
+    internal async Task<byte[]?> RenderAsync(TileInfo tileInfo, Func<bool>? wanted, ReliefTone? tone = null)
     {
         var index = tileInfo.Index;
         if (index.Level is < 0 or > MaximumDisplayZoom) return null;
@@ -85,7 +97,7 @@ public sealed class TerrainReliefTileSource : ILocalTileSource
         return await Task.Run(() =>
         {
             var timer = Stopwatch.StartNew();
-            var png = Encode(relief, scale, subColumn, subRow);
+            var png = Encode(relief, scale, subColumn, subRow, tone);
             Interlocked.Add(ref _renderTicks, timer.ElapsedTicks);
             Interlocked.Increment(ref _rendered);
             return png;
@@ -140,15 +152,16 @@ public sealed class TerrainReliefTileSource : ILocalTileSource
     }
 
     /// <summary>Draws relief as translucent white (lit) and black (shaded) over transparency.</summary>
-    internal static byte[]? Encode(float[] relief, int scale, int subColumn, int subRow)
+    internal static byte[]? Encode(float[] relief, int scale, int subColumn, int subRow, ReliefTone? tone = null)
     {
+        var (shadowGain, highlightGain, maximumAlpha) = tone ?? ReliefTone.Normal;
         using var full = new SKBitmap(TileSize, TileSize, SKColorType.Rgba8888, SKAlphaType.Premul);
         var pixels = new byte[TileSize * TileSize * 4];
         for (var i = 0; i < relief.Length; i++)
         {
             var value = relief[i];
             if (value == 0) continue;
-            var alpha = (byte)Math.Round(255 * Math.Min(MaximumAlpha, Math.Abs(value) * (value > 0 ? HighlightGain : ShadowGain)));
+            var alpha = (byte)Math.Round(255 * Math.Min(maximumAlpha, Math.Abs(value) * (value > 0 ? highlightGain : shadowGain)));
             // Premultiplied: white at alpha a is (a, a, a, a); black is (0, 0, 0, a).
             var grey = value > 0 ? alpha : (byte)0;
             pixels[i * 4] = grey;

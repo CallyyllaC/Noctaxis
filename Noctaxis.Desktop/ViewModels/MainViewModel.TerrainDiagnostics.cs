@@ -10,7 +10,9 @@ public partial class MainViewModel
         ? "Terrain calculations disabled"
         : !Settings.TerrainDebugOverlay ? "Terrain diagnostics disabled"
         : $"Observer: {Observer.Latitude:F5}, {Observer.Longitude:F5}\n" +
-          $"State: {TerrainStatus}\nTerrain generation: {TerrainDebugGeneration}\n" +
+          // The source and data state are support information, so they live here rather than in the
+          // Planner's Terrain panel.
+          $"State: {TerrainStatus}\nTerrain data: {GroundHorizonState}\nTerrain generation: {TerrainDebugGeneration}\n" +
           $"Profile updated: {CurrentTerrain?.GeneratedAt.ToString() ?? "Resolving…"}";
 
     public string TerrainDiagnosticsBearing => EnabledTerrainDiagnosticsProfile is { } profile
@@ -49,7 +51,6 @@ public partial class MainViewModel
         ? $"DEM tile: {diagnostics.TerrainSample.Tile}\nDEM cell: {diagnostics.TerrainSample.Cell}\n" +
           $"DEM resolution: {diagnostics.TerrainSample.Resolution}\nCorrection reason: {diagnostics.SurfaceResolutionReason}\n" +
           $"Observer datum: {CurrentTerrain?.ObserverDatumMessage}\n" +
-          $"Local map generation: {TerrainDebugMapGeneration}\nLocal map state: {TerrainDebugMapLoadState}\n" +
           "The copied snapshot includes full source, correction, radial and cache diagnostics."
         : TerrainDiagnosticsStatus;
 

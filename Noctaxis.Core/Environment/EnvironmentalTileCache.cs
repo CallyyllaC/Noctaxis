@@ -83,7 +83,8 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
     {
         _logger = logger;
         _terrain = terrain;
-        RootDirectory = Path.Combine(paths.GetApplicationDataDirectory(), "EnvironmentalData");
+        // Regenerable tiles live in the cache folder (NX-38); the user-installed atlas stays in the data folder.
+        RootDirectory = Path.Combine(paths.GetCacheDirectory(), "EnvironmentalData");
     }
 
     public string RootDirectory { get; }
@@ -181,6 +182,16 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
                         acquisition = await acquire(stream, cancellationToken).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                    // Cancellation the caller did not ask for is the source giving up, typically
+                    // HttpClient.Timeout. It is a transient source failure for this tile, not a reason to
+                    // abandon everything that requested it.
+                    catch (OperationCanceledException ex)
+                    {
+                        _logger.LogWarning(ex, "Environmental tile acquisition timed out for {Source}/{Layer}/{Tile}",
+                            descriptor.SourceId, descriptor.Layer, descriptor.TileId);
+                        return new EnvironmentalCacheResult(EnvironmentalDataState.SourceUnavailable, null, false,
+                            "Environmental source did not respond in time.");
+                    }
                     catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException)
                     {
                         _logger.LogWarning(ex, "Environmental tile acquisition failed for {Source}/{Layer}/{Tile}",
@@ -302,12 +313,32 @@ public static class EnvironmentalHttpDownloader
             }
             if (response.Content.Headers.ContentLength > maximumBytes)
                 throw new InvalidDataException("Environmental tile exceeds its configured size limit.");
+            // HttpClient.Timeout ends at the headers when the body is streamed: a source that then stops
+            // sending would hold the shared tile load, its lock and its disk lease indefinitely. Each read
+            // must make progress within the client's own timeout (a slow but steady body is never cut off),
+            // and a stall ends as that timeout would have: a TaskCanceledException the caller did not ask for.
+            using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var window = BodyStallWindow(client);
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var buffer = new byte[64 * 1024];
             long total = 0;
             while (true)
             {
-                var read = await input.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+                int read;
+                stall.CancelAfter(window);
+                try { read = await input.ReadAsync(buffer, stall.Token).ConfigureAwait(false); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    throw;
+                }
+                catch (OperationCanceledException ex)
+                {
+                    throw new TaskCanceledException($"The source sent no data for {window.TotalSeconds:0.#} s.",
+                        new TimeoutException(ex.Message, ex));
+                }
+                // Only the source's silence counts, never the time spent writing what it sent.
+                stall.CancelAfter(Timeout.InfiniteTimeSpan);
                 if (read == 0) break;
                 if (total + read > maximumBytes)
                     throw new InvalidDataException("Environmental tile exceeds its configured size limit.");
@@ -319,4 +350,8 @@ public static class EnvironmentalHttpDownloader
         return new EnvironmentalAcquisitionResult(EnvironmentalDataState.SourceUnavailable, null,
             "Environmental source acquisition attempts were exhausted.");
     }
+
+    /// <summary>How long one body read may wait for data: the client's own timeout, or 30 s when it has none.</summary>
+    internal static TimeSpan BodyStallWindow(HttpClient client) =>
+        client.Timeout > TimeSpan.Zero && client.Timeout != Timeout.InfiniteTimeSpan ? client.Timeout : TimeSpan.FromSeconds(30);
 }

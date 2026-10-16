@@ -16,11 +16,15 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
     private readonly ISettlementDataProvider settlement;
     private readonly ILogger<PlannerEnvironmentService> logger;
     public PlannerEnvironmentService(IHorizonService horizons, ISettlementDataProvider settlement,
-        ILogger<PlannerEnvironmentService> logger, IEnvironmentalTileCache? terrainCache = null)
+        ILogger<PlannerEnvironmentService> logger, IEnvironmentalTileCache? terrainCache = null,
+        TimeProvider? time = null)
     {
         this.horizons = horizons;
         this.settlement = settlement;
         this.logger = logger;
+        _completed = new(CompletedSnapshotCapacity, snapshot => HorizonService.EstimateProfileBytes(snapshot.HorizonProfile) +
+            (snapshot.Settlement.Value is { } raster ?
+                ((long)raster.BuildingFraction.Length + raster.BuildingHeightMetres.Length) * sizeof(float) : 0), time);
         terrainCache?.RegisterTerrainInvalidation(InvalidateCache);
     }
 
@@ -30,11 +34,19 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
     private readonly object _gate = new();
     private long _generation;
     private readonly Dictionary<EnvironmentCacheKey, BuildEntry> _snapshots = new();
-    private readonly CompletedResultCache<EnvironmentCacheKey, PlannerEnvironmentSnapshot> _completed =
-        new(CompletedSnapshotCapacity, snapshot => HorizonService.EstimateProfileBytes(snapshot.HorizonProfile) +
-            (snapshot.Settlement.Value is { } raster ?
-                ((long)raster.BuildingFraction.Length + raster.BuildingHeightMetres.Length) * sizeof(float) : 0));
+    private readonly CompletedResultCache<EnvironmentCacheKey, PlannerEnvironmentSnapshot> _completed;
     public CompletedResultCacheDiagnostics CompletedCacheDiagnostics => _completed.Diagnostics;
+
+    /// <summary>
+    /// A snapshot built while a source was transiently missing is reused only as long as a degraded
+    /// horizon is, so it is rebuilt once the source is back. Settlement that the source reports as
+    /// absent for the area (<see cref="EnvironmentalDataState.TileAbsent"/>) is permanent, not degraded.
+    /// </summary>
+    private static TimeSpan? CompletedLifetime(PlannerEnvironmentSnapshot snapshot) =>
+        HorizonService.IsDegraded(snapshot.HorizonProfile) ||
+        snapshot.Settlement.State is EnvironmentalDataState.SourceUnavailable or EnvironmentalDataState.Error
+            ? HorizonService.DegradedProfileLifetime
+            : null;
     public int ActiveBuildCount { get { lock (_gate) return _snapshots.Count; } }
 
     private sealed class BuildEntry
@@ -78,7 +90,7 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
         try
         {
             var result = await BuildAsync(observer, request, CancellationToken.None).ConfigureAwait(false);
-            lock (_gate) { if (_generation == generation) _completed.TryAdd(key, result); }
+            lock (_gate) { if (_generation == generation) _completed.TryAdd(key, result, CompletedLifetime(result)); }
             return result;
         }
         finally

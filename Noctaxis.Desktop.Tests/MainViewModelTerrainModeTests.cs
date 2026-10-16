@@ -36,7 +36,6 @@ public sealed partial class MainViewModelTests
         Assert.Equal(1.7, vm.Snapshot!.Terrain.ObserverAbsoluteElevationMetres!.Value, 8);
         Assert.Empty(vm.Snapshot.Terrain.Samples);
         Assert.Null(vm.TerrainDebugProfile);
-        Assert.Null(vm.TerrainDebugMap);
         Assert.NotNull(vm.Snapshot.Weather.Conditions);
         Assert.Equal(20_000, vm.CameraFramingVisibility!.WeatherVisibilityDistanceMetres);
         Assert.Empty(vm.CameraFramingVisibility.EffectiveTerrainObstructions);
@@ -111,27 +110,6 @@ public sealed partial class MainViewModelTests
             Assert.Null(vm.TerrainDebugProfile);
             Assert.Equal(0, vm.ResolvedGroundElevationMetres);
         }
-    }
-
-    [Fact]
-    public async Task TerrainToggle_RejectsDiagnosticMapThatIgnoresCancellation()
-    {
-        var catalogue = new OpenNgcTargetCatalogue();
-        var maps = new ControllableTerrainDebugMapService();
-        var vm = CreateViewModel(new FakePlanning(catalogue), catalogue,
-            new FakeStore(new PersistedState(4, new AppSettings(TerrainDebugOverlay: true), [],
-                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
-            new FakeExporter(), terrainDebugMaps: maps);
-        await vm.InitializeAsync();
-        vm.ShowPlannerCommand.Execute(null);
-        await WaitUntilAsync(() => maps.RequestCount == 1, TimeSpan.FromSeconds(3));
-        var obsolete = vm.WaitForTerrainDebugMapRefreshAsync();
-        await vm.ApplySettingsAsync(vm.Settings with { EnableTerrainCalculations = false });
-        maps.Complete(0);
-        await obsolete;
-        Assert.Null(vm.TerrainDebugMap);
-        Assert.Equal(1, maps.RequestCount);
-        Assert.True(vm.Settings.TerrainDebugOverlay); // The dependent preference is retained.
     }
 
     [Fact]

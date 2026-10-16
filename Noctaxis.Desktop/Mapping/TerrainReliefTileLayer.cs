@@ -13,11 +13,25 @@ namespace Noctaxis.Desktop.Mapping;
 internal sealed class TerrainReliefTileLayer : TileLayer
 {
     private readonly Relevance _relevance;
+    private readonly ToneHolder _tone;
 
-    internal TerrainReliefTileLayer(TerrainReliefTileSource source) : this(source, new Relevance(source.Schema)) { }
+    internal TerrainReliefTileLayer(TerrainReliefTileSource source) : this(source, new Relevance(source.Schema), new ToneHolder()) { }
 
-    private TerrainReliefTileLayer(TerrainReliefTileSource source, Relevance relevance)
-        : base(source, fetchTileAsFeature: info => Fetch(source, relevance, info)) => _relevance = relevance;
+    private TerrainReliefTileLayer(TerrainReliefTileSource source, Relevance relevance, ToneHolder tone)
+        : base(source, fetchTileAsFeature: info => Fetch(source, relevance, tone, info)) => (_relevance, _tone) = (relevance, tone);
+
+    /// <summary>How strongly this layer draws relief; this layer's own, over the shared shaded grid.</summary>
+    internal TerrainReliefTileSource.ReliefTone Tone
+    {
+        get => _tone.Value;
+        set => _tone.Value = value;
+    }
+
+    private sealed class ToneHolder
+    {
+        private TerrainReliefTileSource.ReliefTone _value = TerrainReliefTileSource.ReliefTone.Normal;
+        public TerrainReliefTileSource.ReliefTone Value { get => _value; set => _value = value; }
+    }
 
     public override void ViewportChanged(FetchInfo fetchInfo)
     {
@@ -27,9 +41,9 @@ internal sealed class TerrainReliefTileLayer : TileLayer
 
     internal bool IsWanted(TileInfo info) => _relevance.IsWanted(info);
 
-    private static async Task<IFeature?> Fetch(TerrainReliefTileSource source, Relevance relevance, TileInfo info)
+    private static async Task<IFeature?> Fetch(TerrainReliefTileSource source, Relevance relevance, ToneHolder tone, TileInfo info)
     {
-        var bytes = await source.RenderAsync(info, () => relevance.IsWanted(info)).ConfigureAwait(false);
+        var bytes = await source.RenderAsync(info, () => relevance.IsWanted(info), tone.Value).ConfigureAwait(false);
         return bytes is null ? null : new RasterFeature(new MRaster(bytes,
             new MRect(info.Extent.MinX, info.Extent.MinY, info.Extent.MaxX, info.Extent.MaxY)));
     }

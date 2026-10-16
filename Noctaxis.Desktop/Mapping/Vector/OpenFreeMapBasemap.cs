@@ -33,18 +33,35 @@ public interface ILabelledBasemap
 /// </summary>
 public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap, ILabelledBasemap
 {
+    /// <summary>OpenFreeMap's own attribution wording, carried by the tile source. The map credits it as
+    /// <see cref="MapAttributions.OpenStreetMap"/>, <see cref="MapAttributions.OpenFreeMap"/> and
+    /// <see cref="MapAttributions.OpenMapTiles"/>, each with its own link.</summary>
     public const string AttributionText = "OpenFreeMap © OpenMapTiles Data from OpenStreetMap";
     private readonly object _gate = new();
     private ThemedBasemapTileLayer[] _layers = [];
+    // What this basemap's own layers were last drawn in. Another view over the same source restyles the
+    // shared source first, so whether these layers need redrawing is this basemap's to remember.
+    private BasemapStyle _appliedStyle;
+    private string _appliedLanguage;
 
-    public OpenFreeMapBasemap(IVectorTileFetcher? fetcher = null, BasemapStyle? style = null) =>
-        Source = new ThemedVectorTileSource(fetcher ?? OpenFreeMapTileFetcher.CreateDefault(), style);
+    public OpenFreeMapBasemap(IVectorTileFetcher? fetcher = null, BasemapStyle? style = null)
+        : this(new ThemedVectorTileSource(fetcher ?? OpenFreeMapTileFetcher.CreateDefault(), style)) { }
+
+    /// <summary>
+    /// Another view of an existing basemap, such as the Picture-in-Picture map's: its own layers over
+    /// the same source, so the decoded vector tiles, the disk cache and the downloads are shared.
+    /// </summary>
+    public OpenFreeMapBasemap(ThemedVectorTileSource source)
+    {
+        Source = source;
+        _appliedStyle = source.Style;
+        _appliedLanguage = source.LabelLanguage;
+    }
 
     public ThemedVectorTileSource Source { get; }
 
     public BasemapDefinition Definition { get; } = new(BasemapKind.Street,
-        new("OpenFreeMap", AttributionText, "https://openfreemap.org",
-            "ODbL", "https://opendatacommons.org/licenses/odbl/1-0/"));
+        new("OpenFreeMap", Credits: [MapAttributions.OpenStreetMap, MapAttributions.OpenFreeMap, MapAttributions.OpenMapTiles]));
 
     public BasemapStyle Style => Source.Style;
 
@@ -70,7 +87,9 @@ public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap, ILab
 
     public bool ApplyStyle(BasemapStyle style)
     {
-        if (!Source.SetStyle(style)) return false;
+        if (Equals(_appliedStyle, style)) return false;
+        Source.SetStyle(style);
+        _appliedStyle = style;
         ThemedBasemapTileLayer[] layers;
         lock (_gate) layers = _layers;
         // Only rendered images are discarded; the layer, its source and the vector data stay.
@@ -82,7 +101,9 @@ public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap, ILab
 
     public bool ApplyLabelLanguage(string language)
     {
-        if (!Source.SetLabelLanguage(language)) return false;
+        if (string.Equals(_appliedLanguage, language, StringComparison.Ordinal)) return false;
+        Source.SetLabelLanguage(language);
+        _appliedLanguage = Source.LabelLanguage;
         ThemedBasemapTileLayer[] layers;
         lock (_gate) layers = _layers;
         // Names are drawn by the reference pass (or the single full pass). The geography pass holds

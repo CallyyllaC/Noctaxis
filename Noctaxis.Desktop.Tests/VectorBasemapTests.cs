@@ -312,7 +312,7 @@ public sealed class VectorBasemapTests : IDisposable
         var composition = new PlannerMapComposition();
         var basemap = Assert.IsType<OpenFreeMapBasemap>(composition.ActiveBasemap);
         Assert.Equal(BasemapKind.Street, composition.Composition.Basemap.Kind);
-        Assert.Equal(OpenFreeMapBasemap.AttributionText, composition.Composition.AttributionText);
+        Assert.Equal("© OpenStreetMap contributors · OpenFreeMap · © OpenMapTiles", composition.Composition.AttributionText);
         // Two passes over one shared source: the vector data is fetched and decoded once for both.
         var layers = composition.Map.Layers.Cast<TileLayer>().ToArray();
         Assert.Equal(2, layers.Length);

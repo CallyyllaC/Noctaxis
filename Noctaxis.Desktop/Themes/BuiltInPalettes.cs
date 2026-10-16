@@ -248,7 +248,7 @@ public static class BuiltInPalettes
 
     // Colour-vision variants. Each deficiency has its own authored sets, measured by simulating that
     // deficiency (Machado et al. 2009, full severity) and CIEDE2000 separation; see
-    // docs/colour-vision-accessibility.md. Sets start from the normal-vision colours and move only as
+    // docs/accessibility.md. Sets start from the normal-vision colours and move only as
     // far as separation needs, so a variant still looks like its theme.
     private static readonly string[] StatusRoles = ["Success", "Warning", "Error", "Information"];
     private static string[]? StatusSet(ColourVisionMode mode, bool light, bool highContrast) => (mode, light, highContrast) switch
@@ -299,6 +299,7 @@ public static class BuiltInPalettes
         [("supporter.moonlit", false, ColourVisionMode.Protanopia)] = [(MapThemeTokens.Water, "#15263A"), (MapThemeTokens.Vegetation, "#1E2D25"), (MapThemeTokens.BuiltUp, "#252A35")],
         [("supporter.moonlit", false, ColourVisionMode.Tritanopia)] = [(MapThemeTokens.Water, "#132538"), (MapThemeTokens.Vegetation, "#212F28"), (MapThemeTokens.BuiltUp, "#272933")],
         [("supporter.moonlit", true, ColourVisionMode.Tritanopia)] = [(MapThemeTokens.Vegetation, "#D3E5E0"), (MapThemeTokens.BuiltUp, "#D4D9DF")],
+        [("supporter.pigeon", false, ColourVisionMode.Tritanopia)] = [(MapThemeTokens.Water, "#0B1D30"), (MapThemeTokens.Vegetation, "#1E3326")],
     };
     // Map symbols are shared by a family's Light and Dark palettes, so these apply to both.
     private static readonly Dictionary<(string Family, ColourVisionMode Mode), (string Key, string Value)[]> MapSymbolOverrides = new()
@@ -361,6 +362,9 @@ public static class BuiltInPalettes
     private static readonly (string, string, string, string, string) FoxfireMap = ("#0D0E12", "#9DE7F0", "#FF8A3D", "#FFB15C", "#9DE7F0");
     private static readonly (string, string, string, string, string) DeepSpaceMap = ("#050711", "#AFC8FF", "#F5D070", "#B8C4FF", "#F5D070");
     private static readonly (string, string, string, string, string) MoonlitMap = ("#171A20", "#EDF1F5", "#C5B9E5", "#BFCDE6", "#F0D8A0");
+    // Pigeon: a silver ring on charcoal, a violet activity arc and teal field of view (the neck sheen), and the
+    // bird's own orange eye for the bearing.
+    private static readonly (string, string, string, string, string) PigeonMap = ("#101215", "#E3E7EC", "#B794E8", "#6FD8BE", "#F5B47A");
     // Basemap roles in MapThemeTokens.Basemap order: land, built-up, building, water, vegetation,
     // minor road, major road, road casing, rail, boundary, label, label halo, water label, POI.
     // Dark maps keep neutral land and let one restrained family hue mark roads, boundaries and POIs;
@@ -383,6 +387,11 @@ public static class BuiltInPalettes
         ["#1C2028", "#232833", "#2C323E", "#172638", "#1D2C24", "#363D4A", "#6C7B93", "#13161B", "#58606D", "#A99CCF", "#DDE3EA", "#171A20", "#8FA6C4", "#C5B9E5"];
     private static readonly string[] MoonlitLightBasemap =
         ["#E1E5EA", "#D6DBE1", "#C8CED6", "#BACADD", "#D3DDD6", "#FFFFFF", "#B3BFD1", "#8F99A6", "#7D8795", "#596E9A", "#202733", "#EEF0F3", "#3A5578", "#566E91"];
+    // Slate-neutral land and roads; violet only for boundaries and teal only for POIs, so neither hue floods the map.
+    private static readonly string[] PigeonDarkBasemap =
+        ["#15181C", "#262A31", "#323741", "#0F2639", "#1A2E22", "#2E343C", "#5B6672", "#0C0E11", "#4D545E", "#8E7BB8", "#D6DBE1", "#101215", "#87A9BE", "#5FC9AE"];
+    private static readonly string[] PigeonLightBasemap =
+        ["#E4E7EA", "#D8DCE1", "#C9CFD6", "#B6CADB", "#C8DCCD", "#FFFFFF", "#B5BDC7", "#8E96A1", "#7D8590", "#6E58A0", "#1E2329", "#F1F3F5", "#34587A", "#0F6E5C"];
     public static IReadOnlyList<ThemeDefinition> Definitions { get; } =
     [
         new("builtin.noctaxis", "Noctaxis", false, Mode("builtin.noctaxis", Authored[0], false), Mode("builtin.noctaxis", Authored[1], true), "Noctaxis appearance"),
@@ -470,7 +479,31 @@ public static class BuiltInPalettes
                 ("SelectionBackground", "#D5DDE9"), ("SelectionForeground", "#1D2735"), ("FocusBorder", "#596E9A"),
                 ("HoverOverlay", "#E2E6EB"), ("PressedOverlay", "#D3D9E1"), ("MapChromeBorder", "#4D5968"), ("MapChromeText", "#202733"),
                 ("ButtonBackground", "#E1E5EA"), ("ButtonHover", "#D4DAE1"), ("ButtonPressed", "#C5CED8"), ("ButtonDisabled", "#ECEEF1"),
-                ("ToggleTrack", "#4D5968"), ("SliderTrack", "#687585"), ("SliderFill", "#566E91"), ("CardBackground", "#F8F9FA")), true))
+                ("ToggleTrack", "#4D5968"), ("SliderTrack", "#687585"), ("SliderFill", "#566E91"), ("CardBackground", "#F8F9FA")), true)),
+        // Pigeon, dedicated to Noctaxis's first supporter: rock-pigeon slate and silver, charcoal wing bars, and the
+        // neck's iridescent emerald-teal and violet as restrained accents (docs/supporter-themes.md).
+        new("supporter.pigeon", "Pigeon", true,
+            Mode("supporter.pigeon", Palette(0, MapRoles("#E61C2026", PigeonMap, PigeonDarkBasemap),
+                ("WindowBackground", "#101215"), ("ApplicationBackground", "#14171B"), ("SurfaceBackground", "#1C2026"),
+                ("SurfaceBackgroundHover", "#2A3038"), ("ElevatedSurface", "#22272E"), ("InputBackground", "#181B20"),
+                ("SurfaceBorder", "#4A525D"), ("SubtleBorder", "#323840"), ("StrongBorder", "#8A939F"),
+                ("PrimaryText", "#EEF0F3"), ("SecondaryText", "#BCC2CB"), ("MutedText", "#A3AAB5"), ("DisabledText", "#89919C"),
+                ("Accent", "#5CCFB0"), ("AccentHover", "#7FDDC4"), ("AccentPressed", "#44B898"), ("AccentForeground", "#0D1A16"),
+                ("SelectionBackground", "#45395F"), ("SelectionForeground", "#FFFFFF"), ("FocusBorder", "#C3A8F0"),
+                ("HoverOverlay", "#2A3038"), ("PressedOverlay", "#353C46"), ("MapChromeBorder", "#8A939F"), ("MapChromeText", "#EEF0F3"),
+                ("ButtonBackground", "#262B33"), ("ButtonHover", "#313740"), ("ButtonPressed", "#3C434D"), ("ButtonDisabled", "#1C2026"),
+                ("ToggleTrack", "#8A939F"), ("SliderTrack", "#8A939F"), ("SliderFill", "#5CCFB0"), ("CardBackground", "#1A1E24")), false),
+            Mode("supporter.pigeon", Palette(1, MapRoles("#F2F9FAFB", PigeonMap, PigeonLightBasemap),
+                ("WindowBackground", "#EEF0F2"), ("ApplicationBackground", "#EEF0F2"), ("SurfaceBackground", "#F9FAFB"),
+                ("SurfaceBackgroundHover", "#E3E7EB"), ("ElevatedSurface", "#FFFFFF"), ("InputBackground", "#FFFFFF"),
+                ("SurfaceBorder", "#697380"), ("SubtleBorder", "#BCC3CB"), ("StrongBorder", "#4A535F"),
+                ("PrimaryText", "#1E2329"), ("SecondaryText", "#434B56"), ("MutedText", "#56606C"), ("DisabledText", "#66707C"),
+                ("Accent", "#0F6E5C"), ("AccentHover", "#0B5A4B"), ("AccentPressed", "#084A3E"), ("AccentForeground", "#FFFFFF"),
+                ("SelectionBackground", "#E2DAF2"), ("SelectionForeground", "#2A1F42"), ("FocusBorder", "#6A4AA8"),
+                ("HoverOverlay", "#E3E7EB"), ("PressedOverlay", "#D4DAE0"), ("MapChromeBorder", "#4A535F"), ("MapChromeText", "#1E2329"),
+                ("ButtonBackground", "#E3E7EB"), ("ButtonHover", "#D6DCE2"), ("ButtonPressed", "#C7CED6"), ("ButtonDisabled", "#EDEFF2"),
+                ("ToggleTrack", "#4A535F"), ("SliderTrack", "#697380"), ("SliderFill", "#0F6E5C"), ("CardBackground", "#F9FAFB")), true),
+            "Rock-pigeon slate and silver with an iridescent teal and violet sheen. Dedicated to Noctaxis's first supporter.")
     ];
 
     /// <summary>Applies the authored colour-vision sets for <paramref name="mode"/>; never a transformation of the composed image.</summary>

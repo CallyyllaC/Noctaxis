@@ -1,0 +1,64 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Media;
+using Noctaxis.Core.Domain;
+using Noctaxis.Core.Export;
+using Noctaxis.Desktop.Themes;
+using NodaTime;
+
+namespace Noctaxis.Desktop.Export;
+
+/// <summary>One row of the sheet's weather panel, already in the user's units.</summary>
+public sealed record ExportWeatherHour(Instant Time, string Clock, string Cloud, string Rain, string Wind, string Temperature);
+
+/// <summary>
+/// The sheet's clean map: a themed basemap with no Planner overlay, centred on the planning location.
+/// <paramref name="Png"/> is drawn at <paramref name="PixelRatio"/> device pixels per sheet pixel.
+/// </summary>
+public sealed record ExportMapImage(byte[] Png, int PixelRatio, string Attribution);
+
+/// <summary>The colours the sheet is drawn in: the user's theme, captured with the plan.</summary>
+public sealed record ExportTheme(Color Background, Color Surface, Color Border, Color PrimaryText, Color SecondaryText,
+    Color Accent, Color MapSurface, CelestialColourSet Celestial)
+{
+    /// <summary>The theme the application shows now; the Noctaxis dark defaults where a role is missing.</summary>
+    public static ExportTheme Current()
+    {
+        Color Of(string key, string fallback) =>
+            Application.Current?.TryFindResource(key, out var value) == true && value is ISolidColorBrush brush ? brush.Color :
+            Application.Current?.TryFindResource(key, out var colour) == true && colour is Color c ? c : Color.Parse(fallback);
+        var celestial = Application.Current?.TryFindResource(CelestialThemeTokens.ColourSet, out var set) == true && set is CelestialColourSet found
+            ? found : CelestialColourSet.Default;
+        return new(Of("WindowBackground", "#0B0F17"), Of("SurfaceBackground", "#131A25"), Of("SurfaceBorder", "#2A3444"),
+            Of("PrimaryText", "#F5F7FA"), Of("SecondaryText", "#B7C1CC"), Of("Accent", "#B39DFF"),
+            Of(MapThemeTokens.Surface, "#0D131C"), celestial);
+    }
+}
+
+/// <summary>
+/// Everything the plan image shows, captured from the Planner at the moment of export: the canonical renderer
+/// (<see cref="IPlannerExportRenderer"/>) draws from this alone, never from the window or its panels, and Save
+/// PNG and Copy PNG both deliver what it draws. <see cref="Plan"/> is the minimal plan embedded in the PNG.
+/// A sheet is about one target, the focused one (<see cref="Target"/>): no other target is drawn on it.
+/// </summary>
+/// <param name="Subject">The header's second line: the target and the planning window.</param>
+/// <param name="Equipment">The header's third line: camera, lens, focal length and field of view. Capture guidance
+/// (shutter, aperture, ISO) would join it here.</param>
+/// <param name="Events">The Sun's and Moon's events in the window, for its darkness and context marks.</param>
+public sealed record PlannerExportSnapshot(
+    NoctaxisPlan Plan,
+    PlanningSnapshot Planning,
+    string LocationName,
+    string Coordinates,
+    string Subject,
+    string Equipment,
+    ExportTargetSeries Target,
+    TimelineEvents Events,
+    Instant WindowStart,
+    Instant WindowEnd,
+    DateTimeZone Zone,
+    IReadOnlyList<ExportWeatherHour> Weather,
+    string? WeatherNote,
+    ExportMapImage? Map,
+    string Footer,
+    ExportTheme Theme);

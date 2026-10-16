@@ -105,6 +105,14 @@ internal static class LayoutAudit
             if (!text.Text!.Any(char.IsLetter)) continue;
             var layout = text.TextLayout;
             var shown = text.Text!.Length > 40 ? text.Text[..40] + "…" : text.Text;
+            // A marquee's one line is meant to be longer than its room: it moves within it (or, with reduced
+            // motion, ends in an ellipsis), so it is the marquee that must fit the window, not its text.
+            if (text.GetVisualParent() is Noctaxis.Desktop.Controls.MarqueeText marquee)
+            {
+                if (marquee.TranslatePoint(default, root) is { } at && (at.X < -1 || at.X + marquee.Bounds.Width > rootBounds.Width + 1))
+                    problems.Add(new(index, "outside the window", shown));
+                continue;
+            }
             if (layout.TextLines.Any(line => line.HasCollapsed)) problems.Add(new(index, "trimmed", shown));
             var box = text.Bounds.Size.Deflate(text.Padding);
             if (layout.Width > box.Width + 1) problems.Add(new(index, "wider than its box", shown));

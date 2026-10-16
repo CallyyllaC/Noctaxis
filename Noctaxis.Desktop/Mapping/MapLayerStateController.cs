@@ -24,6 +24,10 @@ public sealed class MapLayerStateController
     private readonly Dictionary<string, IMapLayerStateAdapter> _adapters = new(StringComparer.Ordinal);
     public MapComposition Composition { get; }
     public BasemapDefinition ActiveBasemap { get; private set; }
+    /// <summary>The credits owed by what the map is drawing now: the basemap, and each overlay while it is
+    /// rendered. Each credit once, in layer order.</summary>
+    public IReadOnlyList<MapAttribution> ActiveAttributions { get; private set; } = [];
+    /// <summary>The compact line of <see cref="ActiveAttributions"/> shown on the map.</summary>
     public string AttributionText { get; private set; } = "";
     public event EventHandler? AttributionChanged;
     public event EventHandler<MapLayerState>? StateChanged;
@@ -129,13 +133,12 @@ public sealed class MapLayerStateController
 
     private void RefreshAttribution()
     {
-        var credits = Composition.Layers
+        var credits = MapAttributions.Distinct(Composition.Layers
             .Where(x => x.Group == MapLayerGroup.Basemap || _states[x.Id].IsRenderable)
-            .Select(x => x.Group == MapLayerGroup.Basemap ? ActiveBasemap.Provider.AttributionText : x.Provider.AttributionText)
-            .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal);
-        var text = string.Join(" · ", credits);
-        if (text == AttributionText) return;
-        AttributionText = text;
+            .SelectMany(x => MapAttributions.Of(x.Group == MapLayerGroup.Basemap ? ActiveBasemap.Provider : x.Provider)));
+        if (credits.SequenceEqual(ActiveAttributions)) return;
+        ActiveAttributions = credits;
+        AttributionText = MapAttributions.Line(credits);
         AttributionChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -61,6 +61,23 @@ public sealed class LightPollutionInstallationTests
     }
 
     [Fact]
+    public async Task ABodyThatStopsArrivingEndsTheInstallInsteadOfHoldingItOpen()
+    {
+        // NX-35 / NX-30: HttpClient.Timeout ends at the headers; a source tile whose body stalls must still end the
+        // install (after its bounded retries) without the user cancelling, and nothing is published.
+        await using var paths = new AtlasTestData();
+        using var http = new HttpClient(new Handler((_, _) => Task.FromResult(
+            new HttpResponseMessage(HttpStatusCode.OK) { Content = new StreamContent(new StalledStream()) })))
+        { Timeout = TimeSpan.FromMilliseconds(200) };
+        var store = new LorenzInstallation(paths, http);
+        var install = store.InstallAsync();
+        var finished = await Task.WhenAny(install, Task.Delay(TimeSpan.FromSeconds(30)));
+        Assert.Same(install, finished);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => install);
+        await store.DetectAsync(); Assert.False(store.IsAvailable);
+    }
+
+    [Fact]
     public async Task StartupRequiresCompleteManifestAndRemoveClearsNumericalCaches()
     {
         await using var paths = new AtlasTestData();
@@ -86,6 +103,27 @@ public sealed class LightPollutionInstallationTests
 
     internal sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => send(request, cancellationToken); }
+    /// <summary>A response body that never sends a byte; only cancellation ends a read.</summary>
+    private sealed class StalledStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            return 0;
+        }
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
     private sealed class Capture : IProgress<LorenzInstallProgress>
     { public LorenzInstallProgress? Last; public void Report(LorenzInstallProgress value) { Assert.True(Last is null || value.CompletedTiles > Last.CompletedTiles); Last = value; } }
 }

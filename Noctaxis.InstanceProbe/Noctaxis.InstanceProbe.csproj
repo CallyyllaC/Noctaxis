@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Test-only process for the single-instance contract (Noctaxis.Core.Tests/InstanceOwnershipProcessTests): a real,
+    separate process that takes ownership exactly as Noctaxis.Desktop's Program does, then reports what happened.
+    It is never packaged and only ever uses the folders and scope its test passes in.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Noctaxis.Core\Noctaxis.Core.csproj" />
+  </ItemGroup>
+</Project>

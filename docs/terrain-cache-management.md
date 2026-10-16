@@ -4,13 +4,13 @@
 
 Settings → Data → Terrain cache shows current file bytes, the applied limit and file count. The maximum uses GiB (binary units), defaults to **2 GiB = 2,147,483,648 bytes**, and follows the existing Save settings / reset-editor flow. Saving a reduced limit triggers eviction immediately without restarting. Zero disables persistent retention; the editor supports up to 1 TiB.
 
-The normal persisted setting is `Settings.TerrainCacheLimitBytes` in `%APPDATA%/Noctaxis/state.json` (on this machine, `C:/Users/CGain/AppData/Roaming/Noctaxis/state.json`). Old state files without this property default to 2 GiB. Prefer the UI; external edits are read on startup, as with the existing settings store.
+The normal persisted setting is `Settings.TerrainCacheLimitBytes` in `%APPDATA%/Noctaxis/state.json` (the Windows data folder; Linux and macOS: [Your data](releasing.md#where-noctaxis-keeps-its-data); on this machine, `C:/Users/CGain/AppData/Roaming/Noctaxis/state.json`). Old state files without this property default to 2 GiB. Prefer the UI; external edits are read on startup, as with the existing settings store.
 
 Clear terrain cache uses the existing confirmation dialog, explaining that terrain will be downloaded again and saved locations/settings remain unchanged. Confirming cancels current Planner terrain work, invalidates source-memory and horizon generations, waits for leased reads/writes, deletes governed files, then refreshes an active observer through the normal Planner pipeline. No observer movement, Planner reopen or application restart is needed.
 
 ## Scope
 
-Only these source trees under `%APPDATA%/Noctaxis/EnvironmentalData` are governed, across their versions/layers:
+Only these source trees under `EnvironmentalData` in the Noctaxis cache folder (`%LOCALAPPDATA%/Noctaxis/Cache` on Windows, `$XDG_CACHE_HOME/Noctaxis` or `~/.cache/Noctaxis` on Linux, `~/Library/Caches/Noctaxis` on macOS; see [Persistence, storage and single instance](architecture.md#persistence-storage-and-single-instance)) are governed, across their versions/layers:
 
 - `mapzen-terrarium/` — currently `elevation-tiles-prod-undated/z{zoom}/{x}-{y}.png`.
 - `esa-worldcover/` — currently `2021-v200/land-cover/{N|S}{latitude}{E|W}{longitude}.tif`.

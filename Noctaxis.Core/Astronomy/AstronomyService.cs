@@ -13,6 +13,15 @@ public interface IAstronomyService
         LocalDate localDate, string timeZoneId, CancellationToken cancellationToken) =>
         Task.Run(() => Calculate(target, observer, instant, localDate, timeZoneId), cancellationToken);
     Task<AstralPath> CalculatePathAsync(AstralTarget target, GeoCoordinate observer, LocalDate localDate, string timeZoneId, Instant selectedInstant, Duration interval, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The same path, sampled across an explicit span rather than a local day: the Planner's Timeline, which
+    /// runs 24 hours on from where it is anchored and may cross midnight. Its events are those its samples
+    /// show. An implementation without one falls back to the local day of <paramref name="start"/>.
+    /// </summary>
+    Task<AstralPath> CalculatePathAsync(AstralTarget target, GeoCoordinate observer, Instant start, Instant end,
+        string timeZoneId, Instant selectedInstant, Duration interval, CancellationToken cancellationToken) =>
+        CalculatePathAsync(target, observer, start.InUtc().Date, timeZoneId, selectedInstant, interval, cancellationToken);
 }
 
 public sealed class AstronomyEngineService(ITimeZoneResolver timeZones) : IAstronomyService
@@ -65,6 +74,25 @@ public sealed class AstronomyEngineService(ITimeZoneResolver timeZones) : IAstro
         }, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<AstralPath> CalculatePathAsync(AstralTarget target, GeoCoordinate observer, Instant start, Instant end,
+        string timeZoneId, Instant selectedInstant, Duration interval, CancellationToken cancellationToken)
+    {
+        if (interval <= Duration.Zero) throw new ArgumentOutOfRangeException(nameof(interval));
+        if (end <= start) throw new ArgumentOutOfRangeException(nameof(end));
+        var localDate = timeZones.InZone(start, timeZoneId).Date;
+        return await Task.Run(() =>
+        {
+            var samples = new List<AstralPathSample>();
+            for (var cursor = start; cursor <= end; cursor += interval)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                samples.Add(new AstralPathSample(cursor, Horizontal(target, observer, cursor)));
+            }
+            if (samples[^1].Instant < end) samples.Add(new AstralPathSample(end, Horizontal(target, observer, end)));
+            return new AstralPath(localDate, timeZoneId, interval, samples, DeriveEventsFromSamples(samples), selectedInstant);
+        }, cancellationToken).ConfigureAwait(false);
+    }
+
     private static HorizontalCoordinate Horizontal(AstralTarget target, GeoCoordinate location, Instant instant)
     {
         var time = ToAstroTime(instant);
@@ -114,10 +142,12 @@ public sealed class AstronomyEngineService(ITimeZoneResolver timeZones) : IAstro
         var rise = AstronomyEngine.SearchRiseSet(body, observer, Direction.Rise, start, spanDays, 0);
         var set = AstronomyEngine.SearchRiseSet(body, observer, Direction.Set, start, spanDays, 0);
         var transit = AstronomyEngine.SearchHourAngle(body, observer, 0, start, +1);
-        return new TargetEvents(
-            InBounds(rise, bounds),
-            InBounds(transit.time, bounds),
-            InBounds(set, bounds));
+        var dayRise = InBounds(rise, bounds);
+        var daySet = InBounds(set, bounds);
+        // No rise and no set in the day: it stayed on whichever side of the horizon it started on.
+        var horizon = dayRise is not null || daySet is not null ? DayHorizon.Crosses
+            : Horizontal(target, location, bounds.Start).AltitudeDegrees >= 0 ? DayHorizon.AboveAllDay : DayHorizon.BelowAllDay;
+        return new TargetEvents(dayRise, InBounds(transit.time, bounds), daySet, horizon);
     }
 
     private TwilightEvents CalculateTwilight(GeoCoordinate location, LocalDate date, string timeZoneId)
@@ -152,7 +182,11 @@ public sealed class AstronomyEngineService(ITimeZoneResolver timeZones) : IAstro
             if (previous.Horizontal.AltitudeDegrees >= 0 && current.Horizontal.AltitudeDegrees < 0)
                 set = InterpolateCrossing(previous, current);
         }
-        return new TargetEvents(rise, transit, set);
+        // The samples span the whole local day, so with no crossing among them the target never changed side.
+        var horizon = rise is not null || set is not null ? DayHorizon.Crosses
+            : samples.All(x => x.Horizontal.AltitudeDegrees >= 0) ? DayHorizon.AboveAllDay
+            : samples.All(x => x.Horizontal.AltitudeDegrees < 0) ? DayHorizon.BelowAllDay : DayHorizon.Crosses;
+        return new TargetEvents(rise, transit, set, horizon);
     }
 
     private static Instant InterpolateCrossing(AstralPathSample a, AstralPathSample b)

@@ -66,6 +66,7 @@ public sealed partial class MainViewModelTests
         var map = window.FindControl<PlannerMapView>("PlannerMap")!;
         foreach (var (id, layer) in map.CompositionForTesting.NativeLayerOrder)
             if (id is "basemap" or Mapping.PlannerMapComposition.BasemapReferenceId) layer.Enabled = false; // Offline.
+        TestMaps.OfflinePip(window);
         window.Show();
         try
         {

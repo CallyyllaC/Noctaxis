@@ -167,7 +167,13 @@ public enum SavedLocationMapRefreshMode
     RefreshSource,
     ReapplyStyle,
     RefreshFeatures,
-    RefreshSettlement
+    RefreshSettlement,
+    /// <summary>
+    /// For bulk work over many locations: a location whose saved map data is complete and valid is reused as it is;
+    /// only a location without it is acquired (as <see cref="RefreshSource"/>). Bulk regeneration never re-downloads
+    /// raster tiles that are already held, as the OpenStreetMap tile policy forbids pre-emptive bulk fetching.
+    /// </summary>
+    AcquireMissing
 }
 
 public interface ILocationMapThumbnailService
@@ -177,6 +183,21 @@ public interface ILocationMapThumbnailService
         SavedLocation location, bool forceRefresh, CancellationToken cancellationToken);
     Task<SavedLocationThumbnailResult?> GetThumbnailAsync(
         SavedLocation location, SavedLocationMapRefreshMode mode, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes everything stored for a saved location (map imagery, features, settlement field and the
+    /// metadata holding its exact coordinates), current and legacy. Call only once the location's
+    /// deletion has been saved. Generation still running for it cannot recreate the files afterwards.
+    /// </summary>
+    Task DeleteLocationAssetsAsync(Guid locationId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Removes stored assets of locations that are not in <paramref name="savedLocationIds"/> and were
+    /// last written before <paramref name="olderThanUtc"/>. The caller must pass the complete set read
+    /// from saved state, never defaults that stand in after a failed load. Returns how many were removed.
+    /// </summary>
+    Task<int> RemoveOrphanedAssetsAsync(IReadOnlySet<Guid> savedLocationIds, DateTime olderThanUtc,
+        CancellationToken cancellationToken) => Task.FromResult(0);
 }
 
 public sealed record SlippyMapTile(int Zoom, int X, int Y, double FractionX, double FractionY)
@@ -220,6 +241,10 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     private readonly string _legacyStorageDirectory;
     private readonly TileMemoryCache<(string Provider, string Style, int Zoom, int X, int Y)> _tileCache = new(16 * 1024 * 1024);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locationGates = new();
+    // Advanced by each deletion of a location's assets. A request that began before the deletion (queued
+    // or running) sees a different value and writes nothing; a later request, e.g. after the location is
+    // imported again, works normally.
+    private readonly ConcurrentDictionary<Guid, long> _deletionEpochs = new();
     private readonly SemaphoreSlim _tileRequestGate = new(1, 1);
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly JsonSerializerOptions _featureJson = new(JsonSerializerDefaults.Web);
@@ -251,12 +276,20 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     public async Task<SavedLocationThumbnailResult?> GetThumbnailAsync(SavedLocation location,
         SavedLocationMapRefreshMode mode, CancellationToken cancellationToken)
     {
+        var epoch = DeletionEpoch(location.Id);
         var gate = _locationGates.GetOrAdd(location.Id, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (mode != SavedLocationMapRefreshMode.UseCache)
-                await MigrateLegacyThumbnailAsync(location.Id, cancellationToken).ConfigureAwait(false);
+            // Deleted while this request waited for the location's gate.
+            if (DeletionEpoch(location.Id) != epoch) return null;
+            if (mode == SavedLocationMapRefreshMode.AcquireMissing)
+            {
+                var held = await TryLoadCompleteAsync(location, cancellationToken).ConfigureAwait(false);
+                if (held is not null)
+                    return new SavedLocationThumbnailResult(held.ThumbnailPath, held.Metadata, true, false);
+                mode = SavedLocationMapRefreshMode.RefreshSource;
+            }
             var previous = await TryLoadPreviousAsync(location.Id, location, cancellationToken).ConfigureAwait(false);
             try
             {
@@ -779,28 +812,20 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                 null, "Compatible road and water overlays reused.", null,
                 false, false, false, 0, DateTimeOffset.UtcNow);
 
+    /// <summary>Why no <c>thumbnail.png</c> is composed: the legacy card artwork is retired.</summary>
+    public const string LegacyArtworkRetiredReason =
+        "Legacy card artwork is retired; the saved-location preview is built from the source data.";
+
     /// <summary>
-    /// Composes the legacy card artwork (<c>thumbnail.png</c>). It is optional: the saved-location preview
-    /// is built from the source data, so a frame the artwork rejects as not visible enough (open sea, say)
-    /// yields no artwork instead of failing the acquisition. Invalid source data still throws.
+    /// The legacy card artwork (<c>thumbnail.png</c>) is retired: no view shows it, and composing it was the costly
+    /// galaxy pipeline (several large blurs per location). Every acquisition and style reapplication now records the
+    /// artwork as skipped, which the cache already treats as complete source data for the preview; an earlier
+    /// <c>thumbnail.png</c> is removed with the next commit, as for any skipped artwork. The renderer itself remains
+    /// for the galaxy calibration tool.
     /// </summary>
-    private LegacyArtwork ComposeLegacyArtwork(byte[] sourcePng, MapFeatureDataDocument? features,
-        SettlementRaster? settlement, WebMercatorViewport viewport, Guid locationId)
-    {
-        try
-        {
-            var png = _processor.ProcessSettlement(sourcePng, features, settlement, viewport, locationId,
-                out var render);
-            return new LegacyArtwork(png, render, null);
-        }
-        catch (LegacyArtworkRejectedException ex)
-        {
-            _logger.LogInformation(
-                "Legacy card artwork skipped for {LocationId}; source data is kept for the preview: {Reason}",
-                locationId, ex.Message);
-            return new LegacyArtwork(null, null, ex.Message);
-        }
-    }
+    private static LegacyArtwork ComposeLegacyArtwork(byte[] sourcePng, MapFeatureDataDocument? features,
+        SettlementRaster? settlement, WebMercatorViewport viewport, Guid locationId) =>
+        new(null, null, LegacyArtworkRetiredReason);
 
     private static SavedLocationThumbnailMetadata WithArtwork(SavedLocationThumbnailMetadata metadata,
         LegacyArtwork artwork) => artwork.Png is null
@@ -1201,42 +1226,6 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         }
     }
 
-    private async Task MigrateLegacyThumbnailAsync(Guid locationId, CancellationToken cancellationToken)
-    {
-        var targetMetadata = Path.Combine(LocationDirectory(locationId), "metadata.json");
-        if (File.Exists(targetMetadata)) return;
-        var legacyDirectory = Path.Combine(_legacyStorageDirectory, locationId.ToString("N"));
-        var legacyMetadataPath = Path.Combine(legacyDirectory, "metadata.json");
-        if (!File.Exists(legacyMetadataPath)) return;
-        try
-        {
-            var metadata = JsonSerializer.Deserialize<SavedLocationThumbnailMetadata>(
-                await File.ReadAllTextAsync(legacyMetadataPath, cancellationToken).ConfigureAwait(false), _json);
-            if (metadata is null || metadata.LocationId != locationId) return;
-            var legacyImage = Path.Combine(legacyDirectory, Path.GetFileName(metadata.ImageFileName));
-            if (!File.Exists(legacyImage)) return;
-            var bytes = await File.ReadAllBytesAsync(legacyImage, cancellationToken).ConfigureAwait(false);
-            if (!_processor.ValidateThumbnail(bytes).IsValid) return;
-            var migrated = metadata with
-            {
-                SchemaVersion = MetadataSchemaVersion,
-                ImageFileName = "thumbnail.png",
-                SourceFileName = "source.png",
-                ThumbnailContentHash = Hash(bytes)
-            };
-            await CommitFilesAtomicallyAsync(LocationDirectory(locationId),
-            [
-                ("thumbnail.png", bytes),
-                ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(migrated, _json)))
-            ], cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Migrated legacy saved-location thumbnail for {LocationId}", locationId);
-        }
-        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
-        {
-            _logger.LogWarning(ex, "Legacy saved-location thumbnail migration failed for {LocationId}", locationId);
-        }
-    }
-
     private static async Task CommitFilesAtomicallyAsync(string directory,
         IReadOnlyList<(string FileName, byte[] Bytes)> files, CancellationToken cancellationToken)
     {
@@ -1273,6 +1262,99 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             }
         }
     }
+
+    public async Task DeleteLocationAssetsAsync(Guid locationId, CancellationToken cancellationToken)
+    {
+        if (locationId == Guid.Empty) throw new ArgumentException("A saved location has a non-empty identifier.", nameof(locationId));
+        // Marked first, so nothing queued behind the gate starts; then the gate waits for a generation
+        // already running, so its files exist before they are removed rather than appearing after.
+        _deletionEpochs.AddOrUpdate(locationId, 1, (_, epoch) => epoch + 1);
+        var gate = _locationGates.GetOrAdd(locationId, _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            DeleteManagedLocationDirectory(StorageDirectory, locationId);
+            DeleteManagedLocationDirectory(_legacyStorageDirectory, locationId);
+            _logger.LogInformation("Removed stored map assets for deleted location {LocationId}", locationId);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<int> RemoveOrphanedAssetsAsync(IReadOnlySet<Guid> savedLocationIds, DateTime olderThanUtc,
+        CancellationToken cancellationToken)
+    {
+        var removed = 0;
+        foreach (var root in new[] { StorageDirectory, _legacyStorageDirectory })
+        {
+            if (!Directory.Exists(root)) continue;
+            foreach (var directory in Directory.EnumerateDirectories(root))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                // Only folders this service names (a GUID in "N" form) are considered; anything else is left alone.
+                if (!Guid.TryParseExact(Path.GetFileName(directory), "N", out var id) || id == Guid.Empty ||
+                    savedLocationIds.Contains(id)) continue;
+                // Recent folders may belong to a location saved since the state was read (for example by
+                // another instance); they are kept until a later start finds them still unreferenced.
+                if (Directory.GetLastWriteTimeUtc(directory) >= olderThanUtc) continue;
+                var gate = _locationGates.GetOrAdd(id, _ => new SemaphoreSlim(1, 1));
+                await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    if (DeleteManagedLocationDirectory(root, id)) removed++;
+                }
+                finally { gate.Release(); }
+            }
+        }
+        if (removed > 0) _logger.LogInformation("Removed stored map assets of {Count} deleted locations", removed);
+        return removed;
+    }
+
+    /// <summary>
+    /// Deletes <c>root/&lt;id:N&gt;</c> and nothing outside it. A link (symbolic link or junction) is removed
+    /// as a link, never followed, at the folder itself or anywhere below it. Returns whether it existed.
+    /// </summary>
+    private bool DeleteManagedLocationDirectory(string root, Guid locationId)
+    {
+        var fullRoot = Path.GetFullPath(root);
+        var directory = Path.GetFullPath(Path.Combine(fullRoot, locationId.ToString("N")));
+        if (!string.Equals(Path.GetDirectoryName(directory), fullRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            throw new InvalidOperationException("Location asset path escaped its managed directory.");
+        var info = new DirectoryInfo(directory);
+        if (!info.Exists) return false;
+        try
+        {
+            DeleteWithoutFollowingLinks(info);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Best effort: a file held open now is removed by the orphan sweep at a later start.
+            _logger.LogWarning(ex, "Could not remove all stored map assets at {Path}", directory);
+            return false;
+        }
+    }
+
+    private static void DeleteWithoutFollowingLinks(DirectoryInfo directory)
+    {
+        if (directory.LinkTarget is not null || directory.Attributes.HasFlag(FileAttributes.ReparsePoint))
+        {
+            directory.Delete(recursive: false);
+            return;
+        }
+        foreach (var entry in directory.EnumerateFileSystemInfos())
+        {
+            if (entry is DirectoryInfo child) DeleteWithoutFollowingLinks(child);
+            else
+            {
+                if (entry.Attributes.HasFlag(FileAttributes.ReadOnly)) entry.Attributes &= ~FileAttributes.ReadOnly;
+                entry.Delete();
+            }
+        }
+        directory.Delete(recursive: false);
+    }
+
+    private long DeletionEpoch(Guid locationId) => _deletionEpochs.TryGetValue(locationId, out var epoch) ? epoch : 0;
 
     private string LocationDirectory(Guid locationId) => Path.Combine(StorageDirectory, locationId.ToString("N"));
     private static bool CoordinatesMatch(SavedLocationThumbnailMetadata metadata, GeoCoordinate coordinate) =>

@@ -3,7 +3,8 @@
 ## Camera inputs and persistence
 
 `CameraFramingSettings.CameraPitchDegrees` is independent of astronomical target altitude:
-0 degrees is horizontal, positive looks upward, range -90 to +90, default 0. Planner's
+0 degrees is horizontal, positive looks upward, range -45 to +90 (`MinimumCameraPitchDegrees`/`MaximumCameraPitchDegrees`;
+a saved pitch below -45 reads as -45), default 0. Planner's
 Camera and framing section exposes a numeric pitch input. It persists through the existing
 automatic framing/settings store.
 

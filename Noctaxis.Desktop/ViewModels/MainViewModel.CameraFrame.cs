@@ -21,29 +21,48 @@ public partial class MainViewModel
             QueueCameraFramingSave();
         }
     }
+    /// <summary>
+    /// The camera's bearing: its own, absolute, and the camera's alone. No target moves it: Focus and Follow
+    /// point the camera by writing it (<see cref="AimAtFocusedTarget"/>), and the Camera frame, the map's
+    /// framing cone and the terrain sampled for them read only this, the pitch and the field of view.
+    /// </summary>
     public double CameraBearingDegrees
     {
-        get => CurrentSnapshot is { } snapshot ? _cameraFramingGuideCalculator.Calculate(snapshot.FieldOfView,
-            snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming).CentreBearingDegrees
-            : Settings.EffectiveCameraFraming.ManualBearingDegrees;
+        get => Angles.NormaliseDegrees(Settings.EffectiveCameraFraming.ManualBearingDegrees);
         set
         {
             if (!double.IsFinite(value)) return;
             var bearing = Angles.NormaliseDegrees(value);
             if (Math.Abs(Angles.NormaliseSignedDegrees(bearing - CameraBearingDegrees)) < 1e-10) return;
-            var target = CurrentSnapshot?.Position.Horizontal.AzimuthDegrees;
             Settings = Settings with { CameraFraming = Settings.EffectiveCameraFraming with
             {
                 ManualBearingDegrees = bearing,
-                CompositionOffsetDegrees = target.HasValue ? Angles.NormaliseSignedDegrees(bearing - target.Value) : 0
+                CompositionOffsetDegrees = 0
             }};
             NotifyCameraFrameProperties();
             QueueCameraFramingSave();
         }
     }
 
+    /// <summary>
+    /// The camera's framing from camera state alone: its own bearing (<see cref="CameraBearingDegrees"/>) and the
+    /// field of view. The focused target's position is never passed in, so it cannot steer the frame. An older
+    /// setting's bearing held as an offset from a target is read as the camera's own bearing, which it always
+    /// also recorded.
+    /// </summary>
+    private CameraFramingGuide CameraGuide(FieldOfView fieldOfView, CameraFramingSettings framing) =>
+        _cameraFramingGuideCalculator.Calculate(fieldOfView, null, framing with { CompositionOffsetDegrees = 0 });
+
     public CameraTerrainDepth? TerrainFrameDepth => Settings.EnableTerrainCalculations
         ? DerivedCameraFraming?.CameraDepth : null;
+    /// <summary>
+    /// The Camera frame's angular size, which its bearing and pitch scales are drawn to: the picture's own span
+    /// when there is one, so a tick is where its angle is drawn, and otherwise the camera's field of view.
+    /// </summary>
+    public double CameraFrameHorizontalFieldOfView => TerrainFrameDepth is { Width: > 1 } depth
+        ? Angles.NormaliseDegrees(depth.Bearings[^1] - depth.Bearings[0]) : CurrentSnapshot?.FieldOfView.HorizontalDegrees ?? 0;
+    public double CameraFrameVerticalFieldOfView => TerrainFrameDepth is { } depth
+        ? depth.UpperAltitude - depth.LowerAltitude : CurrentSnapshot?.FieldOfView.VerticalDegrees ?? 0;
     public double TerrainFrameThreshold => Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent / 100;
     public string TerrainFrameDirection => TerrainFrameDepth?.UpperAltitude <= 0
         ? Strings.Get("Planner_Terrain_Frame_GroundFacing") : string.Empty;
@@ -68,7 +87,11 @@ public partial class MainViewModel
         OnPropertyChanged(nameof(FramingVisibilityStatus)); OnPropertyChanged(nameof(TerrainFrameDepth));
         OnPropertyChanged(nameof(TerrainFrameStatus)); OnPropertyChanged(nameof(TerrainFrameThreshold));
         OnPropertyChanged(nameof(TerrainFrameDirection));
+        OnPropertyChanged(nameof(CameraFrameHorizontalFieldOfView)); OnPropertyChanged(nameof(CameraFrameVerticalFieldOfView));
         OnPropertyChanged(nameof(CameraFrameDiagnostics)); OnPropertyChanged(nameof(TerrainDebugBearing));
+        OnPropertyChanged(nameof(FollowFocusedTarget)); OnPropertyChanged(nameof(IsFollowingFocusedTarget));
+        OnPropertyChanged(nameof(IsCameraDirectionManual));
+        NotifyShotViability();
         CaptureTerrainValidity();
     }
 

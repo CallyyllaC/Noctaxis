@@ -21,7 +21,7 @@ public sealed partial class MainViewModelTests
     [AvaloniaFact]
     [CoversSettingsInput("SettingsTerrainObstructionColour")]
     [CoversSettingsInput("SettingsTerrainTintStrengthPercent")]
-    [CoversSettingsInput("SettingsTerrainMinimapContext")]
+    [CoversSettingsInput("SettingsPlannerPipEnabled")]
     public async Task TerrainColourPickerAppliesAndSavesWithoutEnvironmentOrFrameWork()
     {
         var catalogue = new OpenNgcTargetCatalogue(); var planning = new FakePlanning(catalogue);
@@ -52,15 +52,15 @@ public sealed partial class MainViewModelTests
             Assert.Equal("#22BB88", map.FramingSettings.TerrainObstructionColour);
             Assert.Equal("#22BB88", vm.SettingsTerrainObstructionColourHex);
             strength.Value = 50;
-            vm.SettingsTerrainMinimapContext = 1.5;
+            vm.SettingsPlannerPipEnabled = false;
             await vm.SettleSettingsAsync();
             Assert.Equal("#22BB88", store.State.Settings.EffectiveCameraFraming.TerrainObstructionColour);
             Assert.Equal(50, store.State.Settings.EffectiveCameraFraming.TerrainTintStrengthPercent);
-            Assert.Equal(1.5, store.State.Settings.TerrainMinimapContext);
+            Assert.False(store.State.Settings.EffectivePlannerPip.IsEnabled);
             // Every control shows the saved value: there is no separate editor copy.
             Assert.Equal(Color.Parse("#22BB88"), picker.Color);
             Assert.Equal(50, strength.Value);
-            Assert.Equal(1.5, vm.SettingsTerrainMinimapContext);
+            Assert.False(vm.SettingsPlannerPipEnabled);
             Assert.Same(cached, vm.CameraFramingVisibility); Assert.Same(terrain, vm.Snapshot.Terrain);
             Assert.Equal(generation, vm.PlannerRefresh.Generation);
             Assert.Equal(environment, planning.EnvironmentRequests); Assert.Equal(core, planning.SnapshotCalculations);

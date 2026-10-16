@@ -1,0 +1,233 @@
+{
+  "auditDate": "2026-10-03",
+  "files": [
+    {
+      "file": "Avalonia-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/a21b9f573172f705a944dcc8aad7f036b9986f39/licence.md",
+      "sha256": "213814d306090074d234d760239ff0f67eb9b8d20eefb4d5631bb39dbe0b769b"
+    },
+    {
+      "file": "Avalonia-NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/AvaloniaUI/Avalonia/a21b9f573172f705a944dcc8aad7f036b9986f39/NOTICE.md",
+      "sha256": "dd6f80852d16320c865a2e403ffd1a8b07a0e34c5b37122c0bc2343639ff68e6"
+    },
+    {
+      "file": "Inter-OFL.txt",
+      "source": "https://raw.githubusercontent.com/rsms/inter/0a5106e0b/LICENSE.txt",
+      "sha256": "4d7d9c95e7d7f2f0ebf76d5e0b344826b74e903a34028ee18ab54bb639e45906"
+    },
+    {
+      "file": "AstronomyEngine-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/cosinekitty/astronomy/v2.1.19/LICENSE",
+      "sha256": "690dd98cb13ba4db77c6327deea852a816892bb9debbad5943405c66972f8023"
+    },
+    {
+      "file": "DotNet-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/dotnet/dotnet/b0f34d51fccc69fd334253924abd8d6853fad7aa/src/runtime/LICENSE.TXT",
+      "sha256": "cfc21f5e8bd655ae997eec916138b707b1d290b83272c02a95c9f821b8c87310"
+    },
+    {
+      "file": "NodaTime-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/nodatime/nodatime/381de9834a40f6596ee6218b2c6447ba2860f670/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "NodaTime-NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/nodatime/nodatime/381de9834a40f6596ee6218b2c6447ba2860f670/NOTICE.txt",
+      "sha256": "b20873f8469e39d5d09bfbafa9ceb101d555cf8de61f8c2a31394161d3b4c6dd"
+    },
+    {
+      "file": "RichTextKit-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/toptensoftware/richtextkit/ae434c82d8a197e3d259761879fb3f862f12efd8/license.txt",
+      "sha256": "3fad09d8c0de945f3435da9e830790cea87344ea24237e167d1a03235fd63036"
+    },
+    {
+      "file": "OpenCvSharp-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/shimat/opencvsharp/b161e7e012f5101f6d5dc68a835c59db6cc88b18/LICENSE",
+      "sha256": "93a73400a67ba64071d073386c96b21da8d8265574de0c71520061f741b0d645"
+    },
+    {
+      "file": "SvgSkia-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/wieslawsoltes/Svg.Skia/0164d01769a8b577f6dcc678f25d4802a06ff8c0/LICENSE.TXT",
+      "sha256": "31fdac60ff94d9cab3afef9794905df38c47e82b6879819c025d703d3aebd953"
+    },
+    {
+      "file": "Svg.Custom-MS-PL.txt",
+      "source": "https://raw.githubusercontent.com/wieslawsoltes/Svg.Skia/0164d01769a8b577f6dcc678f25d4802a06ff8c0/src/Svg.Custom/LICENSE.TXT",
+      "sha256": "d0ab1d6a97c328acf658b57141b6f2863d7eaf0066e42a9fd0792df0c4fd2521"
+    },
+    {
+      "file": "ExCSS-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/TylerBrinks/ExCSS/c97e84d6126bb2e42658cf5af627d52e697c8779/license.txt",
+      "sha256": "fe201d8ad7c9f2122b4813fe0811075b63fbac9f4fb0c9075f49f38718a728ad"
+    },
+    {
+      "file": "MicroCom-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/kekekeks/MicroCom/76785efcafd91b5902fd19dd11145f6dd655b7b4/LICENSE",
+      "sha256": "6ee769c9ac4dac9abb16b98b1341e9528ff9f4ab685481410d3376d14148f3a9"
+    },
+    {
+      "file": "NetTopologySuite-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/NetTopologySuite/NetTopologySuite/97d26b92586448b52d5a4f0c060217f94f882c75/License.md",
+      "sha256": "81be2ef7f10ff8f27339062bf1a9182c1f8b3a4fe7882699fc328a1a8f8b2693"
+    },
+    {
+      "file": "NetTopologySuite.Features-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/NetTopologySuite/NetTopologySuite.Features/0cb0a03dba8028fde185601168eeb652c3699a50/LICENSE",
+      "sha256": "29b2a8a6a60e110a21c7e921d27f49066cc2301b4b7fc4dbbde00291d9f57229"
+    },
+    {
+      "file": "NetTopologySuite.GeoJSON-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/NetTopologySuite/NetTopologySuite.IO.GeoJSON/0721747abf0cca9106684e039bbc846951eecc8e/License.md",
+      "sha256": "0174e65c0be695ded21941f7d21d979646af1344bc3b2436b8d8f622c765bf5b"
+    },
+    {
+      "file": "Tmds.DBus-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/tmds/Tmds.DBus/b4a7fed0b878f74cb54f7cca84d2889af4e596ba/COPYING",
+      "sha256": "aca3b49277abcc7886ccb2f115603a9f5b15fc3f96019a10c00f2974098b210c"
+    },
+    {
+      "file": "LibTiff.NET-LICENSE.txt",
+      "source": "https://api.github.com/repos/BitMiracle/libtiff.net/git/blobs/cbdbeb8be149640945dabc4bcbf18d629bd44732",
+      "sha256": "1700d430afca68db45c5e51e5467aa0d4eb9533e964e18a3a56dec5c230f3ba0",
+      "note": "Official upstream licence blob; NuGet 2.4.660 records the official licence-page URL but no source revision. Package copyright 2008-2024 is also retained in the inventory."
+    },
+    {
+      "file": "ANGLE-xxHash-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/AvaloniaUI/angle/1c89805903c1482166356d3b950d474973180e61/src/common/third_party/xxhash/LICENSE",
+      "sha256": "6ffedbc0f7878612d2b23589f1ff2ab15633e1df7963a5d9fc750ec5500c7e7a"
+    },
+    {
+      "file": "OpenCV-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "OpenCV-COPYRIGHT.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/COPYRIGHT",
+      "sha256": "854538f426422b0f989a5e5b7641e5943753d10ef29ea54901dcd36039e43f58"
+    },
+    {
+      "file": "OpenCV/OpenEXR-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/3rdparty/openexr/LICENSE",
+      "sha256": "14eba5f05238f57c77e94f0ebd29a0b3736ba0456ff990cda16e21b6903ac453"
+    },
+    {
+      "file": "OpenCV/OpenJPEG-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/3rdparty/openjpeg/LICENSE",
+      "sha256": "a6af136f3e15038a666b61f376612a07d9a4e48cb7c01adbf3e33b3f14ab49b6"
+    },
+    {
+      "file": "OpenCV/Protobuf-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/3rdparty/protobuf/LICENSE",
+      "sha256": "6e5e117324afd944dcf67f36cf329843bc1a92229a8cd9bb573d7a83130fea7d"
+    },
+    {
+      "file": "OpenCV/Flatbuffers-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/3rdparty/flatbuffers/LICENSE.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "OpenCV/SoftFloat-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/modules/core/3rdparty/SoftFloat/COPYING.txt",
+      "sha256": "0c5b08365136da52639d777f1ebfc03988b0169d80655c90c59f1b3fa3e526a2"
+    },
+    {
+      "file": "OpenCV/ITT-BSD-3-Clause.txt",
+      "source": "https://raw.githubusercontent.com/opencv/opencv/fe38fc608f6acb8b68953438a62305d8318f4fcd/3rdparty/ittnotify/src/ittnotify/BSD-3-Clause.txt",
+      "sha256": "cf48cdd9ed87c2031b68fb1b9f4cfb55d00dcf815b21a30bf8304aa1e5e6f76a"
+    },
+    {
+      "file": "OpenCV/Intel-IPP-EULA.rtf",
+      "source": "https://raw.githubusercontent.com/opencv/opencv_3rdparty/c934a2a15a6df020446ac3dfa07e3acf72b63a8f/ippicv/ippicv_2022.2.0_win_intel64_20250730_general.zip#ippicv_win/EULA.rtf",
+      "sha256": "37f11c79f36fb5e1b00aca31c1234a7435c2929d83e181ee802a349ca8571749"
+    },
+    {
+      "file": "Skia-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/mono/skia/7dbfc07dd33181f84e0958afb7ee805c6c769f0b/LICENSE",
+      "sha256": "5f787c1dee3c56547f09ccc2906ab5f5293c4d8dd6c8654e573216c38e908dbd"
+    },
+    {
+      "file": "Wuffs-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/google/wuffs-mirror-release-c/e3f919ccfe3ef542cfc983a82146070258fb57f8/LICENSE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "file": "D3D12MA-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator/169895d529dfce00390a20e69c2f516066fe7a3b/LICENSE.txt",
+      "sha256": "e078ee4f8c5ed0673f4d93b5318557eb8b4e0d7dbccef2ab45c763c7693f0f37"
+    },
+    {
+      "file": "Skia-zlib-LICENSE.txt",
+      "source": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+/e432200a7931de1b0b1b50201aac8a46d9380cb2/LICENSE?format=TEXT",
+      "sha256": "e1cfcc55c325b3f78cf55df9664abaa066e2271dffe8213347d9fccdfbac8f2c"
+    },
+    {
+      "file": "ANGLE-zlib-LICENSE.txt",
+      "source": "https://chromium.googlesource.com/chromium/src/third_party/zlib/+/b80f1d1e5256ac25f6aea3f31f13d458981cb1f9/LICENSE?format=TEXT",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+    },
+    {
+      "file": "ANGLE-Abseil-LICENSE.txt",
+      "source": "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp/+/677093525ed5a2f357482681a222274866088a2c/LICENSE?format=TEXT",
+      "sha256": "c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747"
+    },
+    {
+      "file": "ANGLE-RapidJSON-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/Tencent/rapidjson/24b5e7a8b27f42fa16b96fc70aade9106cf7102f/license.txt",
+      "sha256": "a140e5d46fe734a1c78f1a3c3ef207871dd75648be71fdda8e309b23ab8b1f32"
+    },
+    {
+      "file": "ANGLE-ASTC-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/ARM-software/astc-encoder/2319d9c4d4af53a7fc7c52985e264ce6e8a02a9b/LICENSE.txt",
+      "sha256": "494accc32e50eb523a0e384d0ae6d4b702db867a89d6971216760e92b240ee12"
+    },
+    {
+      "file": "OpenCV/zlib-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/madler/zlib/v1.3.1/LICENSE",
+      "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+    },
+    {
+      "file": "OpenCV/libpng-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/pnggroup/libpng/v1.6.55/LICENSE",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+    },
+    {
+      "file": "OpenCV/libtiff-LICENSE.txt",
+      "source": "https://gitlab.com/libtiff/libtiff/-/raw/v4.7.1/LICENSE.md",
+      "sha256": "0e27c2382d7b8147972bbb746e04059a1152c8d0fda9d03ef1399d1a433c4ade"
+    },
+    {
+      "file": "OpenCV/libwebp-COPYING.txt",
+      "source": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/COPYING",
+      "sha256": "5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf"
+    },
+    {
+      "file": "OpenCV/libwebp-PATENTS.txt",
+      "source": "https://raw.githubusercontent.com/webmproject/libwebp/v1.6.0/PATENTS",
+      "sha256": "cc3273e0694ea5896145e0677699b53471b03ea43021ddc50e7923fbb9f5023c"
+    },
+    {
+      "file": "OpenCV/libjpeg-turbo/LICENSE.md",
+      "source": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/3.1.3/LICENSE.md",
+      "sha256": "2189dc45a8fe96204069f8124caa53a148dfdc193f50f584c6ca7849a6072872"
+    },
+    {
+      "file": "OpenCV/libjpeg-turbo/README.ijg",
+      "source": "https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/3.1.3/README.ijg",
+      "sha256": "75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6"
+    },
+    {
+      "file": "Wuffs-NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/google/wuffs-mirror-release-c/e3f919ccfe3ef542cfc983a82146070258fb57f8/release/c/wuffs-v0.3.c",
+      "sha256": "ffe6e714688920dbe7dd0499d9eb41addd5f21ac59edd7ef44722bf811fa3a52",
+      "extraction": "Original copyright and Apache header only; source code is not bundled."
+    },
+    {
+      "file": "Svg.Custom-DTD-NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/wieslawsoltes/SVG/fddd725b488611b11a28f32e2fcecc9e275c6297/Source/Resources/svg11.dtd",
+      "sha256": "d7a1e8c04fc8d442cd7c764dca3885e8d91ee18b5993107cc400ba9e80e334de",
+      "extraction": "Original DTD copyright/permission header."
+    }
+  ]
+}

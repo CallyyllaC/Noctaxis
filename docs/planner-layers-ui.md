@@ -1,13 +1,18 @@
 # Planner Layers UI refinement
 
-The Planner now has a compact **Layers ▾** button at the top right of the map,
-beside Toggle inspector. Its standard Avalonia flyout contains Map layers →
-Overlays → Light Pollution, followed by an Opacity label, percentage and slider.
-The opacity controls collapse when Light Pollution is hidden. Clicking outside
-dismisses the flyout. Keyboard adjustment and focus loss commit edits. The new
-control uses application surface, border, text and font-size resources, including
-an explicitly scaled checkbox label. Tooltips and accessibility help text explain
-Layers, Light Pollution and opacity. No additional layer toggles were added.
+The Planner has a compact **Layers ▾** button at the top right of the map. Its standard Avalonia
+flyout opens straight onto the layers, with no headings: the button already says what it is. Each
+layer (Terrain relief, Light Pollution) is one row: its checkbox and name, its opacity percentage
+opposite, and the opacity slider directly beneath, indented under the name. A layer that is off keeps
+its slider and percentage in place, dimmed and disabled, still holding its opacity, so the flyout never
+changes height and nothing moves. Two layers take 158 px where the earlier headed layout took 285.
+
+Avalonia's slider ignores the mouse wheel, so the control adds it to the two opacity sliders only:
+while the pointer is over a slider whose layer is on, each notch moves it 5 percentage points
+(`PlannerLayersControl.OpacityPerWheelNotch`), trackpad deltas gathered into whole notches, clamped to
+the slider's range; at either end the wheel is left to scroll the flyout. A wheel change to Light
+Pollution commits when the pointer leaves the slider or the flyout closes. Dragging, tapping and the
+keyboard are unchanged. Clicking outside dismisses the flyout. There are no tooltips; the checkboxes and sliders keep their descriptions as accessibility help text. No layer toggles were added.
 
 `PlannerLayersViewModel` reads visibility and opacity directly from the map's
 existing `MapLayerStateController`; setters call `SetVisibility` and `SetOpacity`.
@@ -160,3 +165,40 @@ binding, PlannerMapComposition, terrain provider, viewport scheduler and the
 existing composition/state/synchronization tests. Numerical source data was not
 downloaded, rewritten or reinstalled. Terrain calculations and event-driven pin
 synchronization are untouched. No next-phase features were implemented.
+
+## Map attribution
+
+The Planner map has one attribution surface, owned by Noctaxis: a compact strip at the map's
+bottom-right and an info button beside it that opens **Map data & licences**.
+
+- **One source of truth.** Each credit is a `MapAttribution` (id, compact label, full credit, link,
+  licence) defined once in `MapAttributions`. Basemap and layer metadata (`MapProviderMetadata.Credits`)
+  refer to those definitions; a provider with a single plain credit may still give `AttributionText`.
+- **Dynamic.** `MapLayerStateController.ActiveAttributions` holds the credits owed by what is drawn now:
+  the active basemap, and each overlay while it is renderable (visible, above zero opacity, available,
+  active). Credits shared by several providers are given once, by id, where first owed. The strip is
+  their labels joined with " · "; the flyout gives each credit in full with its links.
+- **Labels keep the credited party.** A compact label drops only a product name, never whoever is
+  credited: "Terrain: Mapzen/Tilezen" and "Light pollution: David Lorenz" in the strip, with
+  "Terrain: Mapzen/Tilezen Terrarium" and "David Lorenz Light Pollution Atlas 2025" in the flyout.
+  OpenFreeMap's attribution (OpenFreeMap, © OpenMapTiles, OpenStreetMap data) is three credits, each
+  visible and each with its own link.
+- **Links** open through `IExternalUriLauncher`, by the view model's `OpenMapDataLinkCommand`; a
+  failure is reported in the status line.
+- **No second surface.** Mapsui draws each layer's own attribution as a hyperlink widget over the map.
+  `PlannerMapComposition` switches that off on every native layer it installs; the layers keep their
+  source's attribution as data.
+- The strip wraps rather than truncating, and leaves the pin preview's room at the bottom-left
+  (`AttributionReservedLeft`).
+
+## Opening Layers
+
+Opening the flyout was profiled in the headless Planner window (2026-10-02). Opening it changes no layer
+state, edits no preference, recomputes no attribution and requests no map redraw, and the same content is
+shown each time; the popup itself opens in about 5–40 ms, as the Panels menu does. The one large cost seen
+there is not the flyout's: any frame composed over the map re-runs the environmental-shading shader once
+(about 110 ms with headless software rendering). The real application draws on the GPU and redraws only
+the area that changed, so that figure does not carry over, and no fix was made on it.
+`OpeningLayersOnlyShowsTheFlyout` keeps the opening free of hidden work. Each real opening is timed from
+the press to the flyout's first frame, and one slower than `PlannerLayersControl.SlowOpening` (150 ms) is
+written to the application log with that split, so the delay seen in the app can be located.

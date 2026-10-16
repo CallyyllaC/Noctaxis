@@ -30,8 +30,10 @@ public sealed class UnavailableApplicationRestartService : IApplicationRestartSe
 
 /// <summary>
 /// Relaunches the same executable with the same arguments, on Windows and Linux alike. The new process is
-/// told this one's id (<see cref="WaitForExitArgument"/>) and waits for it to exit before loading saved
-/// state, so the two never use the state file at the same time.
+/// told this one's id (<see cref="WaitForExitArgument"/>) and, before it loads anything, waits for this one to
+/// release the Noctaxis instance and data-folder ownership (<see cref="Noctaxis.Core.Persistence.ApplicationInstanceOwnership"/>).
+/// It never proceeds without that ownership: if this instance has not exited within the bound, the replacement
+/// says so and exits, and Noctaxis can simply be started again.
 /// </summary>
 public sealed class ApplicationRestartService(
     Func<ProcessStartInfo, Process?> start,
@@ -124,22 +126,5 @@ public sealed class ApplicationRestartService(
             result.Add(arguments[i]);
         }
         return result;
-    }
-
-    /// <summary>
-    /// Called at startup of a restarted process: waits (bounded) for the previous instance to finish
-    /// saving and exit. A previous instance that is already gone, or never exits, does not block startup.
-    /// </summary>
-    internal static void WaitForPreviousInstance(int processId, TimeSpan timeout)
-    {
-        try
-        {
-            using var previous = Process.GetProcessById(processId);
-            previous.WaitForExit(timeout);
-        }
-        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or Win32Exception)
-        {
-            // Already exited, or not visible to this process: nothing to wait for.
-        }
     }
 }

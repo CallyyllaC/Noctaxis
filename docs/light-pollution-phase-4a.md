@@ -34,7 +34,9 @@ LPI = (5.0 / 195.0) × (exp(0.0195 × compressed) − 1.0)
 LPI is artificial zenith brightness relative to the assumed natural background.
 No Bortle conversion or extra sky-brightness metric is introduced. Metadata names David
 Lorenz Light Pollution Atlas 2025 and links to the information page. No formal dataset
-licence is asserted; the layer's licence metadata remains unset.
+licence is asserted, and the layer's licence metadata remains unset. Use rests on David
+Lorenz's explicit permission of 8 October 2026
+([permission record](../THIRD_PARTY_NOTICES.md#david-lorenz-light-pollution-atlas-permission)).
 
 ## Installation and storage
 

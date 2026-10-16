@@ -61,6 +61,9 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
+    /// <summary>How long a pooled HTTP connection is reused before a new one (and a fresh DNS lookup) is made.</summary>
+    internal static readonly TimeSpan PooledConnectionLifetime = TimeSpan.FromMinutes(10);
+
     internal static ServiceProvider ConfigureServices(Action<IServiceCollection>? configureForTest = null)
     {
         var services = new ServiceCollection();
@@ -79,6 +82,11 @@ public partial class App : Application
                 builder.AddFilter<Diagnostics.RollingFileLoggerProvider>("Noctaxis.Core.Terrain", LogLevel.Warning);
             }
         });
+        // Typed clients are held by singletons for the life of the application, so the factory's handler rotation never
+        // takes effect; a pooled connection lifetime keeps connections following DNS changes instead (NX-23).
+        services.ConfigureHttpClientDefaults(builder => builder
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { PooledConnectionLifetime = PooledConnectionLifetime })
+            .SetHandlerLifetime(Timeout.InfiniteTimeSpan));
         services.AddSingleton<ITimeZoneResolver, TimeZoneResolver>();
         services.AddSingleton<IClock>(SystemClock.Instance);
         services.AddSingleton<ITargetCatalogue, OpenNgcTargetCatalogue>();
@@ -108,7 +116,6 @@ public partial class App : Application
             provider.GetRequiredService<TerrariumTerrainOptions>()));
         services.AddHttpClient<ILandCoverProvider, WorldCoverLandCoverProvider>();
         services.AddSingleton<ITerrainSurfaceResolver, TerrainSurfaceResolver>();
-        services.AddSingleton<ITerrainDebugMapService, TerrainDebugMapService>();
         services.AddSingleton<IHorizonService>(provider =>
         {
             var horizon = new HorizonService(provider.GetRequiredService<ITerrainSurfaceResolver>(),
@@ -124,13 +131,8 @@ public partial class App : Application
         });
         services.AddSingleton<ISettlementDataProvider, WsfSettlementDataProvider>();
         services.AddSingleton<IPlannerEnvironmentService, PlannerEnvironmentService>();
-        services.AddSingleton<ILightPollutionProvider, UnavailableViirsLightPollutionProvider>();
-        services.AddHttpClient<IAuroraProvider, NoaaSwpcAuroraProvider>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(15);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (global space-weather client)");
-        });
-        services.AddSingleton<ILocationEnvironmentService, LocationEnvironmentService>();
+        // ILocationEnvironmentService, IAuroraProvider (NOAA SWPC) and ILightPollutionProvider were registered but never
+        // resolved by any consumer (NX-51); they are no longer in the container, so no unused network client ships.
         services.AddSingleton<ILocationTransferService, LocationTransferService>();
         services.AddSingleton<IGeographicWeatherCache, GeographicWeatherCache>();
         // Shared so one downloaded forecast serves later planner times, whichever provider instance asks.
@@ -177,10 +179,6 @@ public partial class App : Application
             client.Timeout = TimeSpan.FromSeconds(12);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (desktop photography planner; saved-location thumbnails)");
         });
-        services.AddSingleton<PlatformDeviceLocationProvider>();
-        services.AddSingleton<IDeviceLocationProvider>(provider => provider.GetRequiredService<PlatformDeviceLocationProvider>());
-        services.AddSingleton<IDeviceLocationAvailabilityService>(provider => provider.GetRequiredService<PlatformDeviceLocationProvider>());
-        services.AddSingleton<ILocationResolver, LocationResolver>();
         services.AddSingleton<IUserDataPathProvider, PlatformUserDataPathProvider>();
         services.AddHttpClient("LorenzAtlas", client =>
         {
@@ -190,12 +188,15 @@ public partial class App : Application
         services.AddSingleton(provider => new Noctaxis.Core.LightPollution.LorenzInstallation(
             provider.GetRequiredService<IUserDataPathProvider>(),
             provider.GetRequiredService<IHttpClientFactory>().CreateClient("LorenzAtlas")));
+        // Every save confirms that this process still owns the data folder (NX-31).
+        if (Program.Ownership is { } ownership)
+            services.AddSingleton<IDataDirectoryOwnership>(new InstanceDataDirectoryOwnership(ownership));
         services.AddSingleton<IUserDataStore, JsonUserDataStore>();
         services.AddSingleton<IAwooSupporterLicenceVerifier, AwooSupporterLicenceVerifier>();
         services.AddSingleton<IExternalUriLauncher, ShellExternalUriLauncher>();
         services.AddSingleton<ExternalMapService>();
         services.AddSingleton<IPlanningService, PlanningService>();
-        services.AddSingleton<IScoutingCardExporter, ScoutingCardExporter>();
+        services.AddSingleton<Export.IPlannerExportRenderer, Export.PlannerExportRenderer>();
         services.AddSingleton<LocationSearchViewModel>();
         services.AddSingleton<DesktopDialogService>();
         services.AddSingleton<IPlannerDialogService>(provider => provider.GetRequiredService<DesktopDialogService>());

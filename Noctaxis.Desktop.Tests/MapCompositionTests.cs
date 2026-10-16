@@ -84,7 +84,7 @@ public sealed class MapCompositionTests
         var composition = controller.Composition;
         Assert.Equal(BasemapKind.Street, composition.Basemap.Kind);
         Assert.Equal("OpenFreeMap", composition.Basemap.Provider.DisplayName);
-        Assert.Equal(Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap.AttributionText, composition.AttributionText);
+        Assert.Equal("© OpenStreetMap contributors · OpenFreeMap · © OpenMapTiles", composition.AttributionText);
         Assert.IsType<Noctaxis.Desktop.Mapping.Vector.OpenFreeMapBasemap>(controller.ActiveBasemap);
         // The vector basemap is split: geography at the bottom, its reference pass above.
         var native = controller.Map.Layers.ToArray();

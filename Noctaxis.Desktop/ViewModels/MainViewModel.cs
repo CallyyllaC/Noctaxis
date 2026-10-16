@@ -32,7 +32,7 @@ public partial class MainViewModel : ObservableObject
     private readonly ITargetCatalogue _catalogue;
     private readonly ITimeZoneResolver _timeZones;
     private readonly IUserDataStore _store;
-    private readonly IScoutingCardExporter _exporter;
+    private readonly Export.IPlannerExportRenderer _exporter;
     private readonly ILogger<MainViewModel> _logger;
     private readonly ILensCalculator _lensCalculator;
     private readonly ICameraFramingGuideCalculator _cameraFramingGuideCalculator;
@@ -43,24 +43,20 @@ public partial class MainViewModel : ObservableObject
     private readonly IExternalUriLauncher _externalUriLauncher;
     private readonly IPlannerDialogService _dialogs;
     private readonly IReverseGeocodingProvider _reverseGeocoding;
-    private readonly ITerrainDebugMapService? _terrainDebugMaps;
+    private readonly ILocationMapThumbnailService _locationMapThumbnails;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _temporalCommitCancellation;
     private CancellationTokenSource? _temporalPreviewCancellation;
     private CancellationTokenSource? _reverseLookupCancellation;
-    private CancellationTokenSource? _terrainDebugMapCancellation;
     private Task _activePlannerRefresh = Task.CompletedTask;
-    private Task _activeTerrainDebugMapRefresh = Task.CompletedTask;
     private readonly SemaphoreSlim _plannerSnapshotCommitGate = new(1, 1);
     private readonly object _plannerRefreshGate = new();
     private long _refreshGeneration;
     private long _reverseLookupGeneration;
-    private long _terrainDebugMapGeneration;
     private string? _resolvedPlaceSuggestion;
     private PlanningSession _session;
     private bool _suppressChanges;
     private GeoCoordinate? _lastCustomCoordinate;
-    private DateTimeOffset _dateSliderAnchor;
     private readonly Instant _startupInstant;
     private long _settingsApplyGeneration;
     private readonly StateSaveScheduler _stateSaves;
@@ -69,16 +65,15 @@ public partial class MainViewModel : ObservableObject
     private string? _environmentNotice;
 
     public MainViewModel(IPlanningService planning, ITargetCatalogue catalogue, ITimeZoneResolver timeZones,
-        IUserDataStore store, IScoutingCardExporter exporter,
+        IUserDataStore store, Export.IPlannerExportRenderer exporter,
         ILogger<MainViewModel> logger, ILensCalculator lensCalculator,
         ICameraFramingGuideCalculator cameraFramingGuideCalculator,
         IFramingVisibilityCalculator framingVisibilityCalculator, ILocalHorizonCalculator localHorizonCalculator,
         IClock clock,
-        LocationSearchViewModel locationSearch, ILocationResolver locationResolver,
-        IDeviceLocationAvailabilityService deviceLocationAvailability, ITargetSearchService targetSearch,
+        LocationSearchViewModel locationSearch, ITargetSearchService targetSearch,
         IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
         ILocationMapThumbnailService? locationMapThumbnails = null,
-        ITerrainDebugMapService? terrainDebugMaps = null, TerrainDiskCache? terrainDiskCache = null,
+        TerrainDiskCache? terrainDiskCache = null,
         IHorizonService? terrainDiagnostics = null,
         IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
         IExternalUriLauncher? externalUriLauncher = null,
@@ -107,7 +102,7 @@ public partial class MainViewModel : ObservableObject
         LightPollutionInstallation = lightPollutionInstallation;
         _dialogs = dialogs;
         _reverseGeocoding = reverseGeocoding;
-        _terrainDebugMaps = terrainDebugMaps;
+        _locationMapThumbnails = locationMapThumbnails ?? new NullLocationMapThumbnailService();
         _terrainDiagnostics = terrainDiagnostics as HorizonService;
         _terrainDiskCache = terrainDiskCache;
         _stateSaves = new StateSaveScheduler(store.SaveAsync, logger, delay: persistenceDelay)
@@ -122,10 +117,8 @@ public partial class MainViewModel : ObservableObject
         _startupInstant = PlannerStartupTime.RoundedLocalHour(clock, timeZones);
         _session = PlanningSession.Default(_startupInstant, timeZones.MachineTimeZoneId);
         Targets = catalogue.Targets;
-        _selectedTarget = Targets[0];
         var startupLocal = timeZones.InZone(_startupInstant, timeZones.MachineTimeZoneId);
         _localDate = new DateTimeOffset(startupLocal.Year, startupLocal.Month, startupLocal.Day, 0, 0, 0, TimeSpan.Zero);
-        _dateSliderAnchor = _localDate.Value;
         _timeText = $"{startupLocal.Hour:00}:00";
         _minutesOfDay = startupLocal.Hour * 60;
         _latitude = _session.Observer.Latitude;
@@ -136,11 +129,11 @@ public partial class MainViewModel : ObservableObject
         _selectedOrientation = _session.Lens.Orientation;
         _previewObserver = _session.Observer;
         LocationSearch = locationSearch;
-        Locations = new LocationsViewModel(locationResolver, deviceLocationAvailability, OpenCustomAsync, UseSearchResultAsync,
+        Locations = new LocationsViewModel(OpenCustomAsync, UseSearchResultAsync,
             query => _dialogs.ShowLocationSearchAsync(query),
             OpenSavedLocationAsync, EditLocationAsync, DeleteLocationAsync, ToggleFavouriteAsync,
             SaveCurrentAsNewLocation,
-            locationMapThumbnails ?? new NullLocationMapThumbnailService(),
+            _locationMapThumbnails,
             () => _clock.GetCurrentInstant().ToDateTimeOffset());
         // The collection and its subscriber share this view model's lifetime, so the
         // notification subscription cannot keep an otherwise-discarded view model alive.
@@ -162,7 +155,6 @@ public partial class MainViewModel : ObservableObject
     public ObservableCollection<SavedLocation> SavedLocations { get; } = [];
     public ObservableCollection<CelestialObjectItemViewModel> CelestialObjects { get; } = [];
     public ObservableCollection<WeatherFieldOptionViewModel> WeatherFieldOptions { get; } = [];
-    public ObservableCollection<WeatherFieldGroupViewModel> WeatherFieldGroups { get; } = [];
     public ObservableCollection<CameraProfile> Cameras { get; } = [];
     public ObservableCollection<LensProfile> Lenses { get; } = [];
     public ObservableCollection<CameraProfileEditorViewModel> EquipmentCameraEditors { get; } = [];
@@ -173,7 +165,6 @@ public partial class MainViewModel : ObservableObject
     public PlanningSession Session => _session;
     public GeoCoordinate Observer => _session.Observer;
 
-    [ObservableProperty] private AstralTarget? _selectedTarget;
     [ObservableProperty] private SavedLocation? _selectedLocation;
     [ObservableProperty] private DateTimeOffset? _localDate;
     [ObservableProperty] private double _minutesOfDay;
@@ -192,26 +183,22 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty] private PlanningSnapshot? _snapshot;
     [ObservableProperty] private PlannerRefreshState _plannerRefresh = PlannerRefreshState.Idle;
     [ObservableProperty] private bool _isWeatherRefreshing;
-    [ObservableProperty] private bool _isInspectorOpen = true;
     [ObservableProperty] private int _selectedPageIndex;
     [ObservableProperty] private GeoCoordinate _previewObserver;
     // The Add location tile is the only thing on the Locations page standing for the active pin, so it
     // shows where that pin is, and follows it as the Planner moves.
     partial void OnPreviewObserverChanged(GeoCoordinate value) => Locations?.SetCurrentPin(value);
-    [ObservableProperty] private double _previewMinutesOfDay;
-    [ObservableProperty] private double _previewDateOffsetDays;
     [ObservableProperty] private bool _isCameraFramingOverlayVisible = true;
     [ObservableProperty] private bool _showFramingVisibilityLimits = true;
     [ObservableProperty] private bool _isLocationInteracting;
     [ObservableProperty] private string? _celestialLimitMessage;
-    [ObservableProperty] private TerrainDebugMapSnapshot? _terrainDebugMap;
-    [ObservableProperty] private TerrainDebugMapLoadState _terrainDebugMapLoadState =
-        TerrainDebugMapLoadState.Disabled;
     [ObservableProperty] private bool _isRefreshingLocationThumbnails;
     [ObservableProperty] private string? _locationThumbnailRefreshStatus;
     public bool CanExport => !IsLocationInteracting && Snapshot is not null;
     public int VisibleCelestialCount => CelestialObjects.Count(item => item.IsVisible);
     public string VisibleCelestialCountText => Strings.Format("Planner_Targets_VisibleCount_Format", VisibleCelestialCount, CelestialVisibilityPolicy.MaximumVisibleObjects);
+    /// <summary>The same count, short enough for the Targets heading.</summary>
+    public string VisibleCelestialCountShortText => Strings.Format("Planner_Targets_VisibleCountShort_Format", VisibleCelestialCount, CelestialVisibilityPolicy.MaximumVisibleObjects);
     [ObservableProperty] private string _statusMessage = Strings.Get("Shell_Status_Starting");
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasStartupError))] private string? _startupError;
     public bool HasStartupError => StartupError is not null;
@@ -221,6 +208,12 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     [ObservableProperty, NotifyPropertyChangedFor(nameof(HasOperationalNotice))] private string? _operationalNotice;
     public bool HasOperationalNotice => OperationalNotice is not null;
+    /// <summary>
+    /// Set for the whole session when saved state was only partly understood (a newer version's file):
+    /// nothing is saved, so that file survives. Not dismissible, because every change is affected.
+    /// </summary>
+    [ObservableProperty, NotifyPropertyChangedFor(nameof(HasStateReadOnlyNotice))] private string? _stateReadOnlyNotice;
+    public bool HasStateReadOnlyNotice => StateReadOnlyNotice is not null;
 
     public bool IsPlannerRefreshing => PlannerRefresh.IsRefreshing;
     public double PlannerRefreshProgress => PlannerRefresh.Progress;
@@ -228,11 +221,10 @@ public partial class MainViewModel : ObservableObject
     public PlannerPinActivity PlannerPinActivity => PlannerRefresh.PinActivity;
     public bool CelestialOverlaysReady => PlannerRefresh.CelestialOverlayState == PlannerRefreshWorkState.Ready;
     public bool CameraOverlayReady => PlannerRefresh.CameraGeometryState == PlannerRefreshWorkState.Ready;
-    public bool ShowTerrainDebugOverlay => Settings.EnableTerrainCalculations && Settings.TerrainDebugOverlay;
+    public bool ShowTerrainDebugOverlay => IsDeveloperDiagnosticsEnabled && Settings.EnableTerrainCalculations && Settings.TerrainDebugOverlay;
     public TerrainHorizonProfile? EnabledTerrainDiagnosticsProfile => ShowTerrainDebugOverlay ? CurrentTerrain : null;
     public TerrainHorizonProfile? TerrainDebugProfile => Settings.EnableTerrainCalculations ? CurrentTerrain : null;
     public long TerrainDebugGeneration => PlannerRefresh.Generation;
-    public long TerrainDebugMapGeneration => Volatile.Read(ref _terrainDebugMapGeneration);
     public double? TerrainDebugTargetAltitude => CurrentTerrain is not null
         ? CurrentSnapshot?.Position.Horizontal.AltitudeDegrees
         : null;
@@ -242,11 +234,10 @@ public partial class MainViewModel : ObservableObject
         ? TerrainProfileDiagnostics.CreateDebugSnapshot(terrain,
             CurrentCameraBearing ?? CurrentSnapshot?.Position.Horizontal.AzimuthDegrees ?? 0,
             TerrainDebugTargetAltitude, TerrainDebugGeneration,
-            TerrainDebugMap, TerrainDebugMapGeneration,
             CameraFramingVisibility?.WeatherVisibilityDistanceMetres)
         : $"TERRAIN DEBUG\nObserver\nLatitude: {_session.Observer.Latitude:F6}\n" +
           $"Longitude: {_session.Observer.Longitude:F6}\nGeneration: {TerrainDebugGeneration}\n" +
-          $"State: Resolving terrain profile\nLocal terrain map: {TerrainDebugMapLoadState}";
+          $"State: Resolving terrain profile";
     public bool IsElevationManualOverride => _session.EffectiveObserverElevation.IsManualOverride;
     public TerrainElevationResolutionState TerrainElevationResolutionState =>
         _session.EffectiveObserverElevation.ResolutionState;
@@ -262,20 +253,56 @@ public partial class MainViewModel : ObservableObject
         : _session.EffectiveObserverElevation.TerrainGroundElevationAslMetres.HasValue
             ? Strings.Get("Planner_Location_GroundSource_TerrainDerived")
             : Strings.Get("Planner_Location_GroundSource_Resolving");
-    /// <summary>The ground elevation in the measurement profile's height unit, beside <see cref="GroundElevationUnitText"/>.</summary>
-    public double? GroundElevationDisplay => ResolvedGroundElevationMetres is double ground
-        ? Math.Round(Settings.MeasurementProfile.Height.FromBase(ground), 1)
+    /// <summary>
+    /// Where the camera is above sea level: the resolved ground elevation plus the configured camera
+    /// height, in metres. Null while the ground is still being resolved. Every display of the effective
+    /// altitude is formatted from this one sum.
+    /// </summary>
+    public double? EffectiveCameraAltitudeMetres => ResolvedGroundElevationMetres is double ground
+        ? ground + Settings.EffectiveCameraHeightAboveGroundMetres
         : null;
-    public string GroundElevationUnitText =>
-        Strings.Format("Planner_Location_AboveSeaLevel_Unit_Format", Settings.MeasurementProfile.Height.Symbol);
-    public string EffectiveObserverAltitudeText => ResolvedGroundElevationMetres is double ground
+    public string EffectiveObserverAltitudeText => EffectiveCameraAltitudeMetres is double altitude
         ? Strings.Format("Planner_Location_EffectiveAltitude_Format",
-            Settings.MeasurementProfile.Height.Of(ground + Settings.EffectiveCameraHeightAboveGroundMetres, 1).Format(),
+            Settings.MeasurementProfile.Height.Of(altitude, 1).Format(),
             Settings.MeasurementProfile.Height.Of(Settings.EffectiveCameraHeightAboveGroundMetres, 1).Format())
         : Strings.Get("Planner_Location_EffectiveAltitude_Resolving");
+    /// <summary>The planning location's altitude, "8.0 m ASL", in the measurement profile's height unit.</summary>
+    public string EffectiveCameraAltitudeShortText => EffectiveCameraAltitudeMetres is double altitude
+        ? AboveSeaLevel(altitude)
+        : Strings.Get("Planner_Location_GroundSource_Resolving");
+    /// <summary>
+    /// What the location's altitude is made of: the sum, the ground under it and where that ground value
+    /// came from. Detail for those who want it; the altitude itself is always visible beside it.
+    /// </summary>
+    public string EffectiveCameraAltitudeDetail => ResolvedGroundElevationMetres is double ground
+        ? Strings.Format("Planner_PinOverlay_Altitude_Tooltip_Format", EffectiveObserverAltitudeText,
+            AboveSeaLevel(ground), GroundElevationSourceText)
+        : GroundElevationSourceText;
+    private string AboveSeaLevel(double metres) =>
+        Strings.Format("Planner_Location_AboveSeaLevel_Unit_Format", Settings.MeasurementProfile.Height.Of(metres, 1).Format());
     public bool IsFocalLengthEditable => SelectedLens is { IsPrime: false };
     public double FocalLengthMinimum => SelectedLens?.MinimumFocalLengthMillimetres ?? 1;
     public double FocalLengthMaximum => SelectedLens?.MaximumFocalLengthMillimetres ?? 2_000;
+
+    /// <summary>
+    /// Turns the focal length by <paramref name="notches"/> wheel notches, as a zoom ring would: each notch is
+    /// about 5% of the current focal length, at least one millimetre, and lands on a whole millimetre like the
+    /// Equipment slider's ticks. It is the same <see cref="FocalLength"/> the slider sets, within the selected
+    /// lens's range, so the field of view and the map's framing follow. A prime lens does not change.
+    /// Returns false when nothing changed.
+    /// </summary>
+    public bool StepFocalLength(int notches)
+    {
+        if (notches == 0 || !IsFocalLengthEditable || SelectedLens is not { } lens) return false;
+        var step = Math.Max(1, Math.Round(FocalLength * FocalLengthWheelStep));
+        var next = lens.ClampFocalLength(Math.Round(FocalLength) + notches * step);
+        if (Math.Abs(next - FocalLength) < 1e-9) return false;
+        FocalLength = next;
+        return true;
+    }
+
+    /// <summary>The share of the current focal length one wheel notch turns it by.</summary>
+    public const double FocalLengthWheelStep = .05;
     public bool IsLandscapeOrientation
     {
         get => SelectedOrientation == CameraOrientation.Landscape;
@@ -320,33 +347,23 @@ public partial class MainViewModel : ObservableObject
     public string TargetTerrainMarginText => CurrentTargetLocalVisibility?.ClearanceDegrees is double clearance
         ? $"{Math.Abs(clearance):0.0}°"
         : "—";
-    public string RiseText => FormatTime(Snapshot?.Position.Events.Rise);
-    public string TransitText => FormatTime(Snapshot?.Position.Events.Transit);
-    public string SetText => FormatTime(Snapshot?.Position.Events.Set);
+    public string RiseText => EventText(events => events.Rise, true);
+    public string TransitText => EventText(events => events.Transit, null);
+    public string SetText => EventText(events => events.Set, false);
     public string TerrainStatus => !Settings.EnableTerrainCalculations ? Strings.Get("Terrain_CalculationsDisabled") : CurrentEnvironment is { } environment
         ? environment.ActiveSourceDescription
         : CurrentTerrain is { } terrain
             ? terrain.Status
             : Strings.Get("Planner_Horizon_Loading");
-    public string TerrainCurrentLocationText => $"{Observer.Latitude:F5}, {Observer.Longitude:F5}";
     public string GroundHorizonState => !Settings.EnableTerrainCalculations ? Strings.Get("Planner_Horizon_State_Disabled") : IsRefreshWorkLoading(PlannerRefresh.GroundTerrainState)
         ? CurrentTerrain is { IsComplete: false, HasTerrainCoverage: true } ? Strings.Get("Planner_Horizon_State_Refining") : Strings.Get("Planner_Horizon_State_LoadingEllipsis")
         : FormatHorizonState(CurrentTerrain?.HasTerrainCoverage == true,
             CurrentTerrain?.GroundHorizonState);
     public string GroundHorizonAngleText => FormatHorizonAngle(
         CurrentCameraBearing is double bearing ? CurrentTerrain?.GroundAltitudeAt(bearing) : null);
-    public string TerrainDatumText => !Settings.EnableTerrainCalculations ? GroundElevationSourceText : CurrentTerrain switch
-    {
-        null => Strings.Get("Planner_Horizon_ObserverDatum_Loading"),
-        { ObserverDatumConfidence: ObserverDatumConfidence.Normal } => Strings.Get("Planner_Horizon_ObserverDatum_Normal"),
-        _ => Strings.Get("Planner_Horizon_ObserverDatum_Unavailable")
-    };
     public string GroundObstructionText => FormatObstruction(
         CurrentCameraObstruction.HasGroundData,
         CurrentCameraObstruction.GroundFirstObstructionDistanceMetres);
-    public string WeatherSummary => Snapshot?.Weather.Conditions is { } weather
-        ? Strings.Format("Planner_Weather_Summary_Format", weather.Summary)
-        : Snapshot?.Weather.Message ?? Strings.Get("Weather_Loading");
     public string WeatherDetails
     {
         get
@@ -423,10 +440,7 @@ public partial class MainViewModel : ObservableObject
     public string FieldOfViewText => Snapshot is null ? "—" : $"{Snapshot.FieldOfView.HorizontalDegrees:F1}° × {Snapshot.FieldOfView.VerticalDegrees:F1}°";
     public CameraFramingGuide? CameraFramingGuide => CurrentSnapshot is not { } snapshot || !IsCameraFramingOverlayVisible
         ? null
-        : _cameraFramingGuideCalculator.Calculate(
-            snapshot.FieldOfView,
-            snapshot.Position.Horizontal.AzimuthDegrees,
-            Settings.EffectiveCameraFraming with { IsOverlayVisible = IsCameraFramingOverlayVisible });
+        : CameraGuide(snapshot.FieldOfView, Settings.EffectiveCameraFraming with { IsOverlayVisible = IsCameraFramingOverlayVisible });
     private FramingInputs? _framingInputs;
     private FramingVisibilityAssessment? _framingAssessment;
     private readonly record struct FramingInputs(TerrainHorizonProfile Terrain, WeatherResult Weather,
@@ -440,10 +454,12 @@ public partial class MainViewModel : ObservableObject
         get
         {
             if (CurrentSnapshot is not { } snapshot || CurrentTerrain is not { } terrain) return null;
-            var guide = _cameraFramingGuideCalculator.Calculate(snapshot.FieldOfView,
-                snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var guide = CameraGuide(snapshot.FieldOfView, Settings.EffectiveCameraFraming);
+            // The target's altitude only says whether the focused target clears the terrain at the camera's bearing
+            // (the framing status); it plays no part in the frame's geometry. With nothing focused there is no
+            // target to judge, so the status is the weather's.
             var inputs = new FramingInputs(terrain, snapshot.Weather,
-                snapshot.Position.Horizontal.AltitudeDegrees, guide.CentreBearingDegrees,
+                snapshot.Session.IsTargetFocused ? snapshot.Position.Horizontal.AltitudeDegrees : 90, guide.CentreBearingDegrees,
                 guide.HorizontalFieldOfViewDegrees, snapshot.FieldOfView.VerticalDegrees, CameraPitchDegrees, Settings.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent);
             // A single UI-owned derived result. Compare actual calculator inputs rather than
             // presentation notifications or the containing snapshot (which changes independently).
@@ -499,9 +515,7 @@ public partial class MainViewModel : ObservableObject
         get
         {
             if (Snapshot is not { } snapshot || CurrentTerrain is null) return null;
-            return _cameraFramingGuideCalculator.Calculate(snapshot.FieldOfView,
-                snapshot.Position.Horizontal.AzimuthDegrees,
-                Settings.EffectiveCameraFraming).CentreBearingDegrees;
+            return CameraGuide(snapshot.FieldOfView, Settings.EffectiveCameraFraming).CentreBearingDegrees;
         }
     }
 
@@ -515,6 +529,14 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await InitializeAsync();
+        }
+        catch (UserStateUnavailableException ex)
+        {
+            // The saved state exists but could not be read. Saving is never enabled, so this session
+            // cannot overwrite the file with defaults; the banner says why and what to do.
+            _logger.LogError(ex, "Saved state could not be read; the Planner was not activated and saving is disabled");
+            StartupError = Strings.Format("Shell_Status_StateUnavailable_Format", ex.StatePath);
+            StatusMessage = StartupError;
         }
         catch (Exception ex)
         {
@@ -537,6 +559,7 @@ public partial class MainViewModel : ObservableObject
         // What this process runs with; restart-required settings keep these values until restart.
         _activeSettings = Settings;
         _settingsLoaded = true;
+        RestorePlannerPanels();
         NotifyPendingRestart();
         LoadSupporterLicenceState();
         _suppressChanges = true;
@@ -547,6 +570,11 @@ public partial class MainViewModel : ObservableObject
         // The window is bound before settings load: the map layers must take the loaded preferences.
         OnPropertyChanged(nameof(TerrainReliefMapPreferences));
         OnPropertyChanged(nameof(LightPollutionMapPreferences));
+        // And the Picture-in-Picture map its saved view, before its layers and Follow: Follow turning off
+        // saves the view the map has, which must by then be the saved one.
+        OnPropertyChanged(nameof(IsPlannerPipEnabled));
+        PlannerPipViewReset?.Invoke(this, EventArgs.Empty);
+        NotifyPlannerPip();
         SavedLocations.Clear();
         foreach (var location in persisted.Locations) SavedLocations.Add(location);
         if (_terrainDiskCache is not null && Settings.EnableTerrainCalculations)
@@ -578,16 +606,24 @@ public partial class MainViewModel : ObservableObject
         BuildCelestialObjectItems();
         LoadSettingsEditor();
         await DetectLightPollutionAsync();
-        Locations.Load(SavedLocations, _lastCustomCoordinate, _session.SavedLocationId);
-        await Locations.RefreshDeviceAvailabilityAsync(CancellationToken.None);
+        Locations.Load(SavedLocations, _session.SavedLocationId);
         LoadSessionIntoControls();
         PreviewObserver = _session.Observer;
-        PreviewMinutesOfDay = MinutesOfDay;
-        _dateSliderAnchor = LocalDate ?? _startupInstant.ToDateTimeOffset();
+        KeepMomentInTimeline();
         _initialised = true;
         // Saving starts only once persisted state is fully loaded: an earlier or failed startup must
-        // never overwrite the user's file with defaults.
-        _stateSaves.Enable();
+        // never overwrite the user's file with defaults. State that was only partly understood (a newer
+        // version's file) is never saved over either; the session works, read-only.
+        if (persisted.PreservationWarning is { } warning)
+        {
+            _logger.LogWarning("Saved state (schema {Version}) was only partly understood; saving is disabled for this session. Unrecognised: {Values}",
+                warning.FileVersion, string.Join(", ", warning.UnrecognisedValues));
+            StateReadOnlyNotice = StateReadOnlyMessage(warning);
+        }
+        else _stateSaves.Enable();
+        if (persisted.PreservationWarning is null && persisted.AuthoritativeAsOfUtc is { } authoritativeAsOf)
+            _orphanedAssetSweep = RemoveOrphanedLocationAssetsAsync(
+                SavedLocations.Select(location => location.Id).ToHashSet(), authoritativeAsOf);
         ActivatePlannerIfReady();
     }
 
@@ -598,7 +634,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     internal Task WaitForPlannerRefreshAsync() => _activePlannerRefresh;
-    internal Task WaitForTerrainDebugMapRefreshAsync() => _activeTerrainDebugMapRefresh;
 
     public void PreviewObserverLocation(GeoCoordinate coordinate)
     {
@@ -690,7 +725,7 @@ public partial class MainViewModel : ObservableObject
                 return;
             }
             _resolvedPlaceSuggestion = result.PlaceName;
-            LocationName = $"Near {result.PlaceName}";
+            LocationName = Strings.Format("Planner_Location_Near_Format", result.PlaceName);
             CurrentLocationAttribution = result.Attribution;
         }
         catch (OperationCanceledException)
@@ -780,7 +815,6 @@ public partial class MainViewModel : ObservableObject
                     : DisabledTerrain(), TerrainCrossings = new(null, null), Environment = null };
             NotifySnapshotProperties();
         }
-        if (!Settings.EnableTerrainCalculations) ScheduleTerrainDebugMapRefresh();
         if (_terrainDiskCache is not null && configureTerrainCache)
         {
             string? cacheFailure = null;
@@ -848,16 +882,15 @@ public partial class MainViewModel : ObservableObject
             AttachWeatherFieldOption(option);
             WeatherFieldOptions.Add(option);
         }
-        WeatherFieldGroups.Clear();
-        foreach (var (labelKey, fields) in WeatherFieldGroupDefinitions)
-            WeatherFieldGroups.Add(new WeatherFieldGroupViewModel(Strings.Get(labelKey),
-                fields.Select(field => WeatherFieldOptions.Single(option => option.Field == field)).ToArray()));
+        LoadWeatherTopics();
         EquipmentCameraEditors.Clear();
         foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Cameras!)
             EquipmentCameraEditors.Add(NewCameraEditor(profile));
         EquipmentLensEditors.Clear();
         foreach (var profile in Settings.EffectiveEquipment(_session.Lens).Lenses!)
             EquipmentLensEditors.Add(NewLensEditor(profile));
+        // The window binds before saved profiles load; refresh the warning after both lists are ready.
+        OnPropertyChanged(nameof(EquipmentValidationMessage));
     }
 
     private CameraProfileEditorViewModel NewCameraEditor(CameraProfile profile)
@@ -968,7 +1001,8 @@ public partial class MainViewModel : ObservableObject
     private async Task RefreshSavedLocationThumbnails()
     {
         if (!await _dialogs.ConfirmRefreshSavedLocationThumbnailsAsync(Locations.Saved.Count)) return;
-        await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.RefreshSource,
+        // Bulk: map data already held is reused; only missing or damaged map data is downloaded (OSM tile policy).
+        await RunSavedLocationMapOperationAsync(SavedLocationMapRefreshMode.AcquireMissing,
             Strings.Get("Settings_Data_MapImages_Regenerating"), Strings.Get("Settings_Data_MapImages_Regenerated"),
             Strings.Get("Settings_Data_MapImages_RegeneratedDegraded"));
     }
@@ -1096,65 +1130,6 @@ public partial class MainViewModel : ObservableObject
         _ => field.ToString()
     };
 
-    private static readonly IReadOnlyList<(string LabelKey, IReadOnlyList<WeatherField> Fields)> WeatherFieldGroupDefinitions =
-    [
-        ("Settings_Weather_Group_Weather",
-        [
-            WeatherField.TotalCloudCover, WeatherField.LowCloudCover, WeatherField.MediumCloudCover, WeatherField.HighCloudCover,
-            WeatherField.PrecipitationProbability, WeatherField.PrecipitationAmount, WeatherField.PrecipitationType,
-            WeatherField.Visibility, WeatherField.Temperature, WeatherField.DewPoint, WeatherField.RelativeHumidity,
-            WeatherField.WindSpeed, WeatherField.WindGusts, WeatherField.WindDirection
-        ]),
-        ("Settings_Weather_Group_SunAndDarkness",
-        [
-            WeatherField.Sunrise, WeatherField.Sunset, WeatherField.CivilTwilight, WeatherField.NauticalTwilight,
-            WeatherField.AstronomicalTwilight, WeatherField.AstronomicalDarkness
-        ]),
-        ("Settings_Weather_Group_Moon", [WeatherField.MoonPhase, WeatherField.MoonIllumination, WeatherField.Moonrise, WeatherField.Moonset])
-    ];
-
-    public async Task<byte[]> CreateExportPngAsync(CancellationToken cancellationToken)
-    {
-        // Everything the card describes is captured before the first await: the plan being exported
-        // and the labels around it. The weather is then fetched for that plan's own session, so the
-        // card can never pair one plan with weather fetched for another place or another moment.
-        var exported = Snapshot ?? throw new InvalidOperationException("The plan is not ready to export.");
-        var exportedWeather = Settings.EffectiveWeather;
-        var context = new ScoutingCardExportContext(LocationName, SelectedLocation, exportedWeather, Settings.Units);
-        StatusMessage = Strings.Get("Planner_Export_RefreshingWeather");
-        _logger.LogInformation("Starting export weather refresh");
-        try
-        {
-            var result = await _planning.RefreshWeatherAsync(exported.Session, exportedWeather, cancellationToken);
-            if (result.State != DataState.Ready || result.Conditions is null)
-                throw new InvalidOperationException(Strings.Format("Planner_Export_Cancelled_Format", result.Message));
-            // The card always pairs the plan the export started from with the weather fetched for it.
-            var rendered = exported with { Weather = result };
-            if (IsCurrentWeatherRequest(exported.Session, exportedWeather) && Snapshot is { } current)
-            {
-                // The plan on screen would still make this same request, so it takes the result too.
-                Snapshot = ReferenceEquals(current, exported) ? rendered : current with { Weather = result };
-                NotifySnapshotProperties();
-            }
-            else _logger.LogInformation("The plan changed during export; the card keeps the plan it started from");
-            var bytes = await _exporter.RenderPngAsync(rendered, context, cancellationToken);
-            StatusMessage = Strings.Get("Planner_Export_Ready");
-            return bytes;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogWarning(ex, "Scouting card export failed");
-            StatusMessage = ex.Message;
-            throw;
-        }
-    }
-
-    public void ReportExportDestinationFailure(Exception exception)
-    {
-        StatusMessage = Strings.Format("Planner_Export_Failed_Format", exception.Message);
-        _logger.LogWarning(exception, "PNG export destination failed");
-    }
-
     /// <summary>
     /// Persists the newest state now, bypassing the debounce. Returns false when the write failed for
     /// an expected filesystem reason; that failure has already been logged and shown to the user, so
@@ -1166,6 +1141,23 @@ public partial class MainViewModel : ObservableObject
         // A setting still in its quiet period is the user's latest choice: it is applied and written too.
         CommitDeferredSettings();
         return _stateSaves.IsEnabled ? _stateSaves.FlushAsync(CaptureState()) : Task.FromResult(true);
+    }
+
+    /// <summary>
+    /// The application is closing: stops owned background calculations so none of them can publish or save later,
+    /// then writes the final state and closes the save pipeline. Anything that completes afterwards writes nothing.
+    /// Returns false when the final write failed for an expected filesystem reason (already logged).
+    /// </summary>
+    public Task<bool> ShutdownAsync()
+    {
+        _refreshCancellation?.Cancel();
+        Interlocked.Increment(ref _refreshGeneration);
+        _timelineCalculation?.Cancel();
+        _temporalCommitCancellation?.Cancel();
+        _temporalPreviewCancellation?.Cancel();
+        _reverseLookupCancellation?.Cancel();
+        CommitDeferredSettings();
+        return _stateSaves.CloseAsync(CaptureState());
     }
 
     /// <summary>Schedules a debounced save for frequent, fire-and-forget state changes.</summary>
@@ -1184,7 +1176,7 @@ public partial class MainViewModel : ObservableObject
     private PersistedState CaptureState()
     {
         _terrainDiskCache?.SetSavedLocations(SavedLocations.Select(location => location.Coordinate));
-        return new PersistedState(4, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
+        return new PersistedState(JsonUserDataStore.CurrentSchemaVersion, Settings, SavedLocations.ToArray(), _session, SelectedLocation?.Id, _lastCustomCoordinate);
     }
 
     private void OnStateSaveCompleted(StateSaveResult result)
@@ -1195,6 +1187,11 @@ public partial class MainViewModel : ObservableObject
             : Strings.Format("Shell_Notice_SaveFailed_Format", result.Failure?.Message);
         UpdateOperationalNotice();
     }
+
+    internal static string StateReadOnlyMessage(PersistedStateWarning warning) =>
+        warning.IsNewerVersion
+            ? Strings.Format("Shell_Notice_StateNewerVersion_Format", warning.FileVersion, JsonUserDataStore.CurrentSchemaVersion)
+            : Strings.Get("Shell_Notice_StateUnrecognised");
 
     /// <summary>Reports a recoverable problem that is not a state-file save failure.</summary>
     private void ShowOperationalNotice(string message)
@@ -1269,13 +1266,6 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private async Task UsePlannerSearchResult(LocationSearchResult result)
-    {
-        LocationSearch.Reset();
-        await UseSearchResultAsync(result, false);
-    }
-
     private async Task OpenSavedLocationAsync(LocationCardViewModel card)
     {
         CancelReverseLocationLookup();
@@ -1329,7 +1319,43 @@ public partial class MainViewModel : ObservableObject
         // it is persisted as the most recent location and SaveLocation would re-create it.
         if (SelectedLocation?.Id == card.Id) SelectedLocation = null;
         SyncLocationHomepage();
-        await FlushAsync();
+        // The location's stored map assets (imagery and its exact coordinates) go only once its removal
+        // is on disk: a failed or disabled save keeps the record on disk, so its assets are kept too.
+        var removalSaved = await FlushAsync() && _stateSaves.IsEnabled;
+        if (!removalSaved)
+        {
+            _logger.LogWarning("Location {LocationId} was removed but not saved; its stored map assets are kept", card.Id);
+            return;
+        }
+        try
+        {
+            await _locationMapThumbnails.DeleteLocationAssetsAsync(card.Id, CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // The startup sweep removes what remains on a later run.
+            _logger.LogWarning(ex, "Stored map assets of deleted location {LocationId} could not be removed", card.Id);
+        }
+    }
+
+    private Task _orphanedAssetSweep = Task.CompletedTask;
+    internal Task WaitForOrphanedAssetSweepAsync() => _orphanedAssetSweep;
+
+    /// <summary>
+    /// Removes stored assets of locations deleted before this fix existed, or whose removal failed. Runs
+    /// only after saved state was read completely: defaults after a failed load are not "no locations".
+    /// </summary>
+    private async Task RemoveOrphanedLocationAssetsAsync(IReadOnlySet<Guid> savedLocationIds, DateTime authoritativeAsOfUtc)
+    {
+        try
+        {
+            await Task.Run(() => _locationMapThumbnails.RemoveOrphanedAssetsAsync(savedLocationIds,
+                authoritativeAsOfUtc, CancellationToken.None));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Stored map assets of deleted locations could not be swept");
+        }
     }
 
     private async Task ToggleFavouriteAsync(LocationCardViewModel card)
@@ -1354,7 +1380,7 @@ public partial class MainViewModel : ObservableObject
 
     private void SyncLocationHomepage()
     {
-        Locations.Load(SavedLocations, _lastCustomCoordinate, _session.SavedLocationId);
+        Locations.Load(SavedLocations, _session.SavedLocationId);
     }
 
     private async Task GenerateSavedLocationMapAsync(SavedLocation location)
@@ -1394,19 +1420,31 @@ public partial class MainViewModel : ObservableObject
         var normalised = CelestialVisibilityPolicy.Normalise(withMandatory);
         if (withMandatory.Count(item => item.IsVisible) > CelestialVisibilityPolicy.MaximumVisibleObjects)
             _logger.LogWarning("Saved celestial configuration exceeded the visible-object limit; extra objects were retained but hidden");
-        var requestedPrimary = Settings.CelestialObjects?.DefaultPrimaryTargetId ?? _session.TargetId;
-        var primary = _catalogue.ResolveConfiguredTargetId(requestedPrimary);
-        if (primary is null)
-        {
-            _logger.LogWarning("Discarded unresolved configured primary celestial target {TargetId}", requestedPrimary);
-            primary = "sun";
-        }
-        if (!normalised.Any(item => item.IsVisible && item.TargetId.Equals(primary, StringComparison.OrdinalIgnoreCase)))
-            primary = normalised.FirstOrDefault(item => item.IsVisible)?.TargetId ?? "sun";
+        // The saved focus (for older files, the session's target). A focus that cannot be resolved, or is not
+        // shown, is no focus: nothing else is focused in its place.
+        var requestedFocus = Settings.CelestialObjects is { } objects ? objects.DefaultPrimaryTargetId : _session.TargetId;
+        var resolvedFocus = requestedFocus is null ? null : _catalogue.ResolveConfiguredTargetId(requestedFocus);
+        if (requestedFocus is not null && resolvedFocus is null)
+            _logger.LogWarning("Discarded unresolved focused celestial target {TargetId}", requestedFocus);
         if (!normalised.Any(item => item.IsVisible))
             normalised = normalised.Select(item => item.TargetId.Equals("sun", StringComparison.OrdinalIgnoreCase) ? item with { IsVisible = true } : item).ToArray();
-        _session = _session with { VisibleObjects = normalised, TargetId = primary };
-        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(normalised, primary) };
+        var (focus, anchor) = CelestialVisibilityPolicy.FocusAndAnchor(normalised, resolvedFocus);
+        _session = _session with { VisibleObjects = normalised, TargetId = anchor, IsTargetFocused = focus is not null };
+        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(normalised, focus) };
+    }
+
+    /// <summary>The focused target's id, or null when nothing is focused.</summary>
+    private string? FocusedTargetId => CelestialObjects.FirstOrDefault(item => item.IsPrimary)?.TargetId;
+
+    /// <summary>
+    /// Keeps the plan's anchor and focus in step with the list: the focused target when there is one, otherwise
+    /// the first shown target, not focused. Never focuses or shows anything.
+    /// </summary>
+    private void SyncFocusAndAnchor()
+    {
+        var focus = CelestialObjects.FirstOrDefault(item => item.IsPrimary && item.IsVisible)?.TargetId;
+        var anchor = focus ?? CelestialObjects.FirstOrDefault(item => item.IsVisible)?.TargetId ?? "sun";
+        _session = _session with { TargetId = anchor, IsTargetFocused = focus is not null };
     }
 
     private void BuildCelestialObjectItems()
@@ -1417,10 +1455,11 @@ public partial class MainViewModel : ObservableObject
             var target = Targets.FirstOrDefault(item => item.Id.Equals(selection.TargetId, StringComparison.OrdinalIgnoreCase));
             if (target is null) continue;
             CelestialObjects.Add(new CelestialObjectItemViewModel(target, selection.IsVisible, selection.Order,
-                target.Id.Equals(_session.TargetId, StringComparison.OrdinalIgnoreCase),
-                CelestialObjectChanged, MakePrimaryTarget, RemoveCelestialObject, MoveCelestialObject));
+                _session.IsTargetFocused && selection.IsVisible && target.Id.Equals(_session.TargetId, StringComparison.OrdinalIgnoreCase),
+                CelestialObjectChanged, FocusCelestialObject, RemoveCelestialObject, MoveCelestialObject));
         }
         NotifyCelestialCount();
+        NotifyFocusedTarget();
     }
 
     private void CelestialObjectChanged(CelestialObjectItemViewModel item)
@@ -1433,49 +1472,42 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         CelestialLimitMessage = null;
-        if (item.IsPrimary && !item.IsVisible)
-        {
-            var replacement = CelestialObjects.FirstOrDefault(candidate => candidate.IsVisible);
-            if (replacement is null) { item.SetVisibilitySilently(true); return; }
-            SetPrimaryTarget(replacement);
-        }
+        // The last shown target cannot be hidden: the plan always has something to show.
+        if (!item.IsVisible && !CelestialObjects.Any(candidate => candidate.IsVisible)) { item.SetVisibilitySilently(true); return; }
+        // Hiding the focused target ends the focus; nothing else is focused in its place.
+        if (item.IsPrimary && !item.IsVisible) SetPrimaryTarget(null);
         SaveCelestialSelections(); ScheduleAstronomyRefresh(120);
     }
 
+    /// <summary>
+    /// Focuses a shown target. Focus never shows a hidden one: a hidden target has nothing to focus, so the
+    /// request is refused and the target stays hidden.
+    /// </summary>
     private void MakePrimaryTarget(CelestialObjectItemViewModel item)
     {
-        if (!item.IsVisible)
-        {
-            if (VisibleCelestialCount >= CelestialVisibilityPolicy.MaximumVisibleObjects)
-            {
-                CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_HideAnother");
-                return;
-            }
-            item.SetVisibilitySilently(true);
-        }
+        if (!item.IsVisible) return;
         SetPrimaryTarget(item);
         SaveCelestialSelections(); ScheduleAstronomyRefresh(40);
     }
 
-    private void SetPrimaryTarget(CelestialObjectItemViewModel item)
+    /// <summary>Makes this the one focused target, or, with null, focuses nothing.</summary>
+    private void SetPrimaryTarget(CelestialObjectItemViewModel? item)
     {
         foreach (var candidate in CelestialObjects) candidate.IsPrimary = candidate == item;
-        _session = _session with { TargetId = item.TargetId };
-        _suppressChanges = true; SelectedTarget = item.Target; _suppressChanges = false;
+        SyncFocusAndAnchor();
         NotifyCelestialCount();
+        NotifyFocusedTarget();
     }
 
     private void RemoveCelestialObject(CelestialObjectItemViewModel item)
     {
         if (!item.CanRemove) return;
         CelestialObjects.Remove(item);
-        if (item.IsPrimary)
-        {
-            var replacement = CelestialObjects.FirstOrDefault(candidate => candidate.IsVisible)
-                ?? CelestialObjects.First(candidate => candidate.Target.IsSun);
-            if (!replacement.IsVisible) replacement.SetVisibilitySilently(true);
-            SetPrimaryTarget(replacement);
-        }
+        // Removing the focused target ends the focus; nothing else is focused or shown in its place.
+        if (item.IsPrimary) SetPrimaryTarget(null);
+        if (!CelestialObjects.Any(candidate => candidate.IsVisible))
+            CelestialObjects.First(candidate => candidate.Target.IsSun).SetVisibilitySilently(true);
+        SyncFocusAndAnchor();
         SaveCelestialSelections(); ScheduleAstronomyRefresh(80);
     }
 
@@ -1486,10 +1518,11 @@ public partial class MainViewModel : ObservableObject
         var order = CelestialObjects.Count;
         var visible = VisibleCelestialCount < CelestialVisibilityPolicy.MaximumVisibleObjects;
         var item = new CelestialObjectItemViewModel(target, visible, order, false,
-            CelestialObjectChanged, MakePrimaryTarget, RemoveCelestialObject, MoveCelestialObject);
+            CelestialObjectChanged, FocusCelestialObject, RemoveCelestialObject, MoveCelestialObject);
         CelestialObjects.Add(item);
-        if (visible) SetPrimaryTarget(item);
-        else CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_AddedHidden");
+        // Adding shows the target; it does not take the focus.
+        if (!visible) CelestialLimitMessage = Strings.Get("Settings_Celestial_Limit_AddedHidden");
+        SyncFocusAndAnchor();
         SaveCelestialSelections(); ScheduleAstronomyRefresh(80);
     }
 
@@ -1506,9 +1539,22 @@ public partial class MainViewModel : ObservableObject
         for (var index = 0; index < CelestialObjects.Count; index++) CelestialObjects[index].Order = index;
         var selections = CelestialObjects.Select((item, index) => new CelestialObjectSelection(item.TargetId, item.IsVisible, index)).ToArray();
         _session = _session with { VisibleObjects = selections };
-        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(selections, _session.TargetId) };
-        if (Snapshot is not null) Snapshot = Snapshot with { Session = _session };
+        SyncFocusAndAnchor();
+        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(selections, FocusedTargetId) };
+        // What is drawn changes at once, before the recalculation lands: a hidden target's map ray and Timeline
+        // path leave the plan now, not when the next calculation replaces it.
+        var shown = selections.Where(item => item.IsVisible).Select(item => item.TargetId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (Snapshot is not null)
+            Snapshot = Snapshot with
+            {
+                Session = _session,
+                ObjectPlans = Snapshot.EffectiveObjectPlans.Where(plan => shown.Contains(plan.Position.Target.Id)).ToArray()
+            };
+        if (TimelinePaths.Any(path => !shown.Contains(path.Target.Id)))
+            TimelinePaths = TimelinePaths.Where(path => shown.Contains(path.Target.Id)).ToArray();
+        RequestTimelinePaths();
         NotifyCelestialCount();
+        NotifyFocusedTarget();
     }
 
     private void MoveCelestialObject(CelestialObjectItemViewModel item, int direction)
@@ -1520,19 +1566,26 @@ public partial class MainViewModel : ObservableObject
         SaveCelestialSelections();
     }
 
+    /// <summary>
+    /// Clear objects: every object the user added goes, leaving the built-in Sun and Moon, shown, in their usual
+    /// order. Which object is focused is the Planner's: it stays on the Sun or the Moon, and ends, with nothing
+    /// focused in its place, when the focused object was one of those cleared.
+    /// </summary>
     [RelayCommand]
     private async Task RestoreCelestialDefaults()
     {
-        // Replacing a list the user has shaped loses their choices; the default list itself needs no question.
+        // Clearing a list the user has shaped loses their choices; the built-ins alone need no question.
         var current = Settings.EffectiveCelestialObjects;
-        var isDefault = current.DefaultPrimaryTargetId == "sun" &&
-                        current.EffectiveConfiguredObjects.SequenceEqual(CelestialObjectSettings.Defaults);
+        var isDefault = current.EffectiveConfiguredObjects.SequenceEqual(CelestialObjectSettings.Defaults);
         if (!isDefault && !await _dialogs.ConfirmDestructiveAsync(new DestructiveConfirmation(Strings.Get("Dialogs_RestoreDefaultObjects_Title"),
                 Strings.Get("Dialogs_RestoreDefaultObjects_Message"), Strings.Get("Dialogs_RestoreDefaultObjects_Confirm"))))
             return;
-        _session = _session with { VisibleObjects = CelestialObjectSettings.Defaults, TargetId = "sun" };
-        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(CelestialObjectSettings.Defaults, "sun") };
+        // The Sun or the Moon keeps the focus; a cleared object's focus ends with it.
+        var (focus, anchor) = CelestialVisibilityPolicy.FocusAndAnchor(CelestialObjectSettings.Defaults, FocusedTargetId);
+        _session = _session with { VisibleObjects = CelestialObjectSettings.Defaults, TargetId = anchor, IsTargetFocused = focus is not null };
+        Settings = Settings with { CelestialObjects = new CelestialObjectSettings(CelestialObjectSettings.Defaults, focus) };
         BuildCelestialObjectItems();
+        SaveCelestialSelections();
         CelestialLimitMessage = null;
         ScheduleAstronomyRefresh(40);
     }
@@ -1541,6 +1594,7 @@ public partial class MainViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(VisibleCelestialCount));
         OnPropertyChanged(nameof(VisibleCelestialCountText));
+        OnPropertyChanged(nameof(VisibleCelestialCountShortText));
     }
 
     [RelayCommand]
@@ -1552,8 +1606,9 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Now()
     {
-        _session = _session with { Instant = SystemClock.Instance.GetCurrentInstant() };
+        _session = _session with { Instant = _clock.GetCurrentInstant() };
         LoadTimeControls();
+        AnchorTimeline();
         ScheduleAstronomyRefresh();
     }
 
@@ -1605,50 +1660,74 @@ public partial class MainViewModel : ObservableObject
 
     private bool CanRefreshWeather() => !IsWeatherRefreshing;
 
-    [RelayCommand]
-    private void ToggleInspector() => IsInspectorOpen = !IsInspectorOpen;
-
+    /// <summary>
+    /// Saves the Planner pin as a new saved location — always a new one. It never updates, moves or
+    /// renames a location that already exists, whatever is near the pin or already at it: two saves at
+    /// the same spot are two locations, as asked for. Editing, renaming and deleting saved locations
+    /// belong to the Locations page. A name already in use is numbered rather than refused, because
+    /// saved locations are told apart by name everywhere else.
+    /// </summary>
     [RelayCommand]
     private async Task SaveLocation()
     {
-        var existing = SelectedLocation;
-        var requiresMapGeneration = existing is null || existing.Coordinate != _session.Observer;
-        var proposedName = string.IsNullOrWhiteSpace(LocationName) ? $"Location {SavedLocations.Count + 1}" : LocationName.Trim();
-        if (SavedLocations.Any(location => location.Id != existing?.Id &&
-                                           location.Name.Equals(proposedName, StringComparison.CurrentCultureIgnoreCase)))
-        {
-            StatusMessage = Strings.Get("Locations_Save_NameInUse");
-            return;
-        }
-        var location = existing is null
-            ? new SavedLocation(Guid.NewGuid(), proposedName, _session.Observer, _session.TimeZoneId,
-                LastUsedUtc: _clock.GetCurrentInstant().ToDateTimeOffset(), SortOrder: SavedLocations.Count,
-                DateAddedUtc: _clock.GetCurrentInstant().ToDateTimeOffset(),
-                ObserverElevation: _session.EffectiveObserverElevation)
-            : existing with { Name = proposedName, Coordinate = _session.Observer,
-                TimeZoneId = _session.TimeZoneId,
-                LastUsedUtc = _clock.GetCurrentInstant().ToDateTimeOffset(),
-                ObserverElevation = _session.EffectiveObserverElevation };
-        if (existing is not null) SavedLocations.Remove(existing);
+        var now = _clock.GetCurrentInstant().ToDateTimeOffset();
+        var location = new SavedLocation(Guid.NewGuid(), UniqueLocationName(ProposedLocationName()), _session.Observer,
+            _session.TimeZoneId, LastUsedUtc: now, SortOrder: SavedLocations.Count, DateAddedUtc: now,
+            ObserverElevation: _session.EffectiveObserverElevation);
         SavedLocations.Add(location);
         SelectedLocation = location;
         _session = _session with { SavedLocationId = location.Id };
         SyncLocationHomepage();
         var saved = await FlushAsync();
-        if (requiresMapGeneration) await GenerateSavedLocationMapAsync(location);
-        StatusMessage = !saved ? Strings.Get("Locations_Save_Failed")
-            : existing is null ? Strings.Get("Locations_Save_Saved") : Strings.Get("Locations_Save_Updated");
+        await GenerateSavedLocationMapAsync(location);
+        StatusMessage = saved ? Strings.Get("Locations_Save_Saved") : Strings.Get("Locations_Save_Failed");
+    }
+
+    /// <summary>
+    /// The name a location saved from the Planner starts with: the place the pin was resolved to, the
+    /// name the pin already shows, or "Location n" while it shows only a placeholder. The one naming
+    /// rule for the Planner's save and the Locations page's add.
+    /// </summary>
+    private string ProposedLocationName() => _resolvedPlaceSuggestion ?? (string.IsNullOrWhiteSpace(LocationName) ||
+            LocationName.Equals(Strings.Get("Planner_Location_CurrentLocation_Name"), StringComparison.OrdinalIgnoreCase) ||
+            LocationName.Equals(Strings.Get("Planner_Location_NewLocation_Name"), StringComparison.OrdinalIgnoreCase)
+        ? Strings.Format("Locations_DefaultName_Format", SavedLocations.Count + 1)
+        : LocationName.Trim());
+
+    /// <summary>
+    /// The name itself if no saved location uses it, and otherwise the first free "name (n)". A name
+    /// that is already a numbered copy is numbered from its base: after a save the pin carries the new
+    /// location's name, so the third save at one spot is "Brigg (3)", never "Brigg (2) (2)".
+    /// </summary>
+    private string UniqueLocationName(string name)
+    {
+        bool InUse(string candidate) => SavedLocations.Any(location =>
+            location.Name.Equals(candidate, StringComparison.CurrentCultureIgnoreCase));
+        if (!InUse(name)) return name;
+        var baseName = NumberedNameBase(name) ?? name;
+        for (var number = 2; ; number++)
+        {
+            var candidate = Strings.Format("Locations_NumberedName_Format", baseName, number);
+            if (!InUse(candidate)) return candidate;
+        }
+    }
+
+    /// <summary>The base of a name written in the numbered form, read through that same format, or null.</summary>
+    private static string? NumberedNameBase(string name)
+    {
+        var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(Strings.Get("Locations_NumberedName_Format"))
+            .Replace(@"\{0}", "(?<base>.+)", StringComparison.Ordinal)
+            .Replace(@"\{1}", @"\d+", StringComparison.Ordinal) + "$";
+        var match = System.Text.RegularExpressions.Regex.Match(name, pattern,
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["base"].Value : null;
     }
 
     [RelayCommand]
     private async Task SaveCurrentAsNewLocation()
     {
         var now = _clock.GetCurrentInstant().ToDateTimeOffset();
-        var suggestedName = _resolvedPlaceSuggestion ?? (string.IsNullOrWhiteSpace(LocationName) ||
-                            LocationName.Equals(Strings.Get("Planner_Location_CurrentLocation_Name"), StringComparison.OrdinalIgnoreCase) ||
-                            LocationName.Equals(Strings.Get("Planner_Location_NewLocation_Name"), StringComparison.OrdinalIgnoreCase)
-            ? Strings.Format("Locations_DefaultName_Format", SavedLocations.Count + 1)
-            : LocationName.Trim());
+        var suggestedName = ProposedLocationName();
         var draft = new SavedLocation(Guid.NewGuid(), suggestedName, _session.Observer, _session.TimeZoneId,
             SortOrder: SavedLocations.Count, DateAddedUtc: now,
             ObserverElevation: _session.EffectiveObserverElevation);
@@ -1675,30 +1754,8 @@ public partial class MainViewModel : ObservableObject
         StatusMessage = saved ? Strings.Get("Locations_Save_Saved") : Strings.Get("Locations_Save_Failed");
     }
 
-    [RelayCommand(CanExecute = nameof(CanDeleteLocation))]
-    private async Task DeleteLocation()
-    {
-        if (SelectedLocation is null) return;
-        if (!await _dialogs.ConfirmDeleteSavedLocationAsync(SelectedLocation)) return;
-        SavedLocations.Remove(SelectedLocation);
-        SelectedLocation = null;
-        _session = _session with { SavedLocationId = null };
-        SyncLocationHomepage();
-        await FlushAsync();
-    }
-
-    private bool CanDeleteLocation() => SelectedLocation is not null;
-
-    partial void OnSelectedTargetChanged(AstralTarget? value)
-    {
-        if (_suppressChanges || value is null) return;
-        var item = CelestialObjects.FirstOrDefault(item => item.TargetId.Equals(value.Id, StringComparison.OrdinalIgnoreCase));
-        if (item is not null) MakePrimaryTarget(item);
-    }
-
     partial void OnSelectedLocationChanged(SavedLocation? value)
     {
-        DeleteLocationCommand.NotifyCanExecuteChanged();
         if (_suppressChanges || value is null) return;
         CancelReverseLocationLookup();
         _resolvedPlaceSuggestion = null;
@@ -1718,9 +1775,9 @@ public partial class MainViewModel : ObservableObject
     partial void OnLocalDateChanged(DateTimeOffset? value)
     {
         if (_suppressChanges || value is null) return;
-        _dateSliderAnchor = value.Value.Date;
-        _suppressChanges = true; PreviewDateOffsetDays = 0; _suppressChanges = false;
         ApplyLocalDateTime(true);
+        // A date set directly, from the bar: the Timeline now runs 24 hours on from it.
+        AnchorTimeline();
     }
     partial void OnMinutesOfDayChanged(double value)
     {
@@ -1730,6 +1787,7 @@ public partial class MainViewModel : ObservableObject
         TimeText = $"{minutes / 60:00}:{minutes % 60:00}";
         _suppressChanges = false;
         ApplyLocalDateTime(true);
+        AnchorTimeline();
     }
     partial void OnTimeTextChanged(string value)
     {
@@ -1738,28 +1796,7 @@ public partial class MainViewModel : ObservableObject
         MinutesOfDay = time.Hour * 60 + time.Minute;
         _suppressChanges = false;
         ApplyLocalDateTime(true);
-    }
-    partial void OnPreviewMinutesOfDayChanged(double value)
-    {
-        if (_suppressChanges) return;
-        var snap = Math.Clamp(Settings.TimeSnapMinutes, 1, 30);
-        var minutes = Math.Clamp((int)Math.Round(value / snap) * snap, 0, 1439);
-        _suppressChanges = true;
-        MinutesOfDay = minutes;
-        TimeText = $"{minutes / 60:00}:{minutes % 60:00}";
-        _suppressChanges = false;
-        PreviewTemporalPosition();
-        ScheduleTemporalCommit();
-    }
-    partial void OnPreviewDateOffsetDaysChanged(double value)
-    {
-        if (_suppressChanges) return;
-        var days = (int)Math.Round(value);
-        _suppressChanges = true;
-        LocalDate = _dateSliderAnchor.AddDays(days);
-        _suppressChanges = false;
-        PreviewTemporalPosition();
-        ScheduleTemporalCommit();
+        AnchorTimeline();
     }
     partial void OnTimeZoneIdChanged(string value) { if (!_suppressChanges) ApplyLocalDateTime(true); }
     partial void OnLatitudeChanged(double value)
@@ -1831,10 +1868,18 @@ public partial class MainViewModel : ObservableObject
     }
     partial void OnSnapshotChanged(PlanningSnapshot? value)
     {
+        // A new place or a new set of targets needs new Timeline paths; a new moment within the window does not.
+        RequestTimelinePaths();
+        OnPropertyChanged(nameof(TimelineRealNow));
+        OnPropertyChanged(nameof(HasFocusedTargetDetails));
+        AimAtNewPosition();
         OnPropertyChanged(nameof(CameraFramingGuide));
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
         OnPropertyChanged(nameof(CameraFramingMapSettings));
+        // Before the notifications below, so the assessment they publish already knows a window is on its way.
+        RequestShotWindowPaths();
+        RequestLightPollutionAtPlace();
         NotifyTerrainProperties();
     }
     partial void OnPlannerRefreshChanged(PlannerRefreshState value)
@@ -1879,19 +1924,44 @@ public partial class MainViewModel : ObservableObject
         LocalDate = LocalDate.Value.AddDays(days);
     }
 
+    /// <summary>
+    /// The exact moment the date and time controls were last set from (Now, an imported plan, a Timeline
+    /// position), as opposed to typed. The controls hold only a local date and minute, which cannot keep seconds
+    /// or tell the two 01:30s of an autumn night apart; while they still show this moment, it is what they mean.
+    /// </summary>
+    private Instant? _controlsInstant;
+
+    /// <summary>
+    /// The moment the controls stand for: the exact moment they were set from while they still show it, or else
+    /// their local date and time resolved in the plan's zone (a wall-clock edit).
+    /// </summary>
+    private Instant ControlsInstant(NodaTime.LocalDate date, LocalTime time)
+    {
+        if (_controlsInstant is { } exact)
+        {
+            var shown = _timeZones.InZone(exact, TimeZoneId).LocalDateTime;
+            if (shown.Date == date && shown.Hour == time.Hour && shown.Minute == time.Minute) return exact;
+        }
+        return _timeZones.ResolveLocal(date, time, TimeZoneId);
+    }
+
     private void ApplyLocalDateTime(bool fullRefresh)
     {
         if (LocalDate is null || !LocalTimePatternHelper.TryParse(TimeText, out var time)) return;
         var date = NodaTime.LocalDate.FromDateTime(LocalDate.Value.DateTime);
-        _session = _session with { Instant = _timeZones.ResolveLocal(date, time, TimeZoneId), TimeZoneId = TimeZoneId };
+        var instant = ControlsInstant(date, time);
+        _controlsInstant = instant;
+        _session = _session with { Instant = instant, TimeZoneId = TimeZoneId };
         if (fullRefresh) ScheduleAstronomyRefresh(); else UpdateCurrentOnly();
+        KeepMomentInTimeline();
+        RequestTimelinePaths();
     }
 
     private void PreviewTemporalPosition()
     {
         if (LocalDate is null || !LocalTimePatternHelper.TryParse(TimeText, out var time)) return;
         var date = NodaTime.LocalDate.FromDateTime(LocalDate.Value.DateTime);
-        var preview = _session with { Instant = _timeZones.ResolveLocal(date, time, TimeZoneId) };
+        var preview = _session with { Instant = ControlsInstant(date, time) };
         _temporalPreviewCancellation?.Cancel();
         _temporalPreviewCancellation?.Dispose();
         _temporalPreviewCancellation = new CancellationTokenSource();
@@ -1914,7 +1984,11 @@ public partial class MainViewModel : ObservableObject
             NotifySnapshotProperties();
         }
         catch (OperationCanceledException) { _logger.LogDebug("Obsolete celestial preview cancelled"); }
-        catch (Exception ex) { StatusMessage = ex.Message; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Celestial preview failed");
+            StatusMessage = Strings.Get("Planner_Status_PositionFailed");
+        }
     }
 
     private void ScheduleTemporalCommit()
@@ -1938,7 +2012,7 @@ public partial class MainViewModel : ObservableObject
         if (LocalDate is null || !LocalTimePatternHelper.TryParse(TimeText, out var time)) return;
         _temporalCommitCancellation?.Cancel();
         var date = NodaTime.LocalDate.FromDateTime(LocalDate.Value.DateTime);
-        _session = _session with { Instant = _timeZones.ResolveLocal(date, time, TimeZoneId) };
+        _session = _session with { Instant = ControlsInstant(date, time) };
         _logger.LogInformation("Date/time preview committed; scheduling authoritative recalculation");
         ScheduleAstronomyRefresh(50);
     }
@@ -1978,8 +2052,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             if (Snapshot is null) return;
-            var guide = _cameraFramingGuideCalculator.Calculate(Snapshot.FieldOfView,
-                Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var guide = CameraGuide(Snapshot.FieldOfView, Settings.EffectiveCameraFraming);
             var horizon = await _planning.PrioritiseTerrainAsync(requestedSession,
                 Settings.EffectiveCameraHeightAboveGroundMetres,
                 CameraTerrainBearings(guide), token);
@@ -2010,7 +2083,11 @@ public partial class MainViewModel : ObservableObject
                 Snapshot = Snapshot with { Session = _session, Position = current, Path = Snapshot.Path with { SelectedInstant = _session.Instant } };
             NotifySnapshotProperties();
         }
-        catch (Exception ex) { StatusMessage = ex.Message; }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Current position update failed");
+            StatusMessage = Strings.Get("Planner_Status_PositionFailed");
+        }
     }
 
     private void ScheduleObserverRefresh(int delayMilliseconds = 80)
@@ -2018,7 +2095,6 @@ public partial class MainViewModel : ObservableObject
         // A normal observer request already initialises the same presentation workflow.
         if (_initialised) _plannerActivated = true;
         SchedulePlannerRefresh(PlannerRefreshScope.Observer, delayMilliseconds);
-        ScheduleTerrainDebugMapRefresh();
     }
 
     private void ScheduleAstronomyRefresh(int delayMilliseconds = 80) =>
@@ -2064,7 +2140,12 @@ public partial class MainViewModel : ObservableObject
             StatusText = Strings.Get("Planning_Status_CalculatingPositions")
         });
 
-        var observerWork = scope == PlannerRefreshScope.Observer
+        // An astronomy refresh supersedes the refresh that owned this observer's terrain work. Until that
+        // observer's environment has been committed it carries the work on: the environment service shares
+        // the build still in flight (or its completed result), so nothing is computed twice.
+        var carriesObserverWork = scope == PlannerRefreshScope.Astronomy && Settings.EnableTerrainCalculations &&
+                                  !HasCommittedEnvironment(previousSnapshot, requestedSession.Observer);
+        var observerWork = scope == PlannerRefreshScope.Observer || carriesObserverWork
             ? _planning.StartRefresh(requestedSession, Settings.EffectiveWeather,
                 Settings.EffectiveCameraHeightAboveGroundMetres, cancellationToken)
             : null;
@@ -2138,8 +2219,7 @@ public partial class MainViewModel : ObservableObject
             await coreCommit;
             cancellationToken.ThrowIfCancellationRequested();
             if (!IsCurrentRefresh(generation, requestedSession.Observer) || Snapshot is null) return;
-            var guide = _cameraFramingGuideCalculator.Calculate(Snapshot.FieldOfView,
-                Snapshot.Position.Horizontal.AzimuthDegrees, Settings.EffectiveCameraFraming);
+            var guide = CameraGuide(Snapshot.FieldOfView, Settings.EffectiveCameraFraming);
             var bearings = CameraTerrainBearings(guide);
             UpdateRefresh(generation, state => state with
             {
@@ -2206,7 +2286,7 @@ public partial class MainViewModel : ObservableObject
         if (!Settings.EnableTerrainCalculations)
             core = core with { Terrain = DisabledTerrain(), TerrainCrossings = new(null, null), Environment = null };
         if (Settings.EnableTerrainCalculations && scope == PlannerRefreshScope.Astronomy && previousSnapshot is not null &&
-            Angles.GreatCircleDistanceMetres(previousSnapshot.Session.Observer, requestedSession.Observer) <= 2)
+            IsSameRefreshObserver(previousSnapshot, requestedSession.Observer))
         {
             core = core with
             {
@@ -2353,6 +2433,16 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private static bool IsSameRefreshObserver(PlanningSnapshot snapshot, GeoCoordinate observer) =>
+        Angles.GreatCircleDistanceMetres(snapshot.Session.Observer, observer) <= 2;
+
+    /// <summary>
+    /// Whether the snapshot already holds the environment (full terrain) built for this observer, so an
+    /// astronomy refresh can reuse it rather than carry the observer's environment work on.
+    /// </summary>
+    private static bool HasCommittedEnvironment(PlanningSnapshot? snapshot, GeoCoordinate observer) =>
+        snapshot is { Environment: not null } && IsSameRefreshObserver(snapshot, observer);
+
     private bool IsCurrentRefresh(long generation, GeoCoordinate observer) =>
         generation == Volatile.Read(ref _refreshGeneration) && PlannerRefresh.Generation == generation &&
         IsCurrentObserver(observer);
@@ -2398,7 +2488,6 @@ public partial class MainViewModel : ObservableObject
     {
         _session = _session.WithTerrainCalculationMode(Settings.EnableTerrainCalculations);
         _suppressChanges = true;
-        SelectedTarget = Targets.FirstOrDefault(x => x.Id == _session.TargetId) ?? Targets[0];
         Latitude = _session.Observer.Latitude;
         Longitude = _session.Observer.Longitude;
         Elevation = _session.Observer.ElevationMetres;
@@ -2423,14 +2512,13 @@ public partial class MainViewModel : ObservableObject
     private void LoadTimeControls()
     {
         var local = _timeZones.InZone(_session.Instant, _session.TimeZoneId);
+        _controlsInstant = _session.Instant;
         _suppressChanges = true;
         LocalDate = new DateTimeOffset(local.Year, local.Month, local.Day, 0, 0, 0, TimeSpan.Zero);
         MinutesOfDay = local.Hour * 60 + local.Minute;
-        PreviewMinutesOfDay = MinutesOfDay;
-        _dateSliderAnchor = new DateTimeOffset(local.Year, local.Month, local.Day, 0, 0, 0, TimeSpan.Zero);
-        PreviewDateOffsetDays = 0;
         TimeText = $"{local.Hour:00}:{local.Minute:00}";
         _suppressChanges = false;
+        KeepMomentInTimeline();
     }
 
     private void NotifySnapshotProperties()
@@ -2439,7 +2527,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(HasTargetLocalHorizonDetails)); OnPropertyChanged(nameof(TargetLocalHorizonText));
         OnPropertyChanged(nameof(TargetTerrainMarginLabel)); OnPropertyChanged(nameof(TargetTerrainMarginText));
         OnPropertyChanged(nameof(RiseText)); OnPropertyChanged(nameof(TransitText)); OnPropertyChanged(nameof(SetText));
-        NotifyTerrainProperties(); OnPropertyChanged(nameof(WeatherSummary)); OnPropertyChanged(nameof(WeatherDetails));
+        NotifyTerrainProperties(); OnPropertyChanged(nameof(WeatherDetails));
         OnPropertyChanged(nameof(ConfiguredWeatherDetails));
         OnPropertyChanged(nameof(MoonDetails)); OnPropertyChanged(nameof(HasMoonDetails)); OnPropertyChanged(nameof(SunDetails)); OnPropertyChanged(nameof(HasSunDetails));
         OnPropertyChanged(nameof(FieldOfViewText)); OnPropertyChanged(nameof(Observer));
@@ -2456,14 +2544,11 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TerrainDiagnosticsPerformance));
         OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
         OnPropertyChanged(nameof(TerrainStatus));
-        OnPropertyChanged(nameof(TerrainCurrentLocationText));
         OnPropertyChanged(nameof(GroundHorizonState));
         OnPropertyChanged(nameof(GroundHorizonAngleText));
-        OnPropertyChanged(nameof(TerrainDatumText));
         OnPropertyChanged(nameof(ShowTerrainDebugOverlay));
         OnPropertyChanged(nameof(TerrainDebugProfile));
         OnPropertyChanged(nameof(TerrainDebugGeneration));
-        OnPropertyChanged(nameof(TerrainDebugMapGeneration));
         OnPropertyChanged(nameof(TerrainDebugTargetAltitude));
         OnPropertyChanged(nameof(TerrainDebugBearing));
         OnPropertyChanged(nameof(TerrainDebugHorizontalFieldOfView));
@@ -2472,76 +2557,6 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(CameraFramingGuide));
         OnPropertyChanged(nameof(CameraFramingVisibility));
         OnPropertyChanged(nameof(FramingVisibilityStatus));
-    }
-
-    partial void OnTerrainDebugMapChanged(TerrainDebugMapSnapshot? value)
-    {
-        OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
-        OnPropertyChanged(nameof(TerrainDebugText));
-    }
-
-    partial void OnTerrainDebugMapLoadStateChanged(TerrainDebugMapLoadState value)
-    {
-        OnPropertyChanged(nameof(TerrainDiagnosticsAdvanced));
-        OnPropertyChanged(nameof(TerrainDebugText));
-    }
-
-    private GeoCoordinate? _localMapRequestedObserver;
-    private long _localMapSourceGeneration;
-
-    private void ScheduleTerrainDebugMapRefresh()
-    {
-        var sourceGeneration = _terrainDiskCache?.Generation ?? 0;
-        if (Settings.EnableTerrainCalculations && _terrainDebugMaps is not null &&
-            _localMapRequestedObserver is { } requested && SameObserverPosition(requested, _session.Observer) &&
-            _localMapSourceGeneration == sourceGeneration) return;
-        _terrainDebugMapCancellation?.Cancel();
-        _terrainDebugMapCancellation?.Dispose();
-        _terrainDebugMapCancellation = null;
-        Interlocked.Increment(ref _terrainDebugMapGeneration);
-        TerrainDebugMap = null;
-        OnPropertyChanged(nameof(TerrainDebugMapGeneration));
-        if (!Settings.EnableTerrainCalculations || _terrainDebugMaps is null)
-        {
-            _localMapRequestedObserver = null;
-            TerrainDebugMapLoadState = TerrainDebugMapLoadState.Disabled;
-            _activeTerrainDebugMapRefresh = Task.CompletedTask;
-            return;
-        }
-
-        TerrainDebugMapLoadState = TerrainDebugMapLoadState.Resolving;
-        _terrainDebugMapCancellation = new CancellationTokenSource();
-        var generation = TerrainDebugMapGeneration;
-        var observer = _session.Observer;
-        _localMapRequestedObserver = observer;
-        _localMapSourceGeneration = sourceGeneration;
-        _activeTerrainDebugMapRefresh = ResolveTerrainDebugMapAsync(
-            observer, generation, _terrainDebugMapCancellation.Token);
-    }
-
-    private async Task ResolveTerrainDebugMapAsync(GeoCoordinate observer, long generation,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var map = await _terrainDebugMaps!.GetMapAsync(observer,
-                new TerrainDebugMapRequest(), cancellationToken);
-            if (generation != TerrainDebugMapGeneration ||
-                !SameObserverPosition(observer, _session.Observer)) return;
-            var hasTerrain = map.SurfaceElevationsMetres.Any(value => value.HasValue);
-            TerrainDebugMap = hasTerrain ? map : null;
-            TerrainDebugMapLoadState = hasTerrain ? TerrainDebugMapLoadState.Ready : TerrainDebugMapLoadState.Unavailable;
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
-        catch (Exception ex)
-        {
-            if (generation == TerrainDebugMapGeneration &&
-                SameObserverPosition(observer, _session.Observer))
-            {
-                TerrainDebugMapLoadState = TerrainDebugMapLoadState.Unavailable;
-                _logger.LogWarning(ex, "Terrain diagnostic map sampling failed");
-            }
-        }
     }
 
     private void ApplyResolvedTerrainGround(TerrainHorizonProfile horizon)
@@ -2583,10 +2598,18 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(IsElevationManualOverride));
         OnPropertyChanged(nameof(TerrainElevationResolutionState));
         OnPropertyChanged(nameof(ResolvedGroundElevationMetres));
-        OnPropertyChanged(nameof(GroundElevationDisplay));
         OnPropertyChanged(nameof(CanResetGroundElevation));
         OnPropertyChanged(nameof(GroundElevationSourceText));
+        NotifyEffectiveAltitude();
+    }
+
+    /// <summary>Everything that shows the effective camera altitude, for a change to either of its parts.</summary>
+    private void NotifyEffectiveAltitude()
+    {
+        OnPropertyChanged(nameof(EffectiveCameraAltitudeMetres));
         OnPropertyChanged(nameof(EffectiveObserverAltitudeText));
+        OnPropertyChanged(nameof(EffectiveCameraAltitudeShortText));
+        OnPropertyChanged(nameof(EffectiveCameraAltitudeDetail));
     }
 
     private void NotifyEquipmentProperties()
@@ -2595,6 +2618,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(FocalLengthMinimum));
         OnPropertyChanged(nameof(FocalLengthMaximum));
         OnPropertyChanged(nameof(LensFocalRangeText));
+        NotifyShotViability();
     }
 
     private bool IsCurrentObserver(GeoCoordinate coordinate) =>

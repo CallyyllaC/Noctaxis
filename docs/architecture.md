@@ -11,9 +11,11 @@ implementations, persistence, planning orchestration, and export rendering.
 native dialogs, Mapsui/Web Mercator adaptation, and display rendering. It does
 not calculate astronomy, parse weather, read DEMs, or persist domain state.
 
-`Noctaxis.Core.Tests` tests deterministic backend behaviour. The small
-`Noctaxis.Desktop.Tests` project tests planning-session transitions without
-starting an Avalonia lifetime.
+`Noctaxis.Core.Tests` tests deterministic backend behaviour, including process-level
+single-instance tests that launch the small `Noctaxis.InstanceProbe` console project.
+`Noctaxis.Desktop.Tests` runs view models, views and services under Avalonia headless.
+Tests never read or write the user's real data folder; the one diagnostic that reads a
+copy of it is opt-in (`NOCTAXIS_RUN_LOCAL_STATE_CHECK=1`).
 
 ## Data and dependency flow
 
@@ -33,10 +35,10 @@ on a background task and commit after settling. Lens edits recalculate only FOV.
 Top-level navigation is Locations, Planner, and Settings. `LocationsViewModel`
 owns reusable cards and favourite/recent projections without duplicating a
 planning session. A shared location-search control and `LocationSearchViewModel`
-are used by Planner and the Custom-location dialog. `ILocationResolver`,
-`IDeviceLocationProvider`, `IDeviceLocationAvailabilityService`, and
-`ILocationSearchProvider` keep platform, fallback, and geocoding concerns out of
-views.
+are used by Planner and the Custom-location dialog. `ILocationSearchProvider`
+and `IReverseGeocodingProvider` keep geocoding concerns out of views. Places are
+chosen by search, on the map or from saved locations; Noctaxis does not use device
+geolocation.
 
 ## Coordinates and time
 
@@ -73,9 +75,12 @@ Noctaxis never claims to infer a geographic timezone when it has not done so.
   attribution. `ITargetSearchService` searches the bundled OpenNGC data offline.
 - `IUserDataStore` performs versioned, atomic per-user JSON persistence and
   quarantines malformed files.
-- `IScoutingCardExporter` produces one Skia-rendered PNG byte stream for both
-  save and clipboard destinations. A standard PNG text chunk contains a
-  versioned `NoctaxisExportMetadata` JSON payload; no UI view model is serialized.
+- The plan image: `MainViewModel.CreateExportPngAsync` captures one immutable
+  `PlannerExportSnapshot`, `IPlannerExportRenderer` draws it with Skia, and
+  `NoctaxisPlanImage` embeds the versioned plan in a PNG text chunk. The same bytes go
+  to a file and to the clipboard; every network stage (weather, map) is time-bounded.
+  Importing reads PNG chunks through a bounded walker (`PngMetadataWriter.ReadTexts`)
+  with size, CRC and decompression limits; see [plan images](plan-images.md).
 
 The dependency-injection composition root is `Noctaxis.Desktop/App.axaml.cs`.
 Interfaces exist only at external or meaningfully replaceable boundaries.
@@ -110,10 +115,36 @@ and default primary target are persisted separately from the full catalogue.
 Legacy DEM-folder fields may deserialize for compatibility but are not active
 settings; terrain acquisition is managed by Environmental Intelligence.
 
-## Persistence and secrets
+## Persistence, storage and single instance
 
 `state.json` lives below the platform application-data directory in a
-`Noctaxis` folder. A temporary sibling is flushed then moved over the previous
-file. Malformed data is renamed with a `.corrupt-<timestamp>` suffix and clean
-defaults are returned. Legacy API-key, tile URL, and attribution properties are
-ignored during deserialization. Weather needs no credential or stored secret.
+`Noctaxis` folder (the data folder: `%APPDATA%/Noctaxis` on Windows). A temporary
+sibling is flushed then moved over the previous file. Malformed data is kept
+losslessly under a `.corrupt-<timestamp>` name and is never overwritten; an older
+backup is never restored automatically. Legacy API-key, tile URL, and attribution
+properties are ignored during deserialization. Weather needs no credential or stored secret.
+
+One Noctaxis runs per OS user (`ApplicationInstanceOwnership`). At startup, before
+logging or any file is opened, the process takes a per-user named mutex and an
+exclusive lock file (`.noctaxis-instance.lock`) in the data folder. A second launch
+asks the running instance to bring its window forward and exits; when the data folder
+is held by another account or process it shows a localised message instead. A restart
+hands ownership over by waiting, bounded, for the previous process. Every save checks
+ownership (`IDataDirectoryOwnership`), so a process that does not own the folder
+cannot write `state.json`. There is no multi-writer merging.
+
+On close, `MainViewModel.ShutdownAsync` cancels planner work, writes the final state
+and closes the save pipeline (`StateSaveScheduler.CloseAsync`); anything that finishes
+later writes nothing.
+
+Re-downloadable caches live in a separate cache folder (`CacheStorage`):
+`%LOCALAPPDATA%/Noctaxis/Cache` on Windows, `$XDG_CACHE_HOME/Noctaxis` (or
+`~/.cache/Noctaxis`) on Linux and `~/Library/Caches/Noctaxis` on macOS. It holds
+`EnvironmentalData/{mapzen-terrarium,esa-worldcover,wsf-3d}` and `BasemapCache`.
+Earlier versions kept these in the data folder; at startup they are moved by a
+same-volume rename, merged without overwriting when both exist, and never copied:
+if the folders are on different volumes the old caches stay in the data folder and
+keep being used. User-installed datasets (the Lorenz light-pollution atlas under
+`EnvironmentalData/LightPollution`), saved locations and their maps stay in the data
+folder. The basemap keeps the current OpenFreeMap tileset plus up to two older ones
+(1 GiB together) for offline fallback.

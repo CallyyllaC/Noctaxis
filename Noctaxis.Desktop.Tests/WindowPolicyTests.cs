@@ -31,17 +31,15 @@ public sealed class WindowPolicyTests
         Assert.Single(debug.Descendants(), element => (string?)element.Attribute("IsChecked") == "{Binding SettingsTerrainDebugOverlay}");
         Assert.Single(appearance.Descendants(), element => (string?)element.Attribute("IsChecked") == "{Binding SettingsEnableTerrainCalculations}");
         Assert.Single(data.Descendants(), element => (string?)element.Attribute("Command") == "{Binding ClearTerrainCacheCommand}");
-        var minimap = Assert.Single(planner.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
-        Assert.Equal("208", (string?)minimap.Attribute("Width"));
-        var minimapChrome = minimap.Ancestors().Single(element => element.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == "PlannerTerrainMinimap"));
-        Assert.Equal("False", (string?)minimapChrome.Attribute("IsHitTestVisible"));
-        Assert.Equal("Top", (string?)minimapChrome.Attribute("VerticalAlignment"));
-        Assert.Equal("Left", (string?)minimapChrome.Attribute("HorizontalAlignment"));
-        Assert.Null(minimapChrome.Attribute("IsVisible"));
-        Assert.Single(minimap.Parent!.Elements(), element => (string?)element.Attribute("Text") == "Terrain");
+        // The retired terrain minimap is gone. In its place the Picture-in-Picture map and the Terrain frame
+        // are laid over the main map; neither is a panel.
+        Assert.DoesNotContain(document.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
+        foreach (var name in new[] { "PlannerPip", "PlannerTerrainFrame" })
+        {
+            var overlay = Assert.Single(planner.Descendants(), element => element.Attributes().Any(a => a.Name.LocalName == "Name" && a.Value == name));
+            Assert.DoesNotContain(overlay.Ancestors(), element => element.Name.LocalName == "PlannerPanelHost");
+        }
         Assert.DoesNotContain(planner.Descendants(), element => (string?)element.Attribute("Text") == "Local terrain");
-        Assert.Equal("{Binding GroundMetresPerPixel, ElementName=PlannerMap}", (string?)minimap.Attribute("MetresPerPixel"));
-        Assert.Single(document.Descendants(), element => element.Name.LocalName == "LocalTerrainMap");
     }
     [Fact]
     public void NoctaxisSecondaryWindows_UseDialogWindowPolicy()
@@ -99,15 +97,27 @@ public sealed class WindowPolicyTests
         Assert.Equal(1, progress.Maximum);
     }
 
+    /// <summary>
+    /// The Planner shows where the pin is and does not ask the user to type it: the shell search and the
+    /// map move the pin, and there is no name, coordinate or elevation field to edit anywhere in it.
+    /// </summary>
     [AvaloniaFact]
-    public void PlannerGroundElevation_IsReadOnlyAndHasNoSpinner()
+    public void ThePlannerShowsThePinsLocationAndHasNoFieldsToTypeItInto()
     {
         var window = new MainWindow();
-        var elevation = window.FindControl<NumericUpDown>("PlannerGroundElevation");
+        Assert.Null(window.FindControl<NumericUpDown>("PlannerGroundElevation"));
+        var planner = TestMarkup.LoadMainWindow().Descendants().Single(element =>
+            element.Name.LocalName == "TabItem" && element.Attribute("Header")?.Value == "Planner");
+        foreach (var binding in new[] { "{Binding LocationName}", "{Binding Latitude}", "{Binding Longitude}", "{Binding Elevation}" })
+            Assert.DoesNotContain(planner.Descendants(), element =>
+                element.Name.LocalName is "TextBox" or "NumericUpDown" &&
+                element.Attributes().Any(attribute => attribute.Value == binding));
+        Assert.DoesNotContain(planner.Descendants(), element => element.Name.LocalName == "LocationSearchControl");
 
-        Assert.NotNull(elevation);
-        Assert.True(elevation.IsReadOnly);
-        Assert.False(elevation.ShowButtonSpinner);
+        // The pin's place, coordinates and altitude are one line of text in the Planner's bar, not fields.
+        Assert.IsType<Noctaxis.Desktop.Controls.MarqueeText>(window.FindControl<Control>("PlannerLocationText"));
+        foreach (var name in new[] { "PlannerLocationName", "PlannerLocationCoordinates", "PlannerLocationAltitude", "PlannerPinPreview" })
+            Assert.Null(window.FindControl<Control>(name));
     }
 
     /// <summary>

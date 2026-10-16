@@ -52,7 +52,8 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(EnvironmentalDataState.Available, operation.SettlementState);
         Assert.True(operation.IsComplete);
 
-        // 2. The legacy artwork processor rejected the sea-dominated frame, and only the artwork was skipped.
+        // 2. The legacy artwork processor (kept for the calibration tool) still rejects the sea-dominated frame, and
+        //    the service composes no artwork at all now that it is retired.
         var directory = Path.Combine(service.Value.StorageDirectory, location.Id.ToString("N"));
         var source = await File.ReadAllBytesAsync(Path.Combine(directory, "source.png"));
         Assert.Throws<LegacyArtworkRejectedException>(() => new SavedLocationMapImageProcessor().ProcessSettlement(
@@ -60,7 +61,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.False(operation.ThumbnailSucceeded);
         Assert.True(operation.LegacyArtworkSkipped);
         Assert.True(result.Metadata.LegacyArtworkSkipped);
-        Assert.StartsWith("Styled map artwork", result.Metadata.ThumbnailSkippedReason);
+        Assert.Equal(LocationMapThumbnailService.LegacyArtworkRetiredReason, result.Metadata.ThumbnailSkippedReason);
         Assert.Null(result.Metadata.ThumbnailContentHash);
 
         // 3. The source data is persisted, hash-consistent, with no artwork and no staging leftovers.
@@ -98,7 +99,7 @@ public sealed partial class LocationMapThumbnailServiceTests
 
         // 5. The preview renderer renders it in every theme, appearance and colour-vision mode.
         var renditions = LocationPreviewExport.RenderMatrix(scene, new ThemeCatalogue(isAvailable: _ => true), 425, 240).ToArray();
-        Assert.Equal(48, renditions.Length);
+        Assert.Equal(56, renditions.Length);
         foreach (var rendition in renditions)
         {
             using var bitmap = SKBitmap.Decode(rendition.Png);
@@ -194,8 +195,9 @@ public sealed partial class LocationMapThumbnailServiceTests
             var detailed = await inland.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.RefreshSource,
                 CancellationToken.None);
             Assert.NotNull(detailed);
-            Assert.False(detailed.Metadata.LegacyArtworkSkipped);
-            Assert.True(File.Exists(detailed.ImagePath));
+            Assert.True(detailed.Metadata.LegacyArtworkSkipped);
+            // Artwork left by an earlier version, which the next commit must not pair with new data.
+            File.Copy(Path.Combine(Path.GetDirectoryName(detailed.ImagePath)!, "source.png"), detailed.ImagePath);
         }
 
         using var coastal = CreateService(files, new CoastalTileHandler(viewport.WorldPixelCentreX - CoastOffsetPixels),

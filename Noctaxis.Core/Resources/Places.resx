@@ -4,23 +4,8 @@
   <resheader name="version"><value>2.0</value></resheader>
   <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
   <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value></resheader>
-  <data name="Places_Device_Unavailable" xml:space="preserve">
-    <value>Device location is unavailable.</value>
-  </data>
-  <data name="Places_Device_UnavailableLinux" xml:space="preserve">
-    <value>Device location is unavailable because no supported GeoClue service is configured.</value>
-  </data>
-  <data name="Places_Device_UnavailableWindows" xml:space="preserve">
-    <value>Device location is unavailable in this desktop build.</value>
-  </data>
-  <data name="Places_Device_Unsupported" xml:space="preserve">
-    <value>Device location is not supported on this platform.</value>
-  </data>
-  <data name="Places_GlobalMap_Name" xml:space="preserve">
-    <value>Global map</value>
-  </data>
-  <data name="Places_ReverseGeocoding_RateLimited" xml:space="preserve">
-    <value>Reverse-geocoding rate limit reached.</value>
+  <data name="Places_Search_Unavailable" xml:space="preserve">
+    <value>Location search is unavailable. Check the network connection and try again.</value>
   </data>
   <data name="Places_Search_RateLimited" xml:space="preserve">
     <value>Location search rate limit reached.</value>

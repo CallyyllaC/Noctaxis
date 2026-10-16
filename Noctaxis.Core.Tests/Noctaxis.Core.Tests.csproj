@@ -5,6 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Noctaxis.Core\Noctaxis.Core.csproj" />
+    <!-- A separate process for the single-instance tests; its output is copied beside the tests. -->
+    <ProjectReference Include="..\Noctaxis.InstanceProbe\Noctaxis.InstanceProbe.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
@@ -12,5 +14,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Samples\open-meteo-hourly.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Exports as earlier versions wrote them: every supported schema must keep reading these. -->
+    <None Include="Samples\Compatibility\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

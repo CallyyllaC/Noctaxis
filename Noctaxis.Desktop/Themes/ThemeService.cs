@@ -62,7 +62,9 @@ public sealed class ThemeService : IDisposable
             next[key + "Color"] = colour;
         }
         // Celestial and chart data colours as one object for custom-drawn controls (see CelestialThemeTokens).
-        next[CelestialThemeTokens.ColourSet] = CelestialColourSet.FromPalette(EffectiveTheme.Palette);
+        // Under a colour-vision mode target patterns are emphasised, so the identity never rests on colour.
+        next[CelestialThemeTokens.ColourSet] = CelestialColourSet.FromPalette(EffectiveTheme.Palette,
+            emphasisePatterns: EffectiveTheme.Mode != Noctaxis.Core.Domain.ColourVisionMode.None);
         // The saved-location preview is rendered from these theme roles (see Mapping/Preview).
         var light = EffectiveTheme.AppearanceMode == AppearanceMode.Light;
         var highContrastFamily = EffectiveTheme.Definition.Id == "builtin.highcontrast";
@@ -71,9 +73,10 @@ public sealed class ThemeService : IDisposable
         var card = Color.Parse(EffectiveTheme.Palette[LocationCardTokens.Surface]);
         // Five stops, not four: the extra one removes the step from CardFade straight to nothing, which
         // read as a vertical seam down the card. Every stop is the card surface at a different alpha, so
-        // the fade belongs to whichever theme is loaded and never to a hard-coded colour.
+        // the fade belongs to whichever theme is loaded and never to a hard-coded colour. The alphas are
+        // the same at every text size; what enlarged text moves is where the stops sit, below.
         foreach (var (name, alpha) in new (string, byte)[] { ("CardOpaque", 255), ("CardScrim", 242), ("CardFade", 168), ("CardSoft", 70), ("CardTransparent", 0) })
-            next[name] = Color.FromArgb(Preferences.TextScale > 1.2 ? (byte)255 : alpha, card.R, card.G, card.B);
+            next[name] = Color.FromArgb(alpha, card.R, card.G, card.B);
         // Location cards lift slightly off the page; High Contrast relies on its outlines instead of a shadow.
         next["LocationCardShadow"] = highContrastFamily ? default
             : BoxShadows.Parse(light ? "0 2 10 0 #1A1B2433" : "0 6 18 0 #40000000");
@@ -83,8 +86,23 @@ public sealed class ThemeService : IDisposable
         // text is enlarged. It remains a cap: the navigation strip gives it no more room than it has.
         next["ShellSearchMinWidth"] = 240d * Preferences.TextScale;
         next["ShellSearchMaxWidth"] = 520d * Preferences.TextScale;
-        // Only this text-bearing layout grows; this is not whole-window scaling.
-        next["LocationCardFullWidth"] = Preferences.TextScale > 1.2;
+        // Only this text-bearing layout grows; this is not whole-window scaling. Enlarged text takes a
+        // larger share of the card, and the scrim's solid region and its fade move right with it, so the
+        // text always sits on a solid backing while the artwork is squeezed rather than covered over.
+        var textShare = Math.Clamp(.5 + .17 * (Preferences.TextScale - 1), .5, .67);
+        next["LocationCardTextShare"] = textShare;
+        // A name or a note in a narrower column at a larger size needs another line to wrap onto; the
+        // card has already grown taller to hold it. Wrapping is what enlarged text should do, not trimming.
+        next["LocationCardTextLines"] = Preferences.TextScale > 1.2 ? 3 : 2;
+        var solid = textShare - .2;
+        // The fade keeps its shape and its proportions, and only ends sooner when the text needs the
+        // room, so a strip of artwork survives at every text size.
+        var ramp = Math.Min(textShare + .24, .88) - solid;
+        next["CardStopSolid"] = solid;
+        next["CardStopScrim"] = solid + ramp * (.12 / .44);
+        next["CardStopFade"] = solid + ramp * (.22 / .44);
+        next["CardStopSoft"] = solid + ramp * (.32 / .44);
+        next["CardStopClear"] = solid + ramp;
         next["DatePickerMinimumWidth"] = 150 + 170 * (Preferences.TextScale - 1);
         next["TabItemHeaderFontSize"] = 20 * Preferences.TextScale;
         var highContrast = EffectiveTheme.Definition.Id == "builtin.highcontrast";

@@ -37,7 +37,7 @@
     <value>Regenerate all</value>
   </data>
   <data name="Dialogs_RegenerateMapImages_Message_Format" xml:space="preserve">
-    <value>Download fresh raster maps and road and water overlays for all {0} saved locations? Shared environmental tiles will be reused.</value>
+    <value>Regenerate the map images of all {0} saved locations? Map data already saved is reused; only missing or damaged map data is downloaded again. To refresh one location's map from the source, use Regenerate map image on its card.</value>
     <comment>{0} is the number of saved locations.</comment>
   </data>
   <data name="Dialogs_RegenerateMapImages_Title" xml:space="preserve">
@@ -75,12 +75,12 @@
     <value>This lens will be removed from your equipment.</value>
   </data>
   <data name="Dialogs_RestoreDefaultObjects_Confirm" xml:space="preserve">
-    <value>Restore defaults</value>
+    <value>Clear objects</value>
   </data>
   <data name="Dialogs_RestoreDefaultObjects_Message" xml:space="preserve">
-    <value>Your configured celestial objects will be replaced by the Sun and the Moon.</value>
+    <value>Every object you added will be removed. The Sun and the Moon stay.</value>
   </data>
   <data name="Dialogs_RestoreDefaultObjects_Title" xml:space="preserve">
-    <value>Restore default objects?</value>
+    <value>Clear objects?</value>
   </data>
 </root>

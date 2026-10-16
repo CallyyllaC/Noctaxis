@@ -12,8 +12,13 @@ public enum BasemapKind { Street, Satellite }
 [Flags]
 public enum MapLayerCapabilities { None = 0, Visibility = 1, Opacity = 2 }
 
+/// <summary>
+/// Who supplies a layer's content. <paramref name="Credits"/> is what the map owes while it is drawn; a provider
+/// with a single plain credit may give <paramref name="AttributionText"/> instead. See <see cref="MapAttributions.Of"/>.
+/// </summary>
 public sealed record MapProviderMetadata(string DisplayName, string? AttributionText = null,
-    string? AttributionUrl = null, string? LicenceName = null, string? LicenceUrl = null);
+    string? AttributionUrl = null, string? LicenceName = null, string? LicenceUrl = null,
+    IReadOnlyList<MapAttribution>? Credits = null);
 
 /// <summary>
 /// Logical content, independent of its rendering backend. Order is within its group.
@@ -35,6 +40,8 @@ public sealed class MapComposition
 {
     public BasemapDefinition Basemap { get; }
     public IReadOnlyList<MapLayerDefinition> Layers { get; }
+    /// <summary>Every credit the composition could owe, each once, in layer order.</summary>
+    public IReadOnlyList<MapAttribution> Attributions { get; }
     public string AttributionText { get; }
 
     public MapComposition(BasemapDefinition basemap, IEnumerable<MapLayerDefinition> overlays)
@@ -53,8 +60,8 @@ public sealed class MapComposition
             throw new ArgumentException("Layer IDs must be unique and nonempty.", nameof(overlays));
         Layers = Array.AsReadOnly(new[] { new MapLayerDefinition("basemap", MapLayerGroup.Basemap, 0, basemap.Provider) }
             .Concat(items.OrderBy(x => x.Group).ThenBy(x => x.Order).ThenBy(x => x.Id, StringComparer.Ordinal)).ToArray());
-        AttributionText = string.Join(" · ", Layers.Select(x => x.Provider.AttributionText)
-            .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal));
+        Attributions = MapAttributions.Distinct(Layers.SelectMany(x => MapAttributions.Of(x.Provider)));
+        AttributionText = MapAttributions.Line(Attributions);
     }
 
     public MapComposition WithBasemap(BasemapDefinition basemap) =>

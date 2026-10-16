@@ -86,6 +86,7 @@ public sealed partial class MainViewModelTests
         Assert.DoesNotContain("secret-code", vm.SupporterLicenceStatus);
         Assert.Empty(vm.SupporterLicenceInput);
         Assert.All(vm.ThemeOptions.Where(option => option.IsSupporter), option => Assert.True(option.IsAvailable));
+        Assert.All(vm.ThemeOptions, option => Assert.Equal(option.IsSupporter ? "Supporter" : "Standard", option.AvailabilityLabel));
     }
 
     [Theory]

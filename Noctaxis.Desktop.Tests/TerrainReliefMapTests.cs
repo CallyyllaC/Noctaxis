@@ -81,14 +81,14 @@ public sealed class TerrainReliefMapTests
         var binding = new TerrainReliefMapBinding(map, new FakeElevation(), () => 1);
         var layers = new PlannerLayersViewModel(map.Runtime);
         Assert.True(binding.Layer.Enabled);
-        Assert.Contains(TerrainReliefMapBinding.AttributionText, map.Runtime.AttributionText);
+        Assert.Contains(MapAttributions.TilezenTerrarium.Label, map.Runtime.AttributionText);
 
         map.ReplaceBasemap(new RasterImageryBasemap(new(BasemapKind.Satellite, new("Imagery", "Imagery credit")), () => new BlankImagery()));
         Assert.False(map.Runtime[TerrainReliefMapBinding.LayerId].IsActive);
         Assert.False(binding.Layer.Enabled);
         Assert.True(layers.ShowTerrainRelief); // The user's choice is kept, only not drawn.
         Assert.True(layers.IsTerrainReliefOverImagery);
-        Assert.DoesNotContain(TerrainReliefMapBinding.AttributionText, map.Runtime.AttributionText);
+        Assert.DoesNotContain(MapAttributions.TilezenTerrarium.Label, map.Runtime.AttributionText);
         // Imagery keeps its position at the bottom; nothing else moved.
         Assert.Equal(new[] { "basemap", TerrainReliefMapBinding.LayerId }, map.NativeLayerOrder.Select(x => x.Id));
 
@@ -225,7 +225,7 @@ public sealed class TerrainReliefMapTests
             // Shown by default, restrained.
             Assert.True(runtime[TerrainReliefMapBinding.LayerId].IsRenderable);
             Assert.Equal(TerrainReliefPreferences.DefaultOpacity, native.Opacity, 6);
-            Assert.Contains(TerrainReliefMapBinding.AttributionText, view.AttributionForTesting);
+            Assert.Contains(MapAttributions.TilezenTerrarium.Label, view.AttributionForTesting);
 
             view.TerrainReliefPreferences = new(true, .4);
             Assert.Equal(.4, native.Opacity, 6);
@@ -241,7 +241,7 @@ public sealed class TerrainReliefMapTests
 
             view.TerrainReliefPreferences = new(false, .4);
             Assert.False(native.Enabled);
-            Assert.DoesNotContain(TerrainReliefMapBinding.AttributionText, view.AttributionForTesting);
+            Assert.DoesNotContain(MapAttributions.TilezenTerrarium.Label, view.AttributionForTesting);
         }
         finally { window.Close(); themes.Apply(new()); }
     }
@@ -262,14 +262,15 @@ public sealed class TerrainReliefMapTests
             Dispatcher.UIThread.RunJobs();
             var toggle = controls.FindControl<CheckBox>("TerrainReliefToggle")!;
             var slider = controls.FindControl<Slider>("TerrainReliefOpacitySlider")!;
-            var opacity = controls.FindControl<StackPanel>("TerrainReliefOpacityControls")!;
             Assert.True(toggle.IsChecked);
             Assert.Equal(TerrainReliefPreferences.DefaultOpacity * 100, slider.Value, 6);
             slider.Value = 25;
             Assert.Equal(.25, view.CompositionForTesting.Runtime[TerrainReliefMapBinding.LayerId].Opacity, 6);
             toggle.IsChecked = false;
             Assert.False(view.Layers.ShowTerrainRelief);
-            Assert.False(opacity.IsVisible);
+            Assert.True(slider.IsVisible);
+            Assert.False(slider.IsEffectivelyEnabled);
+            Assert.Equal(25, slider.Value, 6);
             Assert.Equal(2, edits);
             Assert.Equal("Terrain relief opacity", Avalonia.Automation.AutomationProperties.GetName(slider));
         }
@@ -298,6 +299,26 @@ public sealed class TerrainReliefMapTests
         var minX = -WorldHalf + column * size;
         var maxY = WorldHalf - row * size;
         return new TileInfo { Index = new TileIndex(column, row, level), Extent = new Extent(minX, maxY - size, minX + size, maxY) };
+    }
+
+    /// <summary>
+    /// The Picture-in-Picture map shades its relief from the main map's relief source, so a tile either map
+    /// has shaded is shaded once for both, and a Switch finds the other map's tiles already computed. The
+    /// layer and its strength stay each map's own.
+    /// </summary>
+    [AvaloniaFact]
+    public void APictureInPictureMapShadesFromTheMainMapsReliefSource()
+    {
+        var main = new PlannerMapView();
+        main.ConfigureTerrainRelief(new FakeElevation { Tiles = EastwardSlope });
+        var pip = main.CreatePictureInPicture();
+        pip.ShareEnvironmentalSources(main);
+        Assert.Same(main.TerrainReliefForTesting!.Source, pip.TerrainReliefForTesting!.Source);
+        Assert.NotSame(main.TerrainReliefForTesting.Layer, pip.TerrainReliefForTesting.Layer);
+        main.TerrainReliefPreferences = new(true, .6);
+        pip.TerrainReliefPreferences = new(true, 1);
+        Assert.Equal(.6, main.CompositionForTesting.Runtime[TerrainReliefMapBinding.LayerId].Opacity);
+        Assert.Equal(1, pip.CompositionForTesting.Runtime[TerrainReliefMapBinding.LayerId].Opacity);
     }
 
     private sealed class FakeElevation : ITerrariumTileSource

@@ -122,9 +122,28 @@ public sealed class HorizonService : IHorizonService
     private readonly ILogger<HorizonService> _logger;
     private readonly ConcurrentDictionary<string, ProgressiveSession> _active = new(StringComparer.Ordinal);
     public const int CompletedProfileCapacity = 4;
-    private readonly CompletedResultCache<string, TerrainHorizonProfile> _completed =
-        new(CompletedProfileCapacity, EstimateProfileBytes);
+
+    /// <summary>
+    /// How long a completed profile degraded by unavailable terrain is reused. Such a profile usually
+    /// reflects a transient failure (offline, a source timing out), so it must not be served for the
+    /// rest of the session; it matches the Terrarium tile failure backoff, so the rebuild after it
+    /// actually retries the source.
+    /// </summary>
+    public static readonly TimeSpan DegradedProfileLifetime = TimeSpan.FromSeconds(30);
+    private readonly CompletedResultCache<string, TerrainHorizonProfile> _completed;
     public CompletedResultCacheDiagnostics CompletedCacheDiagnostics => _completed.Diagnostics;
+
+    /// <summary>
+    /// True for a profile built while terrain was missing for part of the horizon or for the observer's
+    /// own ground. A profile with terrain calculations disabled is not degraded.
+    /// </summary>
+    public static bool IsDegraded(TerrainHorizonProfile profile) =>
+        profile.TerrainCalculationsEnabled &&
+        (profile.HorizonState != EnvironmentalDataState.Available ||
+         profile.ObserverDatumConfidence == ObserverDatumConfidence.Unavailable);
+
+    private static TimeSpan? CompletedLifetime(TerrainHorizonProfile profile) =>
+        IsDegraded(profile) ? DegradedProfileLifetime : null;
 
     internal static long EstimateProfileBytes(TerrainHorizonProfile profile)
     {
@@ -153,17 +172,18 @@ public sealed class HorizonService : IHorizonService
 
     [ActivatorUtilitiesConstructor]
     public HorizonService(ITerrainSurfaceResolver surface, ILogger<HorizonService> logger,
-        int? degreeOfParallelism = null)
+        int? degreeOfParallelism = null, TimeProvider? time = null)
     {
         _surface = surface;
         _logger = logger;
         _degreeOfParallelism = Math.Clamp(degreeOfParallelism ?? DefaultDegreeOfParallelism,
             1, MaximumTerrainWorkers);
+        _completed = new(CompletedProfileCapacity, EstimateProfileBytes, time);
     }
 
     public HorizonService(ITerrainElevationProvider terrain, ILogger<HorizonService> logger,
-        int? degreeOfParallelism = null)
-        : this(new RawTerrainSurfaceResolver(terrain), logger, degreeOfParallelism) { }
+        int? degreeOfParallelism = null, TimeProvider? time = null)
+        : this(new RawTerrainSurfaceResolver(terrain), logger, degreeOfParallelism, time) { }
 
     /// <summary>
     /// The shared work for this observer and request, created when no live session exists. The
@@ -255,7 +275,8 @@ public sealed class HorizonService : IHorizonService
                     _logger, _cacheLifetime.Token, _degreeOfParallelism, result =>
                     {
                         lock (_generationGate)
-                            if (_generation == generation) _completed.TryAdd(cacheKey, result);
+                            if (_generation == generation)
+                                _completed.TryAdd(cacheKey, result, CompletedLifetime(result));
                     }));
             }
             if (session.IsLive)
@@ -645,7 +666,14 @@ public sealed class HorizonService : IHorizonService
             var status = isComplete
                 ? groundCoverage ? Strings.Format("Terrain_Status_Horizon_Format", groundSource) : Strings.Get("Terrain_Status_ElevationUnavailable")
                 : Strings.Get("Terrain_Status_Refining");
-            var snapshot = _samples.ToArray();
+            // A worker assigns a bearing's multi-field sample and only then publishes it (state 2, volatile write). A
+            // partial profile is taken while workers run, so it copies only published samples; any other bearing is its
+            // initial placeholder. Copying the whole array could read a sample half written (NX-33).
+            var snapshot = new TerrainHorizonSample[_samples.Length];
+            for (var index = 0; index < snapshot.Length; index++)
+                snapshot[index] = Volatile.Read(ref _states[index]) == 2
+                    ? _samples[index]
+                    : new TerrainHorizonSample(index * 360d / snapshot.Length, null, null);
             modelTimer.Stop();
             _timings.AddModelConstruction(modelTimer.Elapsed.TotalMilliseconds);
             var completed = Volatile.Read(ref _completedBearings);

@@ -7,8 +7,9 @@ using Noctaxis.Desktop.Themes;
 namespace Noctaxis.Desktop.Controls;
 
 /// <summary>
-/// Target-list key for one celestial object: a short line in the object's pattern (solid when it is
-/// the primary target) with its marker, exactly as the chart and map draw it.
+/// A target's line sample: a short line in its colour and pattern (solid when it is the focused target), drawn
+/// with the same <see cref="CelestialPalette.Stroke"/> as its map ray and timeline path, long enough to show its
+/// pattern repeat twice. A screen reader hears the pattern by name.
 /// </summary>
 public sealed class CelestialLegendGlyph : Control
 {
@@ -18,32 +19,40 @@ public sealed class CelestialLegendGlyph : Control
         AvaloniaProperty.Register<CelestialLegendGlyph, bool>(nameof(IsPrimary));
     public static readonly StyledProperty<CelestialColourSet> CelestialColoursProperty =
         AvaloniaProperty.Register<CelestialLegendGlyph, CelestialColourSet>(nameof(CelestialColours), CelestialColourSet.Default);
-    public static readonly StyledProperty<IBrush?> HaloProperty =
-        AvaloniaProperty.Register<CelestialLegendGlyph, IBrush?>(nameof(Halo));
 
     public CelestialRole Role { get => GetValue(RoleProperty); set => SetValue(RoleProperty, value); }
     public bool IsPrimary { get => GetValue(IsPrimaryProperty); set => SetValue(IsPrimaryProperty, value); }
     public CelestialColourSet CelestialColours { get => GetValue(CelestialColoursProperty); set => SetValue(CelestialColoursProperty, value); }
-    public IBrush? Halo { get => GetValue(HaloProperty); set => SetValue(HaloProperty, value); }
 
-    static CelestialLegendGlyph() => AffectsRender<CelestialLegendGlyph>(RoleProperty, IsPrimaryProperty, CelestialColoursProperty, HaloProperty);
+    static CelestialLegendGlyph()
+    {
+        AffectsRender<CelestialLegendGlyph>(RoleProperty, IsPrimaryProperty, CelestialColoursProperty);
+        RoleProperty.Changed.AddClassHandler<CelestialLegendGlyph>((glyph, _) => glyph.Describe());
+        IsPrimaryProperty.Changed.AddClassHandler<CelestialLegendGlyph>((glyph, _) => glyph.Describe());
+    }
+
+    /// <summary>Wide enough for two repeats of the longest pattern at its emphasised weight; the row's height.</summary>
+    public const double SampleWidth = 44;
 
     public CelestialLegendGlyph()
     {
-        Width = 30;
+        Width = SampleWidth;
         Height = 16;
-        this.Bind(CelestialColoursProperty, new DynamicResourceExtension(CelestialThemeTokens.ColourSet));
-        this.Bind(HaloProperty, new DynamicResourceExtension("SurfaceBackground"));
+        Describe();
+        // A theme default: a value set on the sample, or a style, wins over it (ThemeDefault).
+        this.BindThemeDefault(CelestialColoursProperty, CelestialThemeTokens.ColourSet);
     }
 
     internal Color ColourForTesting => CelestialColours[Role];
 
+    /// <summary>The pen the sample is drawn with: the target's own <see cref="CelestialPalette.Stroke"/>.</summary>
+    internal Pen StrokeForTesting => CelestialPalette.Stroke(CelestialColours, Role, IsPrimary, IsPrimary ? 2.8 : 1.6);
+
+    private void Describe() => Avalonia.Automation.AutomationProperties.SetName(this, CelestialPalette.PatternName(Role, IsPrimary));
+
     public override void Render(DrawingContext context)
     {
-        var brush = new SolidColorBrush(CelestialColours[Role]);
         var y = Bounds.Height / 2;
-        context.DrawLine(new Pen(brush, IsPrimary ? 2.8 : 1.6, dashStyle: IsPrimary ? null : CelestialPalette.Dash(Role)),
-            new Point(1, y), new Point(Bounds.Width - 1, y));
-        CelestialPalette.DrawMarker(context, Role, new Point(Bounds.Width / 2, y), 9, brush, Halo);
+        context.DrawLine(StrokeForTesting, new Point(1, y), new Point(Bounds.Width - 1, y));
     }
 }

@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Noctaxis.Core.Calculations;
@@ -137,3 +138,54 @@ public sealed partial class EnvironmentalOverlayTests
     }
 }
 
+public sealed partial class MainViewModelTests
+{
+    /// <summary>
+    /// Camera pitch runs from 45° down to straight up, in the Camera direction instrument and its pitch value
+    /// alike, and the instrument's horizon is level with its aim at 0°. A pitch saved below that by an older build
+    /// opens at -45° and is saved that way; a pitch inside the range is kept exactly.
+    /// </summary>
+    [AvaloniaFact]
+    public async Task CameraPitchRunsFromFortyFiveDegreesDownToStraightUpWithLevelMarked()
+    {
+        var store = CreatePlannerStore(new AppSettings(CameraFraming: new CameraFramingSettings(CameraPitchDegrees: -80)));
+        var (vm, window, _) = await CreatePlannerAsync(store: store);
+        try
+        {
+            window.FindControl<TabControl>("PlannerInspectorTabs")!.SelectedIndex = 2;
+            Settle(window);
+            var direction = window.FindControl<CameraDirectionPad>("CameraDirection")!;
+            var number = window.FindControl<NumericUpDown>("CameraPitchInput")!;
+            Assert.Equal((decimal)CameraFramingSettings.MinimumCameraPitchDegrees, number.Minimum);
+            Assert.Equal((decimal)CameraFramingSettings.MaximumCameraPitchDegrees, number.Maximum);
+
+            // The old -80° opens at the new limit, everywhere it shows.
+            Assert.Equal(-45, vm.CameraPitchDegrees);
+            Assert.Equal(-45, direction.Pitch);
+            Assert.Equal(-45m, number.Value);
+
+            // Both limits are accepted; past the lower one is the lower one.
+            vm.CameraPitchDegrees = 90;
+            Settle(window);
+            Assert.Equal(90, direction.Pitch);
+            vm.CameraPitchDegrees = -60;
+            Assert.Equal(-45, vm.CameraPitchDegrees);
+            vm.CameraPitchDegrees = 12.5;
+            Assert.Equal(12.5, vm.CameraPitchDegrees);
+            vm.CameraPitchDegrees = -45;
+            Settle(window);
+            Assert.Equal(-45, direction.Pitch);
+            await vm.SettleSettingsAsync();
+            Assert.Equal(-45, store.State.Settings.CameraFraming!.CameraPitchDegrees);
+
+            // 0° is the reference: the horizon runs through the aim, and looking up drops it below.
+            vm.CameraPitchDegrees = 0;
+            Settle(window);
+            Assert.Equal(direction.Bounds.Height / 2, direction.HorizonY, 6);
+            vm.CameraPitchDegrees = 20;
+            Settle(window);
+            Assert.True(direction.HorizonY > direction.Bounds.Height / 2);
+        }
+        finally { Close(window); }
+    }
+}

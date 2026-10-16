@@ -40,7 +40,7 @@ public sealed partial class MainViewModelTests
         vm.AttachThemeService(service);
         var imageSource = new AppearanceMapFixture(); imageSource.Measure(new Size(640, 300)); imageSource.Arrange(new Rect(0, 0, 640, 300));
         var bitmap = new RenderTargetBitmap(new PixelSize(640, 300)); bitmap.Render(imageSource);
-        vm.Locations.Saved[0].MapThumbnail = bitmap;
+        vm.Locations.Saved[0].PreviewScene = LocationPreviewRendererTests.Scene();
         var window = new MainWindow { Width = 1440, Height = 1000, DataContext = vm };
         window.Show();
         try

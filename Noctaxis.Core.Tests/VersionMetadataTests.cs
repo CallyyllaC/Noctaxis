@@ -10,7 +10,7 @@ public sealed class VersionMetadataTests
     [Fact]
     public void BuiltAssembliesCarryTheNoctaxisVersion()
     {
-        var core = typeof(ScoutingCardExporter).Assembly;
+        var core = typeof(NoctaxisPlan).Assembly;
         var version = ProductVersion(core);
 
         Assert.Matches(@"^\d+\.\d+\.\d+$", version);

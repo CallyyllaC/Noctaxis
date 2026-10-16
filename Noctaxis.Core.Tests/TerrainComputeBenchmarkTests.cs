@@ -106,9 +106,6 @@ public sealed class TerrainComputeBenchmarkTests
                         Assert.Equal(samples, terrain.Metrics.Samples);
                     });
                     await Measure("FoV13", async () => { await horizon.GetProfileAsync(observer, new(13), default); });
-                    var map = new TerrainDebugMapService(resolver);
-                    await Measure("map128", async () => { await map.GetMapAsync(observer, new(), default); });
-                    await Measure("mapRepeat", async () => { await map.GetMapAsync(observer, new(), default); });
                     await Measure("rapid", async () =>
                     {
                         for (var move = 0; move < 4; move++)

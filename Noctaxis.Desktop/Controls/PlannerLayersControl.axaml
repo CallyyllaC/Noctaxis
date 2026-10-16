@@ -4,12 +4,29 @@
              xmlns:vm="using:Noctaxis.Desktop.ViewModels"
              x:Class="Noctaxis.Desktop.Controls.PlannerLayersControl"
              x:DataType="vm:PlannerLayersViewModel">
-  <Button Name="LayersButton" Classes="mapChrome" Content="{loc:Text Planner_Layers_Button}"
-          AutomationProperties.Name="{loc:Text Planner_Layers_MapLayers_AccessibleName}"
-          AutomationProperties.HelpText="{loc:Text Planner_Layers_ChooseMapLayers_HelpText}"
-          ToolTip.Tip="{loc:Text Planner_Layers_ChooseMapLayers_HelpText}">
-    <Button.Flyout>
-      <Flyout Placement="BottomEdgeAlignedRight" Closed="CommitEdit">
+  <!-- A tab on the map's right edge, named as the panels' edge tabs are. It stays pressed while the
+       layers are open, so whether they are open is shown and is read out, not only seen. The layers open
+       beside it, over the map: the map keeps its size and nothing around it moves. -->
+  <ToggleButton Name="LayersButton" Classes="panelEdgeTab mapLayersTab" Content="{loc:Text Planner_Layers_Button}"
+                AutomationProperties.Name="{loc:Text Planner_Layers_MapLayers_AccessibleName}"
+                AutomationProperties.HelpText="{loc:Text Planner_Layers_ChooseMapLayers_HelpText}">
+    <ToggleButton.Styles>
+      <Style Selector="ToggleButton.mapLayersTab">
+        <Setter Property="CornerRadius" Value="6,0,0,6"/>
+        <Setter Property="BorderThickness" Value="1,1,0,1"/>
+        <Setter Property="Background" Value="{DynamicResource MapChromeBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MapChromeText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
+        <Setter Property="Padding" Value="9,8"/>
+        <Setter Property="MinHeight" Value="34"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+      </Style>
+      <Style Selector="ToggleButton.mapLayersTab:checked /template/ ContentPresenter">
+        <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
+      </Style>
+    </ToggleButton.Styles>
+    <ToggleButton.Flyout>
+      <Flyout Placement="LeftEdgeAlignedTop" Closed="CommitEdit">
         <Flyout.FlyoutPresenterTheme>
           <ControlTheme TargetType="FlyoutPresenter" BasedOn="{StaticResource {x:Type FlyoutPresenter}}">
             <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
@@ -17,50 +34,70 @@
             <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}"/>
           </ControlTheme>
         </Flyout.FlyoutPresenterTheme>
+        <!-- The Layers button already says what this is, so it opens straight onto the layers. Each is
+             one row: the switch and its name, its opacity opposite, and the opacity slider beneath.
+             A layer that is off keeps its slider and value in place, dimmed, so nothing moves and its
+             opacity is there when it comes back on. -->
         <ScrollViewer MaxHeight="420" HorizontalScrollBarVisibility="Disabled">
-          <StackPanel Width="280" Spacing="8">
-            <TextBlock Text="{loc:Text Planner_Layers_MapLayers_Heading}" Classes="section"/>
-            <TextBlock Text="{loc:Text Planner_Layers_Overlays_Label}" Foreground="{DynamicResource SecondaryText}"/>
-            <CheckBox Name="TerrainReliefToggle" Content="{loc:Text Planner_Layers_TerrainRelief_Option}"
-                      FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
-                      AutomationProperties.HelpText="{loc:Text Planner_Layers_ShadeHillsValleys_HelpText}"
-                      IsChecked="{Binding ShowTerrainRelief, Mode=TwoWay}"
-                      ToolTip.Tip="{loc:Text Planner_Layers_ShadeHillsValleys_HelpText}"/>
-            <StackPanel Name="TerrainReliefOpacityControls" IsVisible="{Binding ShowTerrainRelief}" Spacing="4">
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="{loc:Text Planner_Layers_Opacity_Label}"/>
-                <TextBlock Grid.Column="1" Text="{Binding TerrainReliefOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
+          <StackPanel Name="LayerRows" Width="280" Spacing="6">
+            <StackPanel.Styles>
+              <Style Selector="CheckBox.layerToggle">
+                <Setter Property="FontSize" Value="{DynamicResource TextBody}"/>
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+              </Style>
+              <Style Selector="TextBlock.layerOpacity">
+                <Setter Property="VerticalAlignment" Value="Center"/>
+                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                <Setter Property="FontFeatures" Value="+tnum"/>
+              </Style>
+              <Style Selector="TextBlock.layerOpacity:disabled">
+                <Setter Property="Opacity" Value="0.5"/>
+              </Style>
+              <!-- Beneath the name rather than beneath the box, and tucked up to the row above it; the
+                   slider keeps its full height to grab. -->
+              <Style Selector="Slider.layerOpacity">
+                <Setter Property="Margin" Value="28,-6,0,0"/>
+              </Style>
+            </StackPanel.Styles>
+
+            <StackPanel Name="TerrainReliefLayer">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <CheckBox Name="TerrainReliefToggle" Classes="layerToggle" Content="{loc:Text Planner_Layers_TerrainRelief_Option}"
+                          AutomationProperties.HelpText="{loc:Text Planner_Layers_ShadeHillsValleys_HelpText}"
+                          IsChecked="{Binding ShowTerrainRelief, Mode=TwoWay}"/>
+                <TextBlock Name="TerrainReliefOpacityValue" Grid.Column="1" Classes="layerOpacity" IsEnabled="{Binding ShowTerrainRelief}"
+                           Text="{Binding TerrainReliefOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
               </Grid>
-              <Slider Name="TerrainReliefOpacitySlider" Minimum="0" Maximum="100"
+              <Slider Name="TerrainReliefOpacitySlider" Classes="layerOpacity" Minimum="0" Maximum="100"
+                      IsEnabled="{Binding ShowTerrainRelief}"
                       Value="{Binding TerrainReliefOpacityPercent, Mode=TwoWay}"
                       AutomationProperties.Name="{loc:Text Planner_Layers_TerrainReliefOpacity_AccessibleName}"
-                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStrongly_HelpText}"
-                      ToolTip.Tip="{loc:Text Planner_Layers_AdjustHowStrongly_HelpText}"/>
-              <TextBlock Text="{loc:Text Planner_Layers_ShownOverSatellite_Description}"
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStrongly_HelpText}"/>
+              <TextBlock Text="{loc:Text Planner_Layers_ShownOverSatellite_Description}" Margin="28,0,0,0"
                          IsVisible="{Binding IsTerrainReliefOverImagery}" TextWrapping="Wrap"
                          Foreground="{DynamicResource SecondaryText}"/>
             </StackPanel>
-            <CheckBox Name="LightPollutionToggle" Content="{loc:Text Planner_Layers_LightPollution_Option}"
-                      FontSize="{DynamicResource TextBody}" Foreground="{DynamicResource PrimaryText}"
-                      AutomationProperties.HelpText="{loc:Text Planner_Layers_ShowModelledArtificial_HelpText}"
-                      IsChecked="{Binding ShowLightPollution, Mode=TwoWay}"
-                      ToolTip.Tip="{loc:Text Planner_Layers_ShowModelledArtificial_HelpText}"/>
-            <StackPanel Name="OpacityControls" IsVisible="{Binding ShowLightPollution}" Spacing="4">
-              <Grid ColumnDefinitions="*,Auto">
-                <TextBlock Text="{loc:Text Planner_Layers_Opacity_Label}"/>
-                <TextBlock Grid.Column="1" Text="{Binding LightPollutionOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
+
+            <StackPanel Name="LightPollutionLayer">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <CheckBox Name="LightPollutionToggle" Classes="layerToggle" Content="{loc:Text Planner_Layers_LightPollution_Option}"
+                          AutomationProperties.HelpText="{loc:Text Planner_Layers_ShowModelledArtificial_HelpText}"
+                          IsChecked="{Binding ShowLightPollution, Mode=TwoWay}"/>
+                <TextBlock Name="LightPollutionOpacityValue" Grid.Column="1" Classes="layerOpacity" IsEnabled="{Binding ShowLightPollution}"
+                           Text="{Binding LightPollutionOpacityPercent, StringFormat={loc:Text Planner_Layers_Opacity_Format}}"/>
               </Grid>
-              <Slider Name="OpacitySlider" Minimum="0" Maximum="100"
+              <Slider Name="OpacitySlider" Classes="layerOpacity" Minimum="0" Maximum="100"
+                      IsEnabled="{Binding ShowLightPollution}"
                       Value="{Binding LightPollutionOpacityPercent, Mode=TwoWay}"
                       AutomationProperties.Name="{loc:Text Planner_Layers_LightPollutionOpacity_AccessibleName}"
-                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStronglyLight_HelpText}"
-                      ToolTip.Tip="{loc:Text Planner_Layers_AdjustHowStronglyLight_HelpText}"/>
+                      AutomationProperties.HelpText="{loc:Text Planner_Layers_AdjustHowStronglyLight_HelpText}"/>
             </StackPanel>
+
             <TextBlock Text="{Binding PersistenceError}" IsVisible="{Binding HasPersistenceError}"
                        TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>
           </StackPanel>
         </ScrollViewer>
       </Flyout>
-    </Button.Flyout>
-  </Button>
+    </ToggleButton.Flyout>
+  </ToggleButton>
 </UserControl>

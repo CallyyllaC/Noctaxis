@@ -34,7 +34,9 @@ button grew by 2 px on hover and press in the same way, reflowing whatever came 
   its control therefore keeps the control hovered, and leaving the control still closes it. Before, each
   tooltip was a native popup window: the main window lost the pointer, and the control lost its hover.
   Flyouts, menus and drop-downs are separate popups and remain interactive. Interactive content belongs
-  in a flyout, never a tooltip.
+  in a flyout, never a tooltip. A control inside one of those popups (an item in an open drop-down) has
+  no overlay layer, so its tooltip is the platform's own popup. The choice is made each time the tooltip
+  is placed. Forcing the overlay there made Avalonia throw and ended the application.
 
 `InteractionGeometryTests` and the location-card geometry test check this across themes and text sizes.
 When adding a state style, change colours or rings, never `BorderThickness`, `Margin`, `Padding`, size

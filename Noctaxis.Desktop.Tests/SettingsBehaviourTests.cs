@@ -365,9 +365,10 @@ public sealed partial class MainViewModelTests
             AssertNothingClipped(notice, $"{family}/{appearance}/{textScale} restart notice");
 
             var categories = window.FindControl<TabControl>("SettingsCategories")!;
-            Assert.Equal(["Appearance", "General", "Equipment", "Planner map", "Weather", "Celestial objects", "Data", "Supporter", "Diagnostics"],
-                categories.Items.OfType<TabItem>().Select(tab => (string?)tab.Header));
-            foreach (var tab in categories.Items.OfType<TabItem>())
+            // Diagnostics is a developer tool, so it is not among them in a normal run.
+            Assert.Equal(["General", "Appearance", "Equipment", "Planner map", "Weather", "Celestial objects", "Data", "Supporter"],
+                categories.Items.OfType<TabItem>().Where(tab => tab.IsVisible).Select(tab => (string?)tab.Header));
+            foreach (var tab in categories.Items.OfType<TabItem>().Where(tab => tab.IsVisible))
             {
                 window.SelectSettingsCategory((string)tab.Header!);
                 foreach (var expander in window.GetVisualDescendants().OfType<Expander>().Where(e => e.IsEffectivelyVisible)) expander.IsExpanded = true;

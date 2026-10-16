@@ -43,7 +43,7 @@ public sealed class OpenMeteoLocationSearchProvider(
             var uri = $"search?name={Uri.EscapeDataString(query)}&count=8&language={CultureInfo.CurrentUICulture.TwoLetterISOLanguageName}&format=json";
             using var response = await httpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                throw new HttpRequestException(Strings.Get("Places_Search_RateLimited"));
+                throw new LocationSearchUnavailableException(Strings.Get("Places_Search_RateLimited"));
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<OpenMeteoGeocodingResponse>(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
@@ -67,7 +67,7 @@ public sealed class OpenMeteoLocationSearchProvider(
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or OperationCanceledException)
         {
             logger.LogWarning(ex, "Location search failed");
-            throw new InvalidOperationException("Location search is unavailable. Check the network connection and try again.", ex);
+            throw new LocationSearchUnavailableException(Strings.Get("Places_Search_Unavailable"), ex);
         }
     }
 
@@ -97,6 +97,10 @@ public sealed class OpenMeteoGeocodingResult
 
 public sealed record ReverseGeocodingResult(string PlaceName, string? RegionDescription, string Attribution);
 
+/// <summary>Location search could not be answered (network, provider limit, unreadable reply). Its message is localised.</summary>
+public sealed class LocationSearchUnavailableException(string message, Exception? innerException = null)
+    : InvalidOperationException(message, innerException);
+
 public interface IReverseGeocodingProvider
 {
     Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate, CancellationToken cancellationToken);
@@ -104,7 +108,9 @@ public interface IReverseGeocodingProvider
 
 /// <summary>
 /// Lightweight, end-user-triggered reverse lookup. Calls are serialised and cached to respect the
-/// public Nominatim service limit; provider DTOs never escape this boundary.
+/// public Nominatim service limit; provider DTOs never escape this boundary. When the service answers that it is
+/// rate limiting or refusing this application (HTTP 429 or 403), no further request is sent for
+/// <see cref="RefusalBackoff"/>: the policy limits are for the whole application, so one client must not keep asking.
 /// </summary>
 public sealed class NominatimReverseGeocodingProvider(
     HttpClient httpClient,
@@ -116,7 +122,10 @@ public sealed class NominatimReverseGeocodingProvider(
     private readonly object _cacheGate = new();
     private readonly SemaphoreSlim _requestGate = new(1, 1);
     private DateTimeOffset _lastRequestUtc = DateTimeOffset.MinValue;
+    private Instant _suspendedUntil = Instant.MinValue;
     public const string Attribution = "Location data: OpenStreetMap contributors";
+    /// <summary>How long lookups stop after the service rate-limits or refuses this application.</summary>
+    public static readonly Duration RefusalBackoff = Duration.FromHours(1);
 
     public async Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate, CancellationToken cancellationToken)
     {
@@ -132,6 +141,7 @@ public sealed class NominatimReverseGeocodingProvider(
         await _requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            if (clock.GetCurrentInstant() < _suspendedUntil) return null;
             var delay = TimeSpan.FromSeconds(1) - (DateTimeOffset.UtcNow - _lastRequestUtc);
             if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             var language = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
@@ -142,8 +152,13 @@ public sealed class NominatimReverseGeocodingProvider(
                 .ConfigureAwait(false);
             _lastRequestUtc = DateTimeOffset.UtcNow;
             if (response.StatusCode == HttpStatusCode.NotFound) return Cache(coordinate, null);
-            if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                throw new HttpRequestException(Strings.Get("Places_ReverseGeocoding_RateLimited"));
+            if (response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Forbidden)
+            {
+                _suspendedUntil = clock.GetCurrentInstant() + RefusalBackoff;
+                logger.LogWarning("Reverse geocoding refused (HTTP {Status}); no further lookups for {Backoff}",
+                    (int)response.StatusCode, RefusalBackoff);
+                return null;
+            }
             response.EnsureSuccessStatusCode();
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var dto = await JsonSerializer.DeserializeAsync<NominatimReverseResponse>(stream,
@@ -200,99 +215,4 @@ public sealed class NominatimAddress
     public string? PreferredLocality() => First(Village, Town, City, Municipality, Hamlet, Suburb, Neighbourhood, County);
     public string? Region() => First(State, County, Country);
     private static string? First(params string?[] values) => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-}
-
-public interface IDeviceLocationProvider
-{
-    Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken);
-}
-
-public enum DeviceLocationAvailabilityState
-{
-    Available,
-    PermissionRequestable,
-    PermissionPermanentlyDenied,
-    Unsupported
-}
-
-public sealed record DeviceLocationAvailability(DeviceLocationAvailabilityState State, string? Reason = null)
-{
-    public bool CanRequest => State is DeviceLocationAvailabilityState.Available or DeviceLocationAvailabilityState.PermissionRequestable;
-}
-
-public interface IDeviceLocationAvailabilityService
-{
-    Task<DeviceLocationAvailability> GetAvailabilityAsync(CancellationToken cancellationToken);
-}
-
-public sealed class PlatformDeviceLocationProvider : IDeviceLocationProvider, IDeviceLocationAvailabilityService
-{
-    public Task<DeviceLocationAvailability> GetAvailabilityAsync(CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        var reason = OperatingSystem.IsLinux()
-            ? Strings.Get("Places_Device_UnavailableLinux")
-            : OperatingSystem.IsWindows()
-                ? Strings.Get("Places_Device_UnavailableWindows")
-                : Strings.Get("Places_Device_Unsupported");
-        return Task.FromResult(new DeviceLocationAvailability(DeviceLocationAvailabilityState.Unsupported, reason));
-    }
-
-    public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => Task.FromResult<LocationResolution?>(null);
-}
-
-public sealed class UnavailableDeviceLocationProvider : IDeviceLocationProvider, IDeviceLocationAvailabilityService
-{
-    public Task<DeviceLocationAvailability> GetAvailabilityAsync(CancellationToken cancellationToken) =>
-        Task.FromResult(new DeviceLocationAvailability(DeviceLocationAvailabilityState.Unsupported, Strings.Get("Places_Device_Unavailable")));
-    public Task<LocationResolution?> TryGetLocationAsync(CancellationToken cancellationToken) => Task.FromResult<LocationResolution?>(null);
-}
-
-public interface ILocationResolver
-{
-    Task<LocationResolution> ResolveDefaultAsync(GeoCoordinate? lastCustomCoordinate, CancellationToken cancellationToken);
-    Task<LocationResolution> ResolveDeviceOrFallbackAsync(GeoCoordinate? lastCustomCoordinate, CancellationToken cancellationToken);
-}
-
-public sealed class LocationResolver(IDeviceLocationProvider deviceLocation, ILogger<LocationResolver> logger) : ILocationResolver
-{
-    private static readonly IReadOnlyDictionary<string, GeoCoordinate> CountryCentres = new Dictionary<string, GeoCoordinate>(StringComparer.OrdinalIgnoreCase)
-    {
-        ["GB"] = new(54.7, -3.5), ["US"] = new(39.8, -98.6), ["CA"] = new(56.1, -106.3),
-        ["AU"] = new(-25.3, 133.8), ["NZ"] = new(-41.3, 174.8), ["DE"] = new(51.2, 10.4),
-        ["FR"] = new(46.2, 2.2), ["ES"] = new(40.4, -3.7), ["IT"] = new(42.8, 12.8),
-        ["NL"] = new(52.2, 5.3), ["NO"] = new(61.0, 8.0), ["SE"] = new(62.0, 15.0),
-        ["IN"] = new(22.6, 79.0), ["JP"] = new(36.2, 138.3), ["BR"] = new(-10.8, -52.9)
-    };
-    private static readonly GeoCoordinate GlobalFallback = new(20, 0);
-
-    public Task<LocationResolution> ResolveDefaultAsync(GeoCoordinate? lastCustomCoordinate, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (lastCustomCoordinate.HasValue)
-            return Task.FromResult(new LocationResolution(lastCustomCoordinate.Value, LocationResolutionSource.LastCustomPosition));
-        try
-        {
-            var region = RegionInfo.CurrentRegion;
-            if (CountryCentres.TryGetValue(region.TwoLetterISORegionName, out var coordinate))
-                return Task.FromResult(new LocationResolution(coordinate, LocationResolutionSource.SystemRegion,
-                    IsApproximate: true, DisplayName: region.DisplayName));
-        }
-        catch (ArgumentException) { }
-        return Task.FromResult(new LocationResolution(GlobalFallback, LocationResolutionSource.ApplicationFallback,
-            IsApproximate: true, DisplayName: Strings.Get("Places_GlobalMap_Name")));
-    }
-
-    public async Task<LocationResolution> ResolveDeviceOrFallbackAsync(GeoCoordinate? lastCustomCoordinate, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var result = await deviceLocation.TryGetLocationAsync(cancellationToken).ConfigureAwait(false);
-            if (result is not null) return result;
-            logger.LogInformation("Operating-system location is unavailable; using location fallback");
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-        catch (Exception ex) { logger.LogWarning(ex, "Operating-system location failed; using location fallback"); }
-        return await ResolveDefaultAsync(lastCustomCoordinate, cancellationToken).ConfigureAwait(false);
-    }
 }

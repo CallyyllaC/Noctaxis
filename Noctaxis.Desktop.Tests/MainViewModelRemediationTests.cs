@@ -2,8 +2,10 @@ using Avalonia.Headless.XUnit;
 using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Catalogues;
 using Noctaxis.Core.Domain;
+using Noctaxis.Core.Localisation;
 using Noctaxis.Core.Persistence;
 using Noctaxis.Core.Planning;
+using Noctaxis.Desktop.Services;
 using Noctaxis.Desktop.ViewModels;
 using Noctaxis.Desktop.Views;
 using NodaTime;
@@ -87,6 +89,144 @@ public sealed partial class MainViewModelTests
         Assert.False(window.IsVisible);
     }
 
+    [AvaloniaFact]
+    public async Task UnreadableSavedState_IsExplainedAndNeverOverwritten()
+    {
+        // V-01: state that exists but cannot be read (another instance, antivirus, sync) is not defaults.
+        var catalogue = new OpenNgcTargetCatalogue();
+        var path = Path.Combine("profile", "Noctaxis", "state.json");
+        var store = new ThrowingStore(new UserStateUnavailableException(path, new IOException("sharing violation")));
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter());
+        await viewModel.StartAsync();
+
+        Assert.True(viewModel.HasStartupError);
+        Assert.Equal(Strings.Format("Shell_Status_StateUnavailable_Format", path), viewModel.StartupError);
+        var window = new MainWindow(viewModel, new DesktopDialogService(new LocationSearchViewModel(
+            new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance)));
+        window.Show();
+        window.Close();
+        await window.CloseCleanup.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal(0, store.Saves);
+    }
+
+    [Fact]
+    public async Task SavedLocationDelete_RemovesStoredAssetsOnlyAfterTheDeletionIsSaved()
+    {
+        // S-V01.
+        var catalogue = new OpenNgcTargetCatalogue();
+        var location = new SavedLocation(Guid.NewGuid(), "Private site", new GeoCoordinate(51, -1), "UTC");
+        var store = new FlakyStore(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null));
+        var assets = new RecordingAssets();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter(), thumbnails: assets);
+        await viewModel.InitializeAsync();
+
+        await Assert.Single(viewModel.Locations.Saved).DeleteCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain(store.State.Locations, item => item.Id == location.Id);
+        Assert.Equal([location.Id], assets.Deleted);
+    }
+
+    [Fact]
+    public async Task SavedLocationDelete_KeepsStoredAssetsWhenTheDeletionCouldNotBeSaved()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var location = new SavedLocation(Guid.NewGuid(), "Private site", new GeoCoordinate(51, -1), "UTC");
+        var store = new FlakyStore(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null));
+        var assets = new RecordingAssets();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter(), thumbnails: assets);
+        await viewModel.InitializeAsync();
+        store.Fail = true;
+
+        await Assert.Single(viewModel.Locations.Saved).DeleteCommand.ExecuteAsync(null);
+
+        // The record is still on disk, so its assets must remain.
+        Assert.Contains(store.State.Locations, item => item.Id == location.Id);
+        Assert.Empty(assets.Deleted);
+    }
+
+    [Fact]
+    public async Task SavedLocationDelete_InAReadOnlySessionKeepsStoredAssets()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var location = new SavedLocation(Guid.NewGuid(), "Private site", new GeoCoordinate(51, -1), "UTC");
+        var store = new FlakyStore(new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)
+        {
+            PreservationWarning = new PersistedStateWarning(JsonUserDataStore.CurrentSchemaVersion + 1, true, [])
+        });
+        var assets = new RecordingAssets();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue, store, new FakeExporter(), thumbnails: assets);
+        await viewModel.InitializeAsync();
+
+        await Assert.Single(viewModel.Locations.Saved).DeleteCommand.ExecuteAsync(null);
+
+        Assert.Equal(0, store.Saves);
+        Assert.Empty(assets.Deleted);
+    }
+
+    [Theory]
+    [InlineData("authoritative", true)]
+    [InlineData("defaults", false)]
+    [InlineData("partial", false)]
+    public async Task OrphanedAssetSweep_RunsOnlyAfterACompleteStateLoad(string load, bool expected)
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var location = new SavedLocation(Guid.NewGuid(), "Kept", new GeoCoordinate(51, -1), "UTC");
+        var asOf = new DateTime(2026, 10, 1, 0, 0, 0, DateTimeKind.Utc);
+        var state = new PersistedState(4, new AppSettings(), [location],
+            PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null);
+        state = load switch
+        {
+            "authoritative" => state with { AuthoritativeAsOfUtc = asOf },
+            "partial" => state with
+            {
+                AuthoritativeAsOfUtc = asOf,
+                PreservationWarning = new PersistedStateWarning(4, false, ["WeatherField 'Future'"])
+            },
+            _ => state
+        };
+        var assets = new RecordingAssets();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue, new FlakyStore(state), new FakeExporter(),
+            thumbnails: assets);
+
+        await viewModel.InitializeAsync();
+        await viewModel.WaitForOrphanedAssetSweepAsync();
+
+        if (expected)
+        {
+            var sweep = Assert.Single(assets.Sweeps);
+            Assert.Equal([location.Id], sweep.Saved);
+            Assert.Equal(asOf, sweep.OlderThan);
+        }
+        else Assert.Empty(assets.Sweeps);
+    }
+
+    private sealed class RecordingAssets : ILocationMapThumbnailService
+    {
+        public List<Guid> Deleted { get; } = [];
+        public List<(Guid[] Saved, DateTime OlderThan)> Sweeps { get; } = [];
+        public string StorageDirectory => "memory";
+        public Task<SavedLocationThumbnailResult?> GetThumbnailAsync(SavedLocation location, bool forceRefresh,
+            CancellationToken cancellationToken) => Task.FromResult<SavedLocationThumbnailResult?>(null);
+        public Task<SavedLocationThumbnailResult?> GetThumbnailAsync(SavedLocation location,
+            SavedLocationMapRefreshMode mode, CancellationToken cancellationToken) =>
+            Task.FromResult<SavedLocationThumbnailResult?>(null);
+        public Task DeleteLocationAssetsAsync(Guid locationId, CancellationToken cancellationToken)
+        {
+            lock (Deleted) Deleted.Add(locationId);
+            return Task.CompletedTask;
+        }
+        public Task<int> RemoveOrphanedAssetsAsync(IReadOnlySet<Guid> savedLocationIds, DateTime olderThanUtc,
+            CancellationToken cancellationToken)
+        {
+            lock (Sweeps) Sweeps.Add((savedLocationIds.ToArray(), olderThanUtc));
+            return Task.FromResult(0);
+        }
+    }
+
     [Fact]
     public async Task SavedLocationCardDelete_ClearsSelectionSoSaveCannotResurrectIt()
     {
@@ -104,7 +244,6 @@ public sealed partial class MainViewModelTests
 
         Assert.Null(viewModel.SelectedLocation);
         Assert.Null(store.State.MostRecentLocationId);
-        Assert.False(viewModel.DeleteLocationCommand.CanExecute(null));
         await viewModel.SaveLocationCommand.ExecuteAsync(null);
         var saved = Assert.Single(viewModel.SavedLocations);
         Assert.NotEqual(location.Id, saved.Id);
@@ -360,7 +499,7 @@ public sealed partial class MainViewModelTests
 
         Assert.Same(viewModel.Snapshot, exporter.LastSnapshot);
         Assert.Equal(51, viewModel.Snapshot!.Weather.Conditions!.TemperatureCelsius);
-        Assert.Equal("Scouting card ready", viewModel.StatusMessage);
+        Assert.Equal("Plan image ready", viewModel.StatusMessage);
     }
 
     [Fact]

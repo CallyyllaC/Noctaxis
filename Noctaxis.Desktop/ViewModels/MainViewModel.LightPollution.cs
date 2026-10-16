@@ -111,6 +111,9 @@ public partial class MainViewModel
         {
             if (_lightPollutionNotificationsAttached && generation == _lightPollutionNotificationGeneration && !IsManagingLightPollution)
                 LightPollutionStatus = InstallationStatus(LightPollutionInstallation!);
+            // An installed, removed or repaired atlas changes what the score can say about the sky here.
+            RequestLightPollutionAtPlace();
+            NotifyShotViability();
         });
     }
     public void CancelEnvironmentalInstall()

@@ -29,7 +29,7 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
     private long _bytes, _limit = DefaultLimitBytes, _clock, _evictions, _evictedBytes, _clears, _oversized;
     private long _generation;
     private TerrainCacheUsage _usage = new(0, DefaultLimitBytes, 0, 0, 0, 0, 0);
-    public string RootDirectory { get; } = Path.Combine(paths.GetApplicationDataDirectory(), "EnvironmentalData");
+    public string RootDirectory { get; } = Path.Combine(paths.GetCacheDirectory(), "EnvironmentalData");
     public long Generation => Interlocked.Read(ref _generation);
     public event Action? Invalidated;
     public event Action? Changed;

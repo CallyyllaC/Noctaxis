@@ -1,0 +1,28 @@
+name: Linux x64 tests
+
+# Builds the solution and runs the Core and Desktop test suites on a hosted linux-x64 runner
+# (platform-tests.yml). Its status is this platform's README test badge.
+# Linux exercises the managed image fallback (no OpenCV) and the headless Avalonia/Skia test host.
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a pull request replaces its run; runs for main and dev always finish, so their badges
+  # show a result rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    uses: ./.github/workflows/platform-tests.yml
+    with:
+      runner: ubuntu-latest
+      rid: linux-x64

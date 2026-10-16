@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Noctaxis
+GenericName=Photography Planner
+Comment=Plan landscape and astrophotography: sun, moon, targets, terrain and weather
+Exec=Noctaxis.Desktop
+Icon=noctaxis
+Terminal=false
+Categories=Graphics;Photography;Science;Astronomy;
+StartupWMClass=Noctaxis

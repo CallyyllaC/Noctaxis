@@ -11,6 +11,7 @@
     <PackageVersion Include="Avalonia.Fonts.Inter" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Headless.XUnit" Version="12.1.0" />
     <PackageVersion Include="Avalonia.Skia" Version="12.1.0" />
+    <PackageVersion Include="Markdig" Version="0.41.3" />
     <PackageVersion Include="Mapsui.Avalonia12" Version="5.1.0" />
     <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.0" />
     <PackageVersion Include="CosineKitty.AstronomyEngine" Version="2.1.19" />

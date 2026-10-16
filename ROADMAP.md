@@ -15,7 +15,7 @@ Legend:
 Map/pin, planning date/time, current-time startup behaviour, targets, camera bearing/pitch, framing and FoV.
 
 ### ✅ Saved locations
-Location cards, favourites, current/device location, imagery/metadata and normal saved-location workflow.
+Location cards, favourites, current location, imagery/metadata and normal saved-location workflow. Device geolocation was removed: places are chosen by search, on the map or from saved locations.
 
 ### ✅ Target selection/details
 Target list, Focus, focused-target details, visibility controls and Follow with camera.
@@ -51,7 +51,7 @@ Docking workspace, Inspector tabs, Timeline, PiP/Camera-frame overlays, duplicat
 Stored preferences versus session/startup state separated sensibly; Settings reorganised and cleaned up.
 
 ### ✅ Appearance system
-Noctaxis, High Contrast, Neon, Foxfire, Deep Space and Moonlit families with light/dark behaviour and semantic resources.
+Noctaxis, High Contrast, Neon, Foxfire, Deep Space, Moonlit and Pigeon families with light/dark behaviour and semantic resources.
 
 ### ✅ Accessibility appearance controls
 Colour-vision variants, 100–200% text scaling, non-colour target line patterns and documented accessibility behaviour.
@@ -60,7 +60,7 @@ Colour-vision variants, 100–200% text scaling, non-colour target line patterns
 Themed values act as defaults while explicit local/style values survive live theme, appearance and colour-vision changes.
 
 ### ✅ Supporter themes
-Neon, Foxfire, Deep Space and Moonlit.
+Neon, Foxfire, Deep Space, Moonlit and Pigeon (dedicated to the first supporter).
 
 ### ✅ Offline Awoo supporter licensing
 Frozen protocol, Ed25519 verification, activation/replacement, persistence and supporter-theme gating.
@@ -132,7 +132,7 @@ Use Noctaxis for several real photography plans and fix workflow annoyances rath
 - remember skipped versions so it does not nag forever like a printer driver from 2007
 
 ### 🟡 Windows release packaging
-Release builds are mature; installer/distribution/update packaging still needs final release treatment.
+A self-contained, extract-and-run zip for x64 and Arm64 (`scripts/package.ps1`), checked for its runtime, native libraries and notices. x64 is the officially supported package; Arm64 is a courtesy build. The Package workflow builds and starts both on hosted runners; it has not run yet. Still to do: a clean-machine run of the x64 zip, and the binary provenance audit of the self-contained packages before release.
 
 ### ⬜ Theme dropdown presentation polish
 Separate the visible theme availability label from tooltip details: standard themes show no redundant status beside their names, while tooltips identify them as Standard. Supporter and locked-theme labels remain informative. Keep this independent of the tooltip crash/full-row selection fixes.
@@ -157,6 +157,17 @@ Display each saved location's stored timezone on its card, using a clear, readab
 
 ### 🟡 Version-aware portable plan import/export
 Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
+### 🟡 Linux courtesy builds
+A self-contained tarball for x64 and Arm64, with an optional per-user menu entry (`scripts/package.sh`). The full test suites run on Ubuntu in CI. The Package workflow starts both tarballs under Xvfb on hosted x64 and Arm64 runners; it has not run yet. Courtesy builds, best-effort.
+
+### 🟡 Courtesy-build release automation
+The first successful Package workflow run on all six packages. Then the release notes can say the courtesy builds were built and started on their own systems. macOS also runs the test suites informationally in CI; review those results once.
+
+### 🚫 Publicly trusted code signing and notarisation for v1.0
+Deferred: not worth the effort for v1.0. It needs paid developer or signing accounts, identity verification and ongoing certificate management. Packages ship unsigned (Windows) or ad-hoc signed (macOS), with the first-launch steps documented.
+
+### 🚫 Manual native validation of courtesy platforms
+Windows x64 is the only officially supported platform. Linux, macOS and Windows on Arm rely on automated checks on hosted runners and on user reports, not on developer-owned hardware ([support policy](docs/releasing.md#support-policy)). Community reports using the [native checklist](docs/releasing.md#native-verification-checklist) are welcome.
 
 ### ⬜ Final first-run/release polish
 Version metadata, release-facing wording, documentation, clean-machine testing and release presentation.

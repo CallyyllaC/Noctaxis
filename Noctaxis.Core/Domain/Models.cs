@@ -107,7 +107,9 @@ public sealed record AstralTarget(
     IReadOnlyList<string>? CatalogueIdentifiers = null,
     double? ApparentMagnitude = null,
     string? AngularSize = null,
-    string? Source = null)
+    string? Source = null,
+    double? MajorAxisArcminutes = null,
+    double? MinorAxisArcminutes = null)
 {
     public bool IsSun => Id.Equals("sun", StringComparison.OrdinalIgnoreCase);
     public bool IsMoon => Id.Equals("moon", StringComparison.OrdinalIgnoreCase);
@@ -119,7 +121,18 @@ public readonly record struct HorizontalCoordinate(double AzimuthDegrees, double
     public bool IsAboveHorizon => AltitudeDegrees >= 0;
 }
 
-public sealed record TargetEvents(Instant? Rise, Instant? Transit, Instant? Set);
+/// <summary>
+/// Where a target is relative to the horizon across a local day in which it neither rises nor sets:
+/// <see cref="Crosses"/> when it does either. With no rise or set, the day says which side it stayed on.
+/// </summary>
+public enum DayHorizon { Crosses, AboveAllDay, BelowAllDay }
+
+/// <summary>
+/// A target's rise, transit and set within one local day. A missing rise or set is either outside the day
+/// (<see cref="DayHorizon.Crosses"/>) or does not happen at all, because the target stays above or below
+/// the horizon all day; <see cref="Horizon"/> says which.
+/// </summary>
+public sealed record TargetEvents(Instant? Rise, Instant? Transit, Instant? Set, DayHorizon Horizon = DayHorizon.Crosses);
 
 public sealed record TwilightEvents(
     Instant? Sunrise,
@@ -183,8 +196,27 @@ public sealed record CameraProfile(
     double SensorWidthMillimetres,
     double SensorHeightMillimetres,
     string? Manufacturer = null,
-    string? Model = null)
+    string? Model = null,
+    int? ResolutionWidthPixels = null,
+    int? ResolutionHeightPixels = null)
 {
+    /// <summary>
+    /// Whether the sensor's resolution is known: both dimensions, each a positive number of pixels. The
+    /// resolution is optional; a profile without it, or with only one dimension, is as valid as ever and
+    /// simply has none.
+    /// </summary>
+    [JsonIgnore]
+    public bool HasResolution => ResolutionWidthPixels is > 0 && ResolutionHeightPixels is > 0;
+
+    /// <summary>
+    /// The pixel pitch, derived from the sensor's size and resolution rather than stored: the mean of the
+    /// horizontal and vertical pitches, in micrometres. Null without a resolution.
+    /// </summary>
+    [JsonIgnore]
+    public double? PixelPitchMicrometres => HasResolution && IsValid
+        ? (SensorWidthMillimetres / ResolutionWidthPixels!.Value + SensorHeightMillimetres / ResolutionHeightPixels!.Value) / 2 * 1000
+        : null;
+
     [JsonIgnore]
     public bool IsValid => ValidationMessage is null;
 
@@ -291,12 +323,24 @@ public sealed record CameraFramingSettings(
     double CameraPitchDegrees = 0,
     double MinimumTerrainFrameCoveragePercent = 5,
     string TerrainObstructionColour = "#9A6F9E",
-    double TerrainTintStrengthPercent = 40)
+    double TerrainTintStrengthPercent = 40,
+    bool FollowFocusedTarget = false,
+    // Which way a drag on the Camera frame turns and tilts it: a preference of the hand only. The bearing and
+    // pitch it writes, and every other way of setting them, are unchanged.
+    bool InvertHorizontalDrag = false,
+    bool InvertVerticalDrag = false)
 {
     public const string DefaultTerrainObstructionColour = "#9A6F9E";
     public const double DefaultTerrainCastAngularDetailDegrees = 1;
     public const double MinimumTerrainCastAngularDetailDegrees = 1;
     public const double MaximumTerrainCastAngularDetailDegrees = 45;
+    /// <summary>
+    /// The pitch a camera can be given: straight up, and down as far as a composition from high ground
+    /// still needs. Steeper than that only points the camera at the ground or the tripod. A saved pitch
+    /// outside these limits reads as the nearest limit.
+    /// </summary>
+    public const double MinimumCameraPitchDegrees = -45;
+    public const double MaximumCameraPitchDegrees = 90;
 
     public CameraFramingSettings Normalised() => this with
     {
@@ -307,7 +351,7 @@ public sealed record CameraFramingSettings(
         LineThickness = Math.Clamp(double.IsFinite(LineThickness) ? LineThickness : 1.25, 0.5, 5),
         // Retain the serialized field for old settings files, but never apply coarse detail.
         TerrainCastAngularDetailDegrees = DefaultTerrainCastAngularDetailDegrees,
-        CameraPitchDegrees = Math.Clamp(double.IsFinite(CameraPitchDegrees) ? CameraPitchDegrees : 0, -90, 90),
+        CameraPitchDegrees = Math.Clamp(double.IsFinite(CameraPitchDegrees) ? CameraPitchDegrees : 0, MinimumCameraPitchDegrees, MaximumCameraPitchDegrees),
         MinimumTerrainFrameCoveragePercent = Math.Clamp(double.IsFinite(MinimumTerrainFrameCoveragePercent) ? MinimumTerrainFrameCoveragePercent : 5, 0, 50)
     };
 
@@ -719,7 +763,7 @@ public sealed record SavedLocation(
     DateTimeOffset? DateAddedUtc = null,
     ObserverElevationState? ObserverElevation = null);
 
-public enum LocationResolutionSource { LastCustomPosition, OperatingSystemLocation, SearchResult, SystemRegion, ApplicationFallback }
+public enum LocationResolutionSource { SearchResult }
 
 public sealed record LocationResolution(
     GeoCoordinate Coordinate,
@@ -741,9 +785,12 @@ public sealed record LocationSearchResult(
 
 public sealed record CelestialObjectSelection(string TargetId, bool IsVisible = true, int Order = 0);
 
+/// <param name="DefaultPrimaryTargetId">
+/// The focused target, saved: null when nothing is focused. It is only ever one of the shown objects.
+/// </param>
 public sealed record CelestialObjectSettings(
     IReadOnlyList<CelestialObjectSelection>? ConfiguredObjects = null,
-    string DefaultPrimaryTargetId = "sun")
+    string? DefaultPrimaryTargetId = "sun")
 {
     public static IReadOnlyList<CelestialObjectSelection> Defaults { get; } =
         [new("sun", true, 0), new("moon", true, 1)];
@@ -770,6 +817,19 @@ public static class CelestialVisibilityPolicy
             })
             .ToArray();
     }
+
+    /// <summary>
+    /// The focus a plan keeps, and the target it is calculated around. Focus is only ever a shown target: a
+    /// requested focus that is missing or hidden is no focus at all, never some other target in its place. The
+    /// anchor is the focused target, or else the first shown one (the Sun when none is shown), which is never
+    /// treated as focused.
+    /// </summary>
+    public static (string? Focus, string Anchor) FocusAndAnchor(IReadOnlyList<CelestialObjectSelection> normalised, string? requestedFocus)
+    {
+        var focus = requestedFocus is null ? null : normalised
+            .FirstOrDefault(item => item.IsVisible && item.TargetId.Equals(requestedFocus, StringComparison.OrdinalIgnoreCase))?.TargetId;
+        return (focus, focus ?? normalised.FirstOrDefault(item => item.IsVisible)?.TargetId ?? "sun");
+    }
 }
 
 public sealed record CelestialObjectPlan(TargetPosition Position, AstralPath Path);
@@ -787,24 +847,36 @@ public sealed record AppSettings(
     bool TerrainDebugOverlay = false,
     long TerrainCacheLimitBytes = 2L * 1024 * 1024 * 1024,
       bool EnableTerrainCalculations = true,
-      double TerrainMinimapContext = 2.5,
       AppearancePreferences? Appearance = null,
       string? AwooSupporterLicenceCode = null,
     ExternalMapProvider ExternalMapProvider = ExternalMapProvider.OpenStreetMap,
     LightPollutionPreferences? LightPollution = null,
     TerrainReliefPreferences? TerrainRelief = null,
     // A culture identifier (see AppLanguages). It is the one language preference: text, formats and map names.
-    string Language = AppLanguages.DefaultId)
+    string Language = AppLanguages.DefaultId,
+    // Where the user has put the Planner's panels. Absent until a panel is first moved.
+    PlannerDockLayout? PlannerDock = null,
+    // The Picture-in-Picture map: on, following the pin, until changed.
+    PlannerPipSettings? PlannerPip = null,
+    // How wide the user has made the map's two instruments, as shares of the map's width.
+    PlannerOverlaySizes? PlannerOverlays = null)
 {
     [JsonIgnore]
     public string EffectiveLanguage => AppLanguages.Normalise(Language);
+
+    [JsonIgnore]
+    public PlannerDockLayout EffectivePlannerDock => PlannerDock ?? PlannerDockLayout.Empty;
 
     public const string UseSystemTimeZoneId = "system";
     [JsonIgnore]
     public long EffectiveTerrainCacheLimitBytes => Math.Clamp(TerrainCacheLimitBytes, 0, 1024L * 1024 * 1024 * 1024);
       public const double DefaultCameraHeightAboveGroundMetres = 1.7;
-      public const double DefaultTerrainMinimapContext = 2.5;
-      public double EffectiveTerrainMinimapContext => Math.Clamp(double.IsFinite(TerrainMinimapContext) ? TerrainMinimapContext : DefaultTerrainMinimapContext, 1.0, 2.5);
+
+    [JsonIgnore]
+    public PlannerPipSettings EffectivePlannerPip => PlannerPip ?? new();
+
+    [JsonIgnore]
+    public PlannerOverlaySizes EffectivePlannerOverlays => (PlannerOverlays ?? new()).Normalised();
 
     [JsonIgnore]
     public WeatherSettings EffectiveWeather => Weather ?? new();
@@ -860,8 +932,12 @@ public sealed record PlanningSession(
     string? CameraProfileId = null,
     string? LensProfileId = null,
     ObserverElevationState? ObserverElevation = null,
-    bool EnableTerrainCalculations = true)
+    bool EnableTerrainCalculations = true,
+    [property: JsonIgnore] bool IsTargetFocused = true)
 {
+    // TargetId is the target the plan is calculated around: the focused target when there is one
+    // (IsTargetFocused), otherwise only an anchor (the first shown target) that nothing emphasises, aims at or
+    // describes as focused. Which targets are drawn is VisibleObjects alone.
     public static PlanningSession Default(Instant now, string timeZoneId) => new(
         new GeoCoordinate(51.5074, -0.1278, 15), now, timeZoneId, "sun",
         LensConfiguration.ForPreset(SensorPreset.FullFrame), null,
@@ -903,4 +979,44 @@ public sealed record PlanningSnapshot(
 {
     [JsonIgnore]
     public IReadOnlyList<CelestialObjectPlan> EffectiveObjectPlans => ObjectPlans ?? [new CelestialObjectPlan(Position, Path)];
+}
+
+/// <summary>One target's path across the Planner's Timeline window: 24 hours on from its anchor.</summary>
+public sealed record TimelinePath(AstralTarget Target, AstralPath Path);
+
+public enum TimelineEventKind { Sunrise, Sunset, AstronomicalDarknessBegins, AstronomicalDarknessEnds, Moonrise, Moonset }
+
+public sealed record TimelineEvent(TimelineEventKind Kind, Instant Instant);
+
+/// <summary>
+/// The Sun's and Moon's events inside one Timeline window, earliest first, and whether the window opens in
+/// astronomical darkness (the Sun more than 18° below the horizon), which together give its dark intervals.
+/// </summary>
+public sealed record TimelineEvents(IReadOnlyList<TimelineEvent> Events, bool DarkAtStart)
+{
+    public static TimelineEvents None { get; } = new([], false);
+
+    /// <summary>
+    /// The window's astronomical darkness, as intervals within [<paramref name="start"/>, <paramref name="end"/>]:
+    /// from the window's start when it opens dark, to its end when it closes dark, the whole window when
+    /// darkness neither begins nor ends in it but it opens dark, and none when it never gets dark.
+    /// </summary>
+    public IReadOnlyList<(Instant Start, Instant End)> DarknessIntervals(Instant start, Instant end)
+    {
+        var intervals = new List<(Instant, Instant)>();
+        var dark = DarkAtStart;
+        var from = start;
+        foreach (var item in Events.OrderBy(item => item.Instant))
+        {
+            if (item.Instant < start || item.Instant > end) continue;
+            if (item.Kind == TimelineEventKind.AstronomicalDarknessBegins && !dark) { dark = true; from = item.Instant; }
+            else if (item.Kind == TimelineEventKind.AstronomicalDarknessEnds && dark)
+            {
+                if (item.Instant > from) intervals.Add((from, item.Instant));
+                dark = false;
+            }
+        }
+        if (dark && end > from) intervals.Add((from, end));
+        return intervals;
+    }
 }

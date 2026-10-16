@@ -1,0 +1,114 @@
+name: Package and start (reusable)
+
+# Builds one release package on a hosted runner of its own operating system and processor, checks it and
+# starts it. Called by the per-platform build workflows (build-<rid>.yml) for pushes and pull requests, and
+# by package.yml for version tags and manual runs, which alone keep the package. Nothing is released or
+# published, and nothing is signed beyond macOS's free ad-hoc signature (docs/releasing.md).
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Hosted runner label of the package's own operating system and processor.
+        required: true
+        type: string
+      rid:
+        description: Runtime identifier of the package.
+        required: true
+        type: string
+      keep-package:
+        description: Keep the package as a workflow artifact for 7 days.
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package and start (${{ inputs.rid }})
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      AVALONIA_TELEMETRY_OPTOUT: 1
+      NoctaxisBuildNumber: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # A package is only reported as built and started natively when the runner and its .NET SDK really
+      # are that operating system and processor.
+      - name: Confirm the runner's operating system and processor
+        shell: bash
+        run: bash scripts/check-runner-platform.sh ${{ inputs.rid }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/package.ps1 -RuntimeIdentifier ${{ inputs.rid }} -OutputDirectory packages
+
+      - name: Package (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: bash scripts/package.sh ${{ inputs.rid }} packages
+
+      # Starts the package as a user would and checks it is still running after 25 s, having logged its
+      # start and nothing fatal. It proves the package starts on that system: the runtime and native
+      # libraries load and the main window opens. It does not exercise the interface.
+      - name: Start the package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem packages -Filter *.zip | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath run
+          $exe = Get-ChildItem run -Recurse -Filter Noctaxis.Desktop.exe | Select-Object -First 1
+          $process = Start-Process $exe.FullName -PassThru
+          Start-Sleep -Seconds 25
+          $alive = -not $process.HasExited
+          if ($alive) { Stop-Process -Id $process.Id -Force; Start-Sleep -Seconds 2 }
+          $logs = "$env:APPDATA\Noctaxis\logs"
+          $log = if (Test-Path $logs) { Get-ChildItem $logs -Filter *.log | Sort-Object LastWriteTime | Select-Object -Last 1 }
+          if ($log) { Get-Content $log.FullName }
+          if (-not $alive) { throw "Noctaxis exited during startup (code $($process.ExitCode))." }
+          if (-not $log) { throw "Noctaxis wrote no log in $logs." }
+          if (-not (Select-String -Path $log.FullName -Pattern ' starting on ' -Quiet)) { throw 'Noctaxis did not log its start.' }
+          if (Select-String -Path $log.FullName -Pattern '\[CRT\]' -Quiet) { throw 'Noctaxis logged a fatal error.' }
+
+      - name: Start the package (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q xvfb libice6 libsm6 fontconfig
+          mkdir run && tar -C run -xzf packages/*.tar.gz
+          app=$(find run -name Noctaxis.Desktop -type f | head -1)
+          xvfb-run -a "$app" & runner=$!
+          sleep 25
+          alive=0; pgrep -f "$app" >/dev/null && alive=1
+          pkill -f "$app" || true; wait $runner || true
+          bash scripts/check-startup-log.sh "$HOME/.config/Noctaxis/logs" "$alive"
+
+      - name: Start the package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # The zip holds Noctaxis.app and README.txt at its root, as Finder extracts it.
+          mkdir run && ditto -x -k packages/*.zip run
+          app=run/Noctaxis.app
+          codesign --verify --deep --strict "$app"
+          test -f run/README.txt
+          "$app/Contents/MacOS/Noctaxis.Desktop" & pid=$!
+          sleep 25
+          alive=0; kill -0 $pid 2>/dev/null && alive=1
+          kill $pid 2>/dev/null || true; wait $pid || true
+          bash scripts/check-startup-log.sh "$HOME/Library/Application Support/Noctaxis/logs" "$alive"
+
+      - name: Keep the package
+        if: inputs.keep-package
+        uses: actions/upload-artifact@v4
+        with:
+          name: noctaxis-${{ inputs.rid }}
+          path: packages/*
+          retention-days: 7
+          if-no-files-found: error

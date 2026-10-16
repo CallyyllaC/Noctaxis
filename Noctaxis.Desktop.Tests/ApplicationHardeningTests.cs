@@ -27,10 +27,9 @@ public sealed class ApplicationHardeningTests
     }
 
     [Fact]
-    public void DiagnosticRenderersHaveExplicitOwnershipAndProductMinimapRemainsProduction()
+    public void DiagnosticRenderersHaveExplicitOwnership()
     {
         Assert.Equal("Noctaxis.Desktop.Diagnostics", typeof(TerrainDebugMiniMap).Namespace);
         Assert.Equal("Noctaxis.Desktop.Diagnostics", typeof(TerrainSampleRenderer).Namespace);
-        Assert.Equal("Noctaxis.Desktop.Controls", typeof(LocalTerrainMap).Namespace);
     }
 }

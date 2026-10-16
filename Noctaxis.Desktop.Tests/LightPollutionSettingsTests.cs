@@ -30,8 +30,7 @@ public sealed partial class MainViewModelTests
             new CameraFramingGuideCalculator(), new FramingVisibilityCalculator(), new LocalHorizonCalculator(),
             new FixedClock(store.State.Session.Instant),
             new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance),
-            new LocationResolver(new UnavailableDeviceLocationProvider(), NullLogger<LocationResolver>.Instance),
-            new UnavailableDeviceLocationProvider(), new LocalTargetSearchService(catalogue), new FakeDialogs(),
+            new LocalTargetSearchService(catalogue), new FakeDialogs(),
             new FakeReverseGeocodingProvider(), lightPollutionInstallation: dataset);
         await vm.InitializeAsync();
         Assert.Equal("Installed", vm.LightPollutionStatus);

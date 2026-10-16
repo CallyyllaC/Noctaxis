@@ -114,11 +114,13 @@ public sealed partial class LocalisationTests
     [Fact]
     public void DisplayedDatesFollowTheCulture()
     {
-        var moment = new LocalDateTime(2026, 3, 5, 21, 30).InZoneStrictly(DateTimeZone.Utc);
-        var british = InCulture("en-GB", () => Strings.Format("Export_Card_DateAndTarget_Format", moment, "M31"));
-        var german = InCulture("de-DE", () => Strings.Format("Export_Card_DateAndTarget_Format", moment, "M31"));
-        Assert.Contains("Thu, 05 Mar 2026  21:30", british);
-        Assert.Contains("2026", german);
+        var start = new DateTime(2026, 3, 5, 21, 30, 0);
+        var british = InCulture("en-GB", () => Strings.Format("Export_Sheet_Subject_Format", "M31", start, start.AddDays(1), "GMT"));
+        var german = InCulture("de-DE", () => Strings.Format("Export_Sheet_Subject_Format", "M31", start, start.AddDays(1), "GMT"));
+        Assert.Equal("M31 · Thu 5 Mar 2026, 21:30 – Fri 6 Mar 2026, 21:30 GMT", british);
+        // The region writes the day and month names; the text stays the application's.
+        Assert.NotEqual(british, german);
+        Assert.Contains("2026, 21:30", german);
         Assert.Contains("M31", german);
         Assert.NotEqual(british, german);
     }

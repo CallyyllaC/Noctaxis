@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Run by Unix shells (including Git Bash on Windows) and read by Linux desktops: always LF.
+*.sh text eol=lf
+*.desktop text eol=lf

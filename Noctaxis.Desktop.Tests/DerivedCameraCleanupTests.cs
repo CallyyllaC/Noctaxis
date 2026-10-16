@@ -32,7 +32,7 @@ public sealed partial class MainViewModelTests
         Assert.Equal("Asia/Tokyo", vm.Session.TimeZoneId);
         var instant = vm.Session.Instant;
         var generation = vm.PlannerRefresh.Generation;
-        await vm.ApplySettingsAsync(vm.Settings with { TerrainMinimapContext = 1.5 });
+        await vm.ApplySettingsAsync(vm.Settings with { PlannerPip = vm.Settings.EffectivePlannerPip with { FollowPin = false } });
         Assert.Equal("Asia/Tokyo", vm.Session.TimeZoneId);
         Assert.Equal(instant, vm.Session.Instant);
         Assert.Equal(generation, vm.PlannerRefresh.Generation);
@@ -58,7 +58,7 @@ public sealed partial class MainViewModelTests
         var originalWork = vm.WaitForPlannerRefreshAsync();
         foreach (var change in new Func<AppSettings, AppSettings>[]
         {
-            s => s with { TerrainMinimapContext = 1.35 },
+            s => s with { PlannerPip = s.EffectivePlannerPip with { FollowPin = false } },
             s => s with { TerrainDebugOverlay = true },
             s => s with { CameraFraming = s.EffectiveCameraFraming with { LineThickness = 3 } },
             s => s with { CameraFraming = s.EffectiveCameraFraming with { IsOverlayVisible = false } },
@@ -86,11 +86,11 @@ public sealed partial class MainViewModelTests
         _ = vm.FramingVisibilityStatus;
         _ = vm.TerrainDebugText;
         Assert.Equal(count, calculator.Count);
-        await vm.ApplySettingsAsync(vm.Settings with { TerrainMinimapContext = 2 });
+        await vm.ApplySettingsAsync(vm.Settings with { PlannerPip = vm.Settings.EffectivePlannerPip with { ResolutionMetresPerPixel = 200 } });
         Assert.Same(first, vm.CameraFramingVisibility);
         Assert.Equal(count, calculator.Count);
         await vm.ApplySettingsAsync(vm.Settings with { CameraFraming = vm.Settings.EffectiveCameraFraming with
-            { CompositionOffsetDegrees = 15 } });
+            { ManualBearingDegrees = vm.Settings.EffectiveCameraFraming.ManualBearingDegrees + 15 } });
         Assert.NotSame(first, vm.CameraFramingVisibility);
         Assert.Equal(count + 1, calculator.Count);
         Assert.Equal(1, planning.EnvironmentRequestCount);
@@ -123,7 +123,6 @@ public sealed partial class MainViewModelTests
             s => s with { Terrain = s.Terrain with { GeneratedAt = s.Terrain.GeneratedAt + Duration.FromSeconds(1) } },
             s => s with { Weather = s.Weather with { State = DataState.Error } },
             s => s with { Position = s.Position with { Horizontal = s.Position.Horizontal with { AltitudeDegrees = 12 } } },
-            s => s with { Position = s.Position with { Horizontal = s.Position.Horizontal with { AzimuthDegrees = 42 } } },
             s => s with { FieldOfView = s.FieldOfView with { HorizontalDegrees = 25 } },
             s => s with { FieldOfView = s.FieldOfView with { VerticalDegrees = 22 } }
         })
@@ -136,6 +135,12 @@ public sealed partial class MainViewModelTests
             _ = vm.FramingVisibilityStatus;
             Assert.Equal(count + 1, calculator.Count);
         }
+        // The focused target's azimuth is not an input: the frame is the camera's, so moving the target
+        // recalculates nothing.
+        var unchanged = calculator.Count;
+        vm.Snapshot = vm.Snapshot! with { Position = vm.Snapshot.Position with { Horizontal = vm.Snapshot.Position.Horizontal with { AzimuthDegrees = 42 } } };
+        _ = vm.CameraFramingVisibility;
+        Assert.Equal(unchanged, calculator.Count);
     }
 
     private sealed class CountingFramingCalculator : IFramingVisibilityCalculator

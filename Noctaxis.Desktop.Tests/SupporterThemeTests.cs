@@ -16,10 +16,10 @@ public sealed class SupporterThemeTests
             .Select(definition => new object[] { definition.Id, definition.DisplayName });
 
     [Fact]
-    public void FourSupporterFamiliesAreRegisteredAndGatedAsOneEntitlement()
+    public void FiveSupporterFamiliesAreRegisteredAndGatedAsOneEntitlement()
     {
         var families = BuiltInPalettes.Definitions.Where(definition => definition.IsSupporter).ToArray();
-        Assert.Equal(["supporter.noctaxis-neon", "supporter.foxfire", "supporter.deep-space", "supporter.moonlit"], families.Select(f => f.Id));
+        Assert.Equal(["supporter.noctaxis-neon", "supporter.foxfire", "supporter.deep-space", "supporter.moonlit", "supporter.pigeon"], families.Select(f => f.Id));
         Assert.All(families, family => Assert.True(family.IsSupporter));
         var denied = new ThemeCatalogue();
         Assert.All(families, family => Assert.False(denied.IsAvailable(family)));
@@ -45,7 +45,7 @@ public sealed class SupporterThemeTests
         Assert.All(options.Where(option => !option.IsSupporter), option =>
         {
             Assert.True(option.IsAvailable);
-            Assert.Equal(string.Empty, option.AvailabilityLabel);
+            Assert.Equal("Standard", option.AvailabilityLabel);
         });
     }
 

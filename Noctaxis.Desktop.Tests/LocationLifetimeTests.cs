@@ -49,14 +49,14 @@ public sealed partial class MainViewModelTests
             new FakeExporter(), thumbnails: thumbnails);
         await vm.InitializeAsync();
         var location = new SavedLocation(Guid.NewGuid(), "Example", new GeoCoordinate(51, 0), "UTC");
-        vm.Locations.Load([location], null);
+        vm.Locations.Load([location]);
         var original = Assert.Single(vm.Locations.Saved);
-        vm.Locations.Load([location with { Name = "Renamed" }], null, location.Id);
+        vm.Locations.Load([location with { Name = "Renamed" }], location.Id);
         Assert.Same(original, Assert.Single(vm.Locations.Saved));
         Assert.Equal("Renamed", original.Name);
         Assert.True(original.IsSelected);
         Assert.Single(thumbnails.Tokens);
-        vm.Locations.Load([], null);
+        vm.Locations.Load([]);
         Assert.True(thumbnails.Tokens[0].IsCancellationRequested);
         thumbnails.Complete();
     }

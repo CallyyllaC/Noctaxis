@@ -31,8 +31,7 @@ public interface IMapsuiBasemap
 public sealed class OpenStreetMapBasemap : IMapsuiBasemap
 {
     public BasemapDefinition Definition { get; } = new(BasemapKind.Street,
-        new("OpenStreetMap", MapProvider.Attribution, "https://www.openstreetmap.org/copyright",
-            "ODbL", "https://opendatacommons.org/licenses/odbl/1-0/"));
+        new("OpenStreetMap", Credits: [MapAttributions.OpenStreetMap]));
 
     public IReadOnlyList<ILayer> CreateLayers() => [Mapsui.Tiling.OpenStreetMap.CreateTileLayer()];
 }
@@ -79,7 +78,7 @@ public sealed class PlannerMapComposition
         var set = CreateLayerSet(_basemap);
         _native[BasemapId] = set.Geography;
         _native[BasemapReferenceId] = set.Reference;
-        foreach (var layer in NativeLayers) Map.Layers.Add(layer);
+        foreach (var layer in NativeLayers) Map.Layers.Add(SuppressProviderAttribution(layer));
         Runtime.BindAdapter(BasemapId, new MapsuiLayerStateAdapter(set.Geography, Map.RefreshGraphics));
         Runtime.BindAdapter(BasemapReferenceId, new MapsuiLayerStateAdapter(set.Reference, Map.RefreshGraphics));
         ApplyBasemapGates();
@@ -197,7 +196,7 @@ public sealed class PlannerMapComposition
         try
         {
             prepare();
-            for (var i = 0; i < layers.Count; i++) Map.Layers.Insert(index + i, layers[i]);
+            for (var i = 0; i < layers.Count; i++) Map.Layers.Insert(index + i, SuppressProviderAttribution(layers[i]));
         }
         catch
         {
@@ -208,6 +207,17 @@ public sealed class PlannerMapComposition
             }
             throw;
         }
+    }
+
+    /// <summary>
+    /// Mapsui draws each layer's own attribution as a link over the map. The Planner credits every active
+    /// provider in one strip of its own, from the composition's metadata, so the native links are switched
+    /// off rather than drawn on top of it. The layer keeps its source's attribution as data.
+    /// </summary>
+    private static ILayer SuppressProviderAttribution(ILayer layer)
+    {
+        layer.Attribution.Enabled = false;
+        return layer;
     }
 
     private static (ILayer[] Geography, ILayer[] Reference) CreateLayerSet(IMapsuiBasemap basemap)

@@ -36,17 +36,23 @@ public static class CelestialThemeTokens
     public static IReadOnlyList<string> All { get; } = [.. Objects, .. Chart];
 }
 
-/// <summary>The resolved celestial and chart colours of one theme palette.</summary>
-public sealed record CelestialColourSet(ImmutableArray<Color> Objects, Color BelowHorizon, Color TerrainFill, Color TerrainOutline)
+/// <summary>
+/// The resolved celestial and chart colours of one theme palette, and whether target patterns are emphasised:
+/// under a colour-vision mode the dash pattern is the identity colour cannot be relied on for, so dashed paths
+/// are drawn heavier (<see cref="Controls.CelestialPalette.Stroke"/>).
+/// </summary>
+public sealed record CelestialColourSet(ImmutableArray<Color> Objects, Color BelowHorizon, Color TerrainFill, Color TerrainOutline,
+    bool EmphasisePatterns = false)
 {
     /// <summary>Noctaxis Dark with no colour-vision mode; used before a theme is loaded.</summary>
     public static CelestialColourSet Default { get; } = FromPalette(BuiltInPalettes.Definitions[0].Dark.Palette);
 
     public Color this[Controls.CelestialRole role] => Objects[(int)role];
 
-    public static CelestialColourSet FromPalette(IReadOnlyDictionary<string, string> palette) => new(
+    public static CelestialColourSet FromPalette(IReadOnlyDictionary<string, string> palette, bool emphasisePatterns = false) => new(
         [.. CelestialThemeTokens.Objects.Select(token => Color.Parse(palette[token]))],
         Color.Parse(palette[CelestialThemeTokens.ChartBelowHorizon]),
         Color.Parse(palette[CelestialThemeTokens.ChartTerrainFill]),
-        Color.Parse(palette[CelestialThemeTokens.ChartTerrainOutline]));
+        Color.Parse(palette[CelestialThemeTokens.ChartTerrainOutline]),
+        emphasisePatterns);
 }

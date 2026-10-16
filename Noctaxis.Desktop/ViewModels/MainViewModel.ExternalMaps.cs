@@ -21,9 +21,29 @@ public partial class MainViewModel
     private bool CanOpenInMaps() => ExternalMapService.HasValidCoordinates(Latitude, Longitude);
 
     [RelayCommand(CanExecute = nameof(CanOpenInMaps))]
-    private void OpenInMaps()
+    private void OpenInMaps() => OpenMapCoordinates(Latitude, Longitude);
+
+    private bool CanOpenMapCoordinate(GeoCoordinate? coordinate) => coordinate is { } value &&
+        ExternalMapService.HasValidCoordinates(value.Latitude, value.Longitude);
+
+    /// <summary>Open a map-menu position without changing the Planner's observer or session.</summary>
+    [RelayCommand(CanExecute = nameof(CanOpenMapCoordinate))]
+    private void OpenMapCoordinate(GeoCoordinate? coordinate)
     {
-        if (_externalMaps.TryOpen(Latitude, Longitude, Settings.ExternalMapProvider, out var error)) return;
+        if (coordinate is { } value && CanOpenMapCoordinate(value)) OpenMapCoordinates(value.Latitude, value.Longitude);
+    }
+
+    private void OpenMapCoordinates(double? latitude, double? longitude)
+    {
+        if (_externalMaps.TryOpen(latitude, longitude, Settings.ExternalMapProvider, out var error)) return;
         StatusMessage = Strings.Format("Planner_Location_OpenMapsFailed_Format", error);
+    }
+
+    /// <summary>A map credit's source or licence page, from Map data &amp; licences.</summary>
+    [RelayCommand]
+    private void OpenMapDataLink(Uri? uri)
+    {
+        if (uri is null || _externalUriLauncher.TryOpen(uri, out var error)) return;
+        StatusMessage = Strings.Format("Planner_Map_OpenLinkFailed_Format", uri.Host, error);
     }
 }

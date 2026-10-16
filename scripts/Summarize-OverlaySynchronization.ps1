@@ -1,3 +1,4 @@
+#requires -Version 5.1
 param([string]$Path = "$PSScriptRoot/../docs/benchmarks/overlay-sync-native.json")
 $data = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
 function Percentile($values, $fraction) {

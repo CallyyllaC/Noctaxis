@@ -53,9 +53,10 @@ models are added.
 9. State and saved locations use versioned JSON files in the platform's user
    application-data folder. Writes use a temporary sibling followed by atomic
    replacement/move. Corrupt files are quarantined and defaults remain usable.
-10. Scouting cards are PNG-only at the UI. SkiaSharp renders a single byte
-    stream used for save and clipboard; an Apache-licensed PNG library writes
-    the versioned structured export model into `Noctaxis.ExportData` metadata.
+10. Plan images are PNG-only at the UI. One renderer draws a single byte
+    stream used for save and clipboard, and an Apache-licensed PNG library
+    embeds the minimal plan as `Noctaxis.Plan` metadata, which import reads
+    back (see `docs/plan-images.md`).
 
 ## Delivery sequence
 
@@ -99,8 +100,8 @@ models are added.
   Settings tab; remove the obsolete modal and informational Map section.
 - Keep the observer pin geographically anchored. Map panning is viewport-only;
   explicit pin dragging previews locally and commits once on release.
-- Model device-location availability independently from resolution and disable
-  unsupported or permanently denied states without startup permission requests.
+- Device-location functionality from this batch has since been removed. Choose places
+  by search, on the map or from saved locations; no device permission is requested.
 - Use one debounced search control for Planner and the cancellable Custom dialog;
   edit saved names and optional notes in a separate validated dialog.
 - Import and validate the OpenNGC J2000 CSV catalogue, add local combined

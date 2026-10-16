@@ -1,0 +1,1995 @@
+{
+  "schema_version": "1.0",
+  "report_id": "noctaxis-phase-0-independent-2026-10-15",
+  "title": "Noctaxis — Phase 0 Independent Architecture and Engineering Audit",
+  "investigation_date": "2026-10-14",
+  "recovery_and_report_date": "2026-10-15",
+  "repository": "H:/Noctaxis",
+  "inspected_head": "468c48f1593ac9a7d55a763e4603f7ba56bbd0c9",
+  "scope": "Current working tree at investigation time, including existing uncommitted and untracked source. Discovery and evidence only.",
+  "independence": {
+    "other_reviewer_consulted": false,
+    "previous_performance_audits_consulted": false,
+    "benchmarks_run": false,
+    "profiling_run": false,
+    "production_changes_made": false
+  },
+  "evidence_limitations": [
+    "Recovered session record and surviving diagnostic harness are the evidence sources for this report. The investigation was not restarted during recovery.",
+    "The 571-file inventory and source-hash baseline were recorded during investigation but the original functions store is unavailable after recovery. A post-investigation hash comparison cannot be claimed.",
+    "Initial git status had 307 entries (135 modified, 7 deleted, 165 untracked); recovery observed 321 entries before report creation. Concurrent or intervening changes were not investigated or attributed.",
+    "Source line numbers are those recorded during investigation; symbols identify the intended code if intervening changes move lines.",
+    "Original test output survives in the session record; separate TRX or complete raw logs were not recovered.",
+    "No native GUI, real-network failure, cross-platform package, full-suite, benchmark, profiling, vulnerability-advisory, or independent scientific-reference validation was performed."
+  ],
+  "severity_scale": {
+    "high": "Material correctness failure in an ordinary supported workflow; recommend resolution before early access.",
+    "medium": "Important but bounded correctness, recovery, resource, or data-safety concern; release decision depends on exposure.",
+    "low": "Limited impact or maintainability concern; normally follow-up work.",
+    "informational": "Positive finding or evidence gap, not a defect."
+  },
+  "priority_scale": {
+    "P1": "Before early access, or explicit release acceptance with narrow evidence.",
+    "P2": "Early-access hardening or next targeted validation.",
+    "P3": "Measure or improve when evidence justifies the work."
+  },
+  "tests": [
+    {
+      "id": "T01",
+      "project": "Noctaxis.Core.Tests",
+      "filter": "FullyQualifiedName~PersistenceAndWeatherTests|FullyQualifiedName~NoctaxisPlanTests|FullyQualifiedName~StateCompatibilityTests",
+      "passed": 63,
+      "failed": 0,
+      "skipped": 0,
+      "configuration": "Release",
+      "out_dir": "H:/Noctaxis/artifacts/independent-review/core/",
+      "evidence": "Recorded tool output; raw TRX unavailable. Initial NU1301 sandbox restore failure; permitted network retry succeeded."
+    },
+    {
+      "id": "T02",
+      "project": "Noctaxis.Desktop.Tests",
+      "filter": "FullyQualifiedName~StateSaveSchedulerTests|FullyQualifiedName~PlannerTimelineTests|FullyQualifiedName~PlanImageTests",
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "configuration": "Release",
+      "out_dir": "H:/Noctaxis/artifacts/independent-review/desktop/",
+      "evidence": "Only StateSaveSchedulerTests matched: timeline and image test files use a partial MainViewModelTests class. Corrected with T03."
+    },
+    {
+      "id": "T03",
+      "project": "Noctaxis.Desktop.Tests",
+      "filter": "FullyQualifiedName~AValidPlanRestoresTheMinimalState|FullyQualifiedName~APlanImageOpensBackToThePlanItWasMadeFrom|FullyQualifiedName~TheWindowRunsTwentyFourHoursOnFromTheMoment|FullyQualifiedName~EveryChangeFromTheBarReanchorsTheWindow|FullyQualifiedName~TheExportedPngCarriesTheMinimalPlan",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "configuration": "Release; --no-build --no-restore",
+      "out_dir": "H:/Noctaxis/artifacts/independent-review/desktop/",
+      "evidence": "Recorded tool output. Six test cases from five method-name selectors."
+    }
+  ],
+  "reproduction": {
+    "project": "H:/Noctaxis/artifacts/independent-review/repros/Repros.csproj",
+    "files": [
+      "Program.cs",
+      "DesktopProbe.cs",
+      "SingleThreadContext.cs"
+    ],
+    "execution_command": "dotnet run --project H:/Noctaxis/artifacts/independent-review/repros/Repros.csproj -c Release -p:UseAppHost=false -p:OutDir=H:/Noctaxis/artifacts/independent-review/repros/run-final/",
+    "execution_status": "Completed with exit code 0 during original investigation; not rerun during report recovery.",
+    "constraints": "References isolated compiled Core and Desktop test outputs. Links existing VectorTile.cs without editing it. Desktop probe uses reflection over existing test helpers and a serial SynchronizationContext, not a real Avalonia window.",
+    "recorded_output": [
+      "Instant via minute-only local controls: 2026-10-25T01:30:45Z -> 2026-10-25T00:30:00Z",
+      "10:50 forecast: cache=2026-10-14T10:00:00Z, cloud=10; mapper=2026-10-14T11:00:00Z, cloud=90",
+      "Malformed vector length exception: OverflowException",
+      "Environment retry after provider recovery: calls=1, sameSnapshot=True, coverage=False",
+      "Null location state exception: NullReferenceException; file remains=True",
+      "Time before change: 11:00",
+      "Time change during terrain load: environmentRequests=1, environmentNull=True, terrainComplete=False, plannerPhase=PlannerRefreshState { Generation = 2, Scope = Astronomy, Phase = Ready, AstronomyState = Ready, CelestialOverlayState = Ready, CameraGeometryState = Ready, WeatherState = Ready, GroundTerrainState = NotRequired, EnvironmentMetadataState = NotRequired, StatusText = Planner ready, CameraTerrainState = NotRequired, IsRefreshing = False, IsCoreReady = True, HasBlockingError = False, HasOptionalFailure = False, PinActivity = None, Progress = 1 }"
+    ]
+  },
+  "findings": [
+    {
+      "id": "D01",
+      "title": "An astronomy refresh abandons a pending observer environment result",
+      "component": "Desktop planner refresh coordination",
+      "classification": "Verified correctness defect",
+      "confidence": "High",
+      "severity": "high",
+      "priority": "P1",
+      "release_relevance": "Recommend resolving before early access: a normal time adjustment can leave incomplete terrain with a Ready status.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 1987,
+          "symbol": "SchedulePlannerRefresh"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2014,
+          "symbol": "RefreshNowAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2157,
+          "symbol": "CommitCoreAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2200,
+          "symbol": "CommitEnvironmentAsync"
+        }
+      ],
+      "problem": "One refresh cancellation/generation governs both astronomy and observer-dependent environment completion. A new astronomy-only request cancels the previous observer refresh, but does not request or rejoin its pending environment work. It copies the previous terrain/environment even when incomplete.",
+      "evidence": [
+        "SchedulePlannerRefresh cancels _refreshCancellation and increments generation for every scope (recorded lines 1987–2000).",
+        "RefreshNowAsync requests environment work only for Observer scope (2014–2040). Astronomy scope can complete with environment and ground terrain NotRequired.",
+        "CommitCoreAsync reuses prior terrain/environment for an astronomy refresh at effectively the same observer (2167–2174), without requiring that environment completion has occurred.",
+        "CommitEnvironmentAsync rejects the old result on cancellation/generation mismatch. The replacement refresh can reach Ready (2053–2064) without any remaining consumer that can publish complete terrain.",
+        "The staged compiled-view-model probe observed one environment request, null Environment, incomplete Terrain and Phase=Ready after the old environment result was released."
+      ],
+      "reproduction_steps": [
+        "Create the real compiled MainViewModel using existing MainViewModelTests.StagedPlanning, FakeStore and FakeExporter helpers; run continuations on the surviving serial SynchronizationContext.",
+        "Commit a new observer at (53, -1); complete core and weather and allow the initial terrain-bearing snapshot to commit, but hold full environment completion.",
+        "Call StepTime(30), causing an Astronomy refresh; complete its core/weather work and await the new refresh.",
+        "Complete the original environment request and await the old refresh.",
+        "Inspect Snapshot and PlannerRefresh. Recorded result: environmentRequests=1; environmentNull=True; terrainComplete=False; Phase=Ready; GroundTerrainState/EnvironmentMetadataState=NotRequired."
+      ],
+      "consequences": "The planner can stop receiving the full terrain/environment for the selected observer until another observer refresh or equivalent invalidation occurs. Dependent presentation can remain incomplete while the overall status promises readiness.",
+      "recommendation": "Give observer-dependent work a lifecycle independent of astronomy changes, or explicitly rejoin pending environment work for the current observer. Reusing a completed result is valid; dropping the only publisher of an incomplete result is not. Add the exact interleaving as a deterministic regression test before changing coordination.",
+      "regression_risks": "Do not allow stale observer results to commit, duplicate expensive terrain builds, or make time changes wait unnecessarily for optional data. Preserve completed-terrain reuse and current core-first responsiveness.",
+      "limitations": "This is a compiled view-model reproduction with existing fakes, not a native GUI capture or real terrain download."
+    },
+    {
+      "id": "D02",
+      "title": "Absolute plan/timeline instants are converted through ambiguous minute-only local time",
+      "component": "Plan-image import and timeline/time controls",
+      "classification": "Verified correctness defect",
+      "confidence": "High for the conversion failure; full image/timeline UI scenario not executed",
+      "severity": "high",
+      "priority": "P1",
+      "release_relevance": "Astronomy plans must retain the requested instant. The daylight-saving overlap changes the time by an hour; second precision is lost outside overlaps too.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.PlanImage.cs",
+          "line": 228,
+          "symbol": "ImportPlanImage / ApplyPlan"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.TimeBar.cs",
+          "line": 64,
+          "symbol": "SetLocalDateTime"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 1842,
+          "symbol": "ApplyLocalDateTime"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Time/TimeZoneResolver.cs",
+          "line": 50,
+          "symbol": "ResolveLocal"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.Timeline.cs",
+          "line": 77,
+          "symbol": "TimelineSelectedInstant and timeline selection conversion"
+        }
+      ],
+      "problem": "Import starts with an unambiguous UTC Instant, converts it to local date/time, formats only hours/minutes into controls, and resolves that wall time again with lenient zone mapping. The second occurrence of a repeated local time cannot survive this route. Timeline selection also round-trips absolute offsets through local time.",
+      "evidence": [
+        "Plan application uses TimeUtc.InZone(...).LocalDateTime and SetLocalDateTime rather than retaining TimeUtc as the authoritative instant (PlanImage.cs recorded lines 228–258).",
+        "SetLocalDateTime formats TimeText as HH:mm. ResolveLocal uses InZoneLeniently.",
+        "The direct conversion probe transformed 2026-10-25T01:30:45Z in Europe/London to 2026-10-25T00:30:00Z.",
+        "Timeline.cs recorded lines 91–113 likewise convert an absolute selection through local/snap/lenient resolution. Existing passing whole-minute, non-overlap plan tests do not cover this boundary."
+      ],
+      "reproduction_steps": [
+        "Take Instant.FromUtc(2026,10,25,1,30,45), the later 01:30 in Europe/London.",
+        "Convert to LocalDateTime in Europe/London, then keep only its date/hour/minute as the controls do.",
+        "Call TimeZoneResolver.ResolveLocal with that date/time and zone.",
+        "Observe 2026-10-25T00:30:00Z instead of the original instant."
+      ],
+      "consequences": "A reopened or selected plan can point at the wrong sky/time and weather hour. Ordinary seconds are discarded; the autumn overlap adds a one-hour error.",
+      "recommendation": "Keep Instant authoritative for imports and absolute timeline selections. Format local controls for display without using them to reconstruct already-known instants. For actual wall-time edits, specify and test an ambiguity policy.",
+      "regression_risks": "Cover both daylight-saving folds, spring gaps, zone changes, timeline snapping and second precision. Preserve intended minute snapping for explicit user actions without applying it silently to imported absolute times.",
+      "limitations": "The failing conversion chain was executed directly. A PNG import through a live window and every timeline interaction were not exercised.",
+      "external_sources": [
+        {
+          "title": "NodaTime DateTimeZone: lenient mapping semantics",
+          "url": "https://nodatime.org/3.3.x/api/NodaTime.DateTimeZone.html",
+          "supports": "Lenient mapping chooses the earlier occurrence for ambiguous local times."
+        }
+      ]
+    },
+    {
+      "id": "D03",
+      "title": "Geographic weather cache can return the wrong forecast hour",
+      "component": "Weather cache and Open-Meteo mapping",
+      "classification": "Verified correctness defect",
+      "confidence": "High",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Visible planning information can be stale by an hour during ordinary time changes without any provider failure.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Weather/OpenMeteoWeatherProvider.cs",
+          "line": 39,
+          "symbol": "GeographicWeatherCache.TryGet"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Weather/OpenMeteoWeatherProvider.cs",
+          "line": 140,
+          "symbol": "OpenMeteoWeatherProvider.GetWeatherAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Weather/OpenMeteoWeatherProvider.cs",
+          "line": 258,
+          "symbol": "OpenMeteoMapper.TryMap"
+        }
+      ],
+      "problem": "The geographic cache accepts samples within 60 minutes of the requested instant and ranks by spatial distance. This can short-circuit the nearest-hour selection made by the hourly forecast mapper.",
+      "evidence": [
+        "Cache filtering uses absolute forecast-time distance below 60 minutes, then orders spatially (recorded lines 39–59).",
+        "GetWeatherAsync checks this cache before the retained forecast/mapper path.",
+        "With hourly cloud values 10 at 10:00 and 90 at 11:00, a 10:00 cached sample is returned for 10:50, while mapping the same hourly data chooses 11:00."
+      ],
+      "reproduction_steps": [
+        "Construct a two-hour forecast with timestamps 10:00/11:00 UTC and cloud cover 10/90.",
+        "Map and store the 10:00 sample at one coordinate in GeographicWeatherCache.",
+        "Request the same coordinate at 10:50, within cache TTL.",
+        "Compare the cache result with OpenMeteoMapper.TryMap over the existing hourly forecast: cache=10:00/cloud10; mapper=11:00/cloud90."
+      ],
+      "consequences": "Displayed weather depends on cache history rather than the same forecast-selection rule used for an uncached request. This can misinform a planned observation.",
+      "recommendation": "Use retained forecast data as the canonical source for time selection, or key mapped entries by the selected forecast hour and relevant request identity. Test adjacent-hour boundaries and multiple cached hours.",
+      "regression_risks": "Preserve geographic reuse, offline availability and network request reduction. Do not fix a selection error by forcing an API request on every time change.",
+      "limitations": "Deterministic cache/mapper probe, not a real API call. Configuration-field identity was considered but a separate user-visible defect was not established."
+    },
+    {
+      "id": "D04",
+      "title": "Unavailable environmental results remain authoritative after provider recovery",
+      "component": "Environmental and horizon completed-result caches",
+      "classification": "Verified correctness defect",
+      "confidence": "High for same-service recovery failure",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "A transient initial data outage can persist through ordinary retries during the session.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/PlannerEnvironmentService.cs",
+          "line": 56,
+          "symbol": "GetSnapshotAsync / BuildAndCacheAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Terrain/TerrainProviders.cs",
+          "line": 224,
+          "symbol": "HorizonService completed-result lookup"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Terrain/TerrainProviders.cs",
+          "line": 432,
+          "symbol": "Completed horizon publication"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/CompletedResultCache.cs",
+          "line": null,
+          "symbol": "CompletedResultCache"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrariumTerrainProvider.cs",
+          "line": 381,
+          "symbol": "Recent failure handling"
+        }
+      ],
+      "problem": "Completed-result caches admit results with unavailable or incomplete terrain and do not give those outcomes a freshness/retry policy. Lower-level transient-failure expiry cannot help when a higher cache satisfies the request without consulting the recovered provider.",
+      "evidence": [
+        "PlannerEnvironmentService caches completed snapshots, including unavailable coverage, in a small capacity-limited cache without an outcome-sensitive expiry.",
+        "HorizonService also retains completed profiles without making availability a cache-admission requirement.",
+        "A stub horizon changed from unavailable to available; a second environmental request returned the identical snapshot with no second horizon call: calls=1, sameSnapshot=True, coverage=False."
+      ],
+      "reproduction_steps": [
+        "Create PlannerEnvironmentService with a stub IHorizonService initially returning a no-coverage profile.",
+        "Request one observer snapshot and allow completion.",
+        "Change the stub to return an available profile.",
+        "Request the same observer again without unrelated invalidation; observe that the provider is not called and the original unavailable snapshot is returned."
+      ],
+      "consequences": "Users may need an explicit invalidation, eviction or application restart to recover from transient data unavailability. A small entry count does not make cached failures fresh.",
+      "recommendation": "Define availability-aware admission/expiry and explicit retry semantics at every completed-result layer. Retain stable successful data aggressively, but allow unavailable/partial outcomes to be rebuilt when retry or source generation warrants it.",
+      "regression_risks": "Avoid retry storms during a real outage and avoid repeatedly recalculating valid static terrain. Distinguish a successfully completed unavailable result from a faulted task and from an intentionally limited profile.",
+      "limitations": "The environmental cache recovery failure is executed evidence; lower-level cache interactions are source-supported. No real offline-to-online transition was run."
+    },
+    {
+      "id": "D05",
+      "title": "A structurally invalid location entry escapes state-file recovery",
+      "component": "JSON persistence and legacy migration",
+      "classification": "Verified correctness defect",
+      "confidence": "High",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Malformed local state can repeatedly prevent successful startup; not shown to be produced by normal saving.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 82,
+          "symbol": "LoadAsync recovery catch filter"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 154,
+          "symbol": "ToDomain legacy location migration"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 519,
+          "symbol": "Startup error handling"
+        }
+      ],
+      "problem": "A deserializable Locations array containing null reaches migration code that dereferences each location. NullReferenceException is outside the recovery filter, so the malformed file is neither successfully loaded nor handled by the expected quarantine/default recovery path.",
+      "evidence": [
+        "LoadAsync handles JSON, I/O, authorization, argument and invalid-data exceptions but not the null dereference generated by migration.",
+        "The version<4 migration accesses each location's ObserverElevation.",
+        "A version-3 state with Locations:[null] threw NullReferenceException and remained in place."
+      ],
+      "reproduction_steps": [
+        "Use JsonUserDataStore to write a minimal version-3 state to an isolated fixture directory.",
+        "Replace its Locations property with [null], retaining valid JSON.",
+        "Call LoadAsync.",
+        "Observe NullReferenceException and that the state file remains present. The surviving probe uses only its own state-fixture path."
+      ],
+      "consequences": "The same structurally invalid file can fail every subsequent initialization. Application startup handles failure at a higher level, but that does not repair/quarantine the bad state.",
+      "recommendation": "Validate deserialized collection elements and required domain fields before migration and route invalid input through the intentional recovery policy. Prefer explicit validation to broadly swallowing programmer NullReferenceExceptions.",
+      "regression_risks": "Preserve valid legacy records, migration fixtures and backup/recovery behavior. Do not silently drop legitimate locations or overwrite the only recoverable original.",
+      "limitations": "Proven for the version-3/null-location fixture. No claim that all malformed version-4 shapes fail or that ordinary application saving produces this input."
+    },
+    {
+      "id": "D06",
+      "title": "Malformed vector lengths escape decoder recovery and can leave a faulted cached task",
+      "component": "Vector tile decoder and themed decoded cache",
+      "classification": "Verified correctness defect",
+      "confidence": "High for decoder contract violation; high source confidence for cache consequence",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Corrupt cached or server tile input can repeatedly fail a tile until eviction/recreation; no whole-application crash was demonstrated.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/VectorTile.cs",
+          "line": 220,
+          "symbol": "ProtobufReader.Bytes"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/VectorTile.cs",
+          "line": 75,
+          "symbol": "DecodeLayer extent conversion"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/ThemedVectorTileSource.cs",
+          "line": 126,
+          "symbol": "GetDecodedAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/ThemedVectorTileSource.cs",
+          "line": 149,
+          "symbol": "LoadAsync"
+        }
+      ],
+      "problem": "Length conversion uses checked int casts that throw OverflowException, while the decoded source only treats InvalidDataException as recoverable corrupt input. The task is stored before decoding finishes; the fault bypasses normal cleanup/discard logic.",
+      "evidence": [
+        "VectorTile.Decode on bytes 1a 80 80 80 80 08 throws OverflowException from the oversized protobuf length.",
+        "ThemedVectorTileSource.LoadAsync catches InvalidDataException, not this overflow.",
+        "GetDecodedAsync retains the created task. The normal removal path after the try/catch is bypassed on an unexpected decoder exception."
+      ],
+      "reproduction_steps": [
+        "Call VectorTile.Decode(new byte[] {0x1a,0x80,0x80,0x80,0x80,0x08}).",
+        "Observe OverflowException instead of the malformed-input exception expected by LoadAsync.",
+        "For future integration validation, place that payload behind a fake tile fetcher and request the tile twice; the latter cache consequence was not executed in this phase."
+      ],
+      "consequences": "A corrupt input can remain a faulted decoded entry and may leave the invalid disk payload intact, so ordinary retries do not necessarily recover. This is a robustness issue, not evidence of remote code execution.",
+      "recommendation": "Validate sizes/tags before casts and normalize malformed-input failures to a defined decoder contract. Ensure faulted in-flight entries are removed in identity-safe cleanup and discard known-invalid raw payloads.",
+      "regression_risks": "Do not hide genuine programming faults, remove a newer replacement task by key alone, or reject valid protobuf encodings. Add small malformed-input tests without allocating huge buffers.",
+      "limitations": "Only the decoder failure was directly executed. Repeated fetch/render behavior and native UI consequences remain source-based predictions."
+    },
+    {
+      "id": "A01",
+      "title": "Environmental build ownership breaks cancellation across service layers",
+      "component": "Environment/horizon orchestration",
+      "classification": "Strongly supported architectural problem",
+      "confidence": "High for ownership mechanism; user cost unmeasured",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Validate alongside D01: correcting publication without correcting abandoned-work ownership can preserve unnecessary background work.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/PlannerEnvironmentService.cs",
+          "line": 56,
+          "symbol": "GetSnapshotAsync / BuildAndCacheAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Terrain/TerrainProviders.cs",
+          "line": 224,
+          "symbol": "HorizonService shared requests and consumers"
+        }
+      ],
+      "problem": "The environmental service shares a producer started with CancellationToken.None, while individual callers only cancel their WaitAsync. A downstream horizon service may correctly count consumers, but its consumer here remains uncancellable. Per-build concurrency limits do not bound the number of simultaneous observer builds.",
+      "evidence": [
+        "The recorded BuildAndCacheAsync/BuildAsync path uses CancellationToken.None; GetSnapshotAsync applies caller cancellation to waiting.",
+        "The _snapshots in-flight dictionary is keyed by observer and does not impose a global active-build cap.",
+        "HorizonService's consumer cancellation cannot stop work while its environmental caller remains interested indefinitely. Clearing a cache dictionary alone does not cancel the producer."
+      ],
+      "consequences": "Rapid observer changes can leave obsolete terrain work running after the view model has abandoned it. Network, CPU and memory use may accumulate across concurrent builds. Magnitude and user-visible latency are unmeasured.",
+      "recommendation": "Write a controlled multi-consumer cancellation test first. Give shared producers explicit lifetime ownership, with cancellation when the last consumer leaves or a deliberately bounded background policy. Consider a global work bound if measurements justify it. P01 specifies a later load scenario.",
+      "regression_risks": "Do not use the first caller's cancellation token as the shared producer token: one caller must not cancel work still needed by another. Preserve coalescing and safe invalidation.",
+      "limitations": "Source-supported lifecycle mismatch; no cancellation-load benchmark or peak resource measurement was run."
+    },
+    {
+      "id": "A02",
+      "title": "Planner state coherence depends on several separate mutable generations",
+      "component": "MainViewModel and derived planner results",
+      "classification": "Strongly supported architectural problem",
+      "confidence": "High for coordination burden; not every interleaving is defective",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Make focused ownership improvements around reproduced failures; a large rewrite is not an early-access prerequisite.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 1987,
+          "symbol": "Refresh scheduling and snapshot commits"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.Timeline.cs",
+          "line": 149,
+          "symbol": "Timeline path requests"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.PlanImage.cs",
+          "line": 56,
+          "symbol": "CreateExportPng"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.CameraFrame.cs",
+          "line": null,
+          "symbol": "Camera-derived state"
+        }
+      ],
+      "problem": "Session, snapshot, terrain, timeline, focused target, camera and export inputs are updated by different mechanisms. Generation checks protect individual operations, but consumers can still read a combination of results from different generations. File size alone is not the defect; cross-result coherence is the difficult contract.",
+      "evidence": [
+        "D01 is a reproduced case where generation rejection prevents stale publication but also loses necessary current-observer completion.",
+        "Timeline and export read independently maintained state rather than a single validated generation-tagged result bundle.",
+        "The main view model is split into partials but shared mutable state and suppression/refresh responsibilities still cross those files."
+      ],
+      "consequences": "Changes to one feature require understanding ordering assumptions elsewhere. Tests for isolated successful refreshes can miss transitions between partial and complete states. U01 describes an export-coherence hypothesis needing validation.",
+      "recommendation": "Define invariants for observer identity, instant/window identity and completion of each derived result. Introduce narrowly scoped ownership/coherence boundaries where those invariants are currently implicit; an immutable export input bundle and independent observer work ownership are concrete candidates. Do not split files merely to reduce line counts.",
+      "regression_risks": "Preserve core-first responsiveness, live camera edits, focus ownership and cached results. Avoid centralizing unrelated rendering state or creating a generic orchestration framework without a demonstrated need.",
+      "limitations": "This is supported architectural coupling, not proof that every derived view is currently inconsistent."
+    },
+    {
+      "id": "P01",
+      "title": "Obsolete observer builds may accumulate behind apparently cancelled requests",
+      "component": "Environmental work",
+      "priority": "P1",
+      "confidence": "High mechanism confidence; bottleneck unverified",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/PlannerEnvironmentService.cs",
+          "line": 56,
+          "symbol": "GetSnapshotAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Terrain/TerrainProviders.cs",
+          "line": 224,
+          "symbol": "HorizonService"
+        }
+      ],
+      "problem": "Observer changes can start distinct environmental builds that continue after their callers cancel, as described in A01. A six-worker per-horizon limit is not a total service limit.",
+      "resource_types": [
+        "CPU",
+        "network I/O",
+        "allocation",
+        "memory",
+        "concurrency"
+      ],
+      "scenario": "After correctness/lifetime tests, compare one observer request with a controlled sequence of 20 observer moves while earlier terrain is pending. Run cold-cache, warm-cache and unavailable-source cases; do not mix them into one average.",
+      "measurements": [
+        "Peak active observer builds and tile workers",
+        "Cancelled callers versus completed obsolete producers",
+        "Fetched bytes and distinct tiles",
+        "CPU and allocation per accepted result",
+        "Peak working set and GC pressure",
+        "Time until the final observer has usable terrain and UI dispatch latency"
+      ],
+      "consequences": "Background work for discarded observers may compete with the final requested location.",
+      "recommendation": "Measure cancellation propagation and active-work bounds before tuning worker counts. If confirmed, fix ownership/coalescing and only then tune parallelism.",
+      "regression_risks": "Multi-consumer work sharing, cache reuse and valid partial terrain must survive.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. Prioritize validation because it overlaps a correctness/lifetime risk.",
+      "evidence": [
+        "Observer changes can start distinct environmental builds that continue after their callers cancel, as described in A01. A six-worker per-horizon limit is not a total service limit."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "After correctness/lifetime tests, compare one observer request with a controlled sequence of 20 observer moves while earlier terrain is pending. Run cold-cache, warm-cache and unavailable-source cases; do not mix them into one average.",
+        "measurements": [
+          "Peak active observer builds and tile workers",
+          "Cancelled callers versus completed obsolete producers",
+          "Fetched bytes and distinct tiles",
+          "CPU and allocation per accepted result",
+          "Peak working set and GC pressure",
+          "Time until the final observer has usable terrain and UI dispatch latency"
+        ],
+        "resources": [
+          "CPU",
+          "network I/O",
+          "allocation",
+          "memory",
+          "concurrency"
+        ]
+      }
+    },
+    {
+      "id": "P02",
+      "title": "Synchronous astronomy/event computation can occur before the first asynchronous boundary",
+      "component": "Planning and astronomy",
+      "priority": "P1",
+      "confidence": "High for synchronous work; actual UI cost unmeasured",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Planning/PlanningService.cs",
+          "line": 202,
+          "symbol": "Core calculation setup"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Astronomy/AstronomyService.cs",
+          "line": 43,
+          "symbol": "Calculate"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Astronomy/AstronomyService.cs",
+          "line": 127,
+          "symbol": "Event calculation"
+        }
+      ],
+      "problem": "Task.FromResult(astronomy.Calculate(...)) evaluates Calculate synchronously. Event searches use repeated samples; catalogue event calculations and paths/timeline can repeat related work at different sample intervals. Cancellation checks outside a calculation do not interrupt its inner loop.",
+      "resource_types": [
+        "CPU",
+        "allocation",
+        "UI latency",
+        "cancellation latency"
+      ],
+      "scenario": "Trace a normal date/time change and repeated scrubbing with the maximum supported visible-target configuration, representative catalogue targets and polar/mid-latitude observers. Separate position, events, path generation and optional terrain costs.",
+      "measurements": [
+        "Calling thread and UI dispatch delay",
+        "CPU samples by position/event/path function",
+        "Number of repeated astronomical evaluations per accepted refresh",
+        "Allocation and collections",
+        "Time to observe cancellation and count of discarded completed calculations"
+      ],
+      "consequences": "If this work runs on the UI continuation and takes material time, controls may stall; if it is cheap enough or already off-thread in the relevant path, there may be no bottleneck.",
+      "recommendation": "First establish thread ownership and measured cost. Then consider separating instant positions from daily events or reusing appropriately keyed calculations; offload only where thread-safety and cancellation are clear.",
+      "regression_risks": "Event precision, time-zone boundaries, target identity, refraction and thread-safety of dependencies.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. Prioritize validation because it overlaps a correctness/lifetime risk.",
+      "evidence": [
+        "Task.FromResult(astronomy.Calculate(...)) evaluates Calculate synchronously. Event searches use repeated samples; catalogue event calculations and paths/timeline can repeat related work at different sample intervals. Cancellation checks outside a calculation do not interrupt its inner loop."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Trace a normal date/time change and repeated scrubbing with the maximum supported visible-target configuration, representative catalogue targets and polar/mid-latitude observers. Separate position, events, path generation and optional terrain costs.",
+        "measurements": [
+          "Calling thread and UI dispatch delay",
+          "CPU samples by position/event/path function",
+          "Number of repeated astronomical evaluations per accepted refresh",
+          "Allocation and collections",
+          "Time to observe cancellation and count of discarded completed calculations"
+        ],
+        "resources": [
+          "CPU",
+          "allocation",
+          "UI latency",
+          "cancellation latency"
+        ]
+      }
+    },
+    {
+      "id": "P03",
+      "title": "Catalogue search performs repeated normalization and ranking synchronously",
+      "component": "Local target search and UI search orchestration",
+      "priority": "P2",
+      "confidence": "High for algorithm shape; user latency unverified",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Catalogues/TargetCatalogue.cs",
+          "line": null,
+          "symbol": "LocalTargetSearchService.SearchAsync / MatchRank"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/CelestialObjectViewModels.cs",
+          "line": 140,
+          "symbol": "SearchAsync"
+        }
+      ],
+      "problem": "The inspected local search returns Task.FromResult around synchronous filtering/ranking and repeatedly normalizes strings/aliases. A debounce limits request frequency but does not make the surviving request asynchronous.",
+      "resource_types": [
+        "CPU",
+        "allocation",
+        "UI latency"
+      ],
+      "scenario": "Use the shipped catalogue with incremental common/rare/alias/no-match queries on a representative lower-power machine. Include cultures and rapid replacement of a pending query.",
+      "measurements": [
+        "Search execution thread",
+        "End-to-end input-to-result latency including p95",
+        "Normalization and comparison counts",
+        "Bytes allocated per query",
+        "Cancellation behavior and stale results"
+      ],
+      "consequences": "A sufficiently expensive surviving query could interrupt typing. The catalogue may also be small enough in practice for this to be negligible.",
+      "recommendation": "Measure first; if material, precompute stable normalized keys and consider cancellation-aware background evaluation rather than adding another debounce delay.",
+      "regression_risks": "Alias ranking, Unicode/culture handling, result ordering and focus/selection preservation.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "The inspected local search returns Task.FromResult around synchronous filtering/ranking and repeatedly normalizes strings/aliases. A debounce limits request frequency but does not make the surviving request asynchronous."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Use the shipped catalogue with incremental common/rare/alias/no-match queries on a representative lower-power machine. Include cultures and rapid replacement of a pending query.",
+        "measurements": [
+          "Search execution thread",
+          "End-to-end input-to-result latency including p95",
+          "Normalization and comparison counts",
+          "Bytes allocated per query",
+          "Cancellation behavior and stale results"
+        ],
+        "resources": [
+          "CPU",
+          "allocation",
+          "UI latency"
+        ]
+      }
+    },
+    {
+      "id": "P04",
+      "title": "Expired map metadata may serialize repeated network refresh attempts before cached tiles are read",
+      "component": "OpenFreeMap template resolution",
+      "priority": "P2",
+      "confidence": "High source confidence; outage latency not simulated",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/OpenFreeMapTileFetcher.cs",
+          "line": 82,
+          "symbol": "FetchCoreAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/OpenFreeMapTileFetcher.cs",
+          "line": 113,
+          "symbol": "ResolveTemplateAsync"
+        }
+      ],
+      "problem": "Template resolution occurs before local tile retrieval. An expired TileJSON record triggers work under a shared template gate; fallback to the old record does not advance its retrieved timestamp. Subsequent tile callers can retry the same failed refresh serially.",
+      "resource_types": [
+        "Network I/O",
+        "queueing",
+        "latency"
+      ],
+      "scenario": "Seed valid cached tiles and an expired manifest, then use a deterministic failing or delayed metadata endpoint. Pan once and compare against a fresh-manifest/offline baseline.",
+      "measurements": [
+        "Metadata request count per viewport",
+        "Time waiting for template gate",
+        "Cached tile time-to-first-display",
+        "Retry spacing",
+        "Queue length and cancellation response"
+      ],
+      "consequences": "Cached basemap availability may depend unnecessarily on a repeatedly failing metadata service. No actual duration or outage behavior was measured.",
+      "recommendation": "If reproduced, allow cached rendering while a shared refresh attempt/backoff policy manages metadata freshness.",
+      "regression_risks": "Do not keep obsolete templates forever, bypass provider changes, or introduce a retry loop.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "Template resolution occurs before local tile retrieval. An expired TileJSON record triggers work under a shared template gate; fallback to the old record does not advance its retrieved timestamp. Subsequent tile callers can retry the same failed refresh serially."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Seed valid cached tiles and an expired manifest, then use a deterministic failing or delayed metadata endpoint. Pan once and compare against a fresh-manifest/offline baseline.",
+        "measurements": [
+          "Metadata request count per viewport",
+          "Time waiting for template gate",
+          "Cached tile time-to-first-display",
+          "Retry spacing",
+          "Queue length and cancellation response"
+        ],
+        "resources": [
+          "Network I/O",
+          "queueing",
+          "latency"
+        ]
+      }
+    },
+    {
+      "id": "P05",
+      "title": "PNG plan metadata processing decodes/re-encodes image content",
+      "component": "Plan image import/export",
+      "priority": "P2",
+      "confidence": "High for extra image work; normal-image cost unmeasured",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Export/PngMetadataWriter.cs",
+          "line": 8,
+          "symbol": "AddText"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Export/PngMetadataWriter.cs",
+          "line": 24,
+          "symbol": "ReadText"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.PlanImage.cs",
+          "line": 228,
+          "symbol": "ImportPlanImage"
+        }
+      ],
+      "problem": "Adding metadata processes full image rows after rendering; reading metadata also traverses image content. An absent key can cause repeated parsing at higher layers. Import is invoked synchronously from the view-model path.",
+      "resource_types": [
+        "CPU",
+        "allocation",
+        "memory",
+        "UI latency"
+      ],
+      "scenario": "Measure realistic exported images at supported dimensions and external PNGs with/without plan metadata. Separate drawing, encoding, metadata embedding, decoding and view-model application.",
+      "measurements": [
+        "Per-stage CPU and wall time",
+        "Peak managed/native memory",
+        "Allocated bytes and collections",
+        "UI dispatch delay",
+        "Number of full image passes"
+      ],
+      "consequences": "Large plans or externally supplied images may delay import/export and temporarily duplicate image memory.",
+      "recommendation": "Measure representative sizes. If significant, use bounded metadata-only PNG chunk handling or move expensive parsing off the UI thread while retaining input validation. R02 addresses safety limits independently of speed.",
+      "regression_risks": "PNG CRC/chunk ordering, Unicode metadata, pixel fidelity, ancillary chunks and corrupt-file handling.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "Adding metadata processes full image rows after rendering; reading metadata also traverses image content. An absent key can cause repeated parsing at higher layers. Import is invoked synchronously from the view-model path."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Measure realistic exported images at supported dimensions and external PNGs with/without plan metadata. Separate drawing, encoding, metadata embedding, decoding and view-model application.",
+        "measurements": [
+          "Per-stage CPU and wall time",
+          "Peak managed/native memory",
+          "Allocated bytes and collections",
+          "UI dispatch delay",
+          "Number of full image passes"
+        ],
+        "resources": [
+          "CPU",
+          "allocation",
+          "memory",
+          "UI latency"
+        ]
+      }
+    },
+    {
+      "id": "P06",
+      "title": "Saved-location cards retain two artwork paths",
+      "component": "Location previews and thumbnail loading",
+      "priority": "P2",
+      "confidence": "High for both loads; aggregate cost unmeasured",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/LocationViewModels.cs",
+          "line": 297,
+          "symbol": "LoadMapThumbnailAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Views/LocationsPage.axaml",
+          "line": 72,
+          "symbol": "LocationPreviewImage binding"
+        }
+      ],
+      "problem": "LocationCardViewModel obtains thumbnail output, loads a preview scene and also constructs/stores a bitmap from the legacy image path. The inspected LocationsPage displays PreviewScene through LocationPreviewImage. Both cache/asset paths may therefore do work for one visible card.",
+      "resource_types": [
+        "Disk I/O",
+        "hashing CPU",
+        "managed/native memory",
+        "image decoding"
+      ],
+      "scenario": "Load a realistic large saved-location collection with warm and cold caches; then switch theme and revisit the page. Record visible versus non-visible cards separately.",
+      "measurements": [
+        "Files read and hashed",
+        "Scene loads and bitmap decodes per card",
+        "Peak bitmap/native memory",
+        "Card-ready latency",
+        "Background requests and work for off-screen cards"
+      ],
+      "consequences": "Unnecessary legacy decoding or cache validation may multiply with saved locations; no measured collection threshold is established.",
+      "recommendation": "Audit all remaining MapThumbnail consumers before removal. If the second path is unnecessary, retire it deliberately and preserve needed compatibility/migration behavior.",
+      "regression_risks": "Cache regeneration, fallback artwork, commands, export or tests that still rely on the bitmap.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "LocationCardViewModel obtains thumbnail output, loads a preview scene and also constructs/stores a bitmap from the legacy image path. The inspected LocationsPage displays PreviewScene through LocationPreviewImage. Both cache/asset paths may therefore do work for one visible card."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Load a realistic large saved-location collection with warm and cold caches; then switch theme and revisit the page. Record visible versus non-visible cards separately.",
+        "measurements": [
+          "Files read and hashed",
+          "Scene loads and bitmap decodes per card",
+          "Peak bitmap/native memory",
+          "Card-ready latency",
+          "Background requests and work for off-screen cards"
+        ],
+        "resources": [
+          "Disk I/O",
+          "hashing CPU",
+          "managed/native memory",
+          "image decoding"
+        ]
+      }
+    },
+    {
+      "id": "P07",
+      "title": "Preview resize invalidation rejects stale renders without cancelling their work",
+      "component": "LocationPreviewImage",
+      "priority": "P3",
+      "confidence": "High for scheduling mechanism; user cost unmeasured",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Controls/LocationPreviewImage.cs",
+          "line": 60,
+          "symbol": "StartRender"
+        }
+      ],
+      "problem": "A size/style change can schedule another Task.Run render. Generation checks prevent an obsolete result from being displayed but do not stop the obsolete CPU/allocation work already in flight.",
+      "resource_types": [
+        "CPU",
+        "allocation",
+        "concurrency",
+        "native image memory"
+      ],
+      "scenario": "Resize a window containing multiple preview cards continuously and change theme while rendering. Compare isolated-card and many-card cases.",
+      "measurements": [
+        "Peak in-flight render jobs",
+        "Started/completed/discarded render ratio",
+        "Allocated image buffers",
+        "GC/native memory",
+        "UI responsiveness and final-frame latency"
+      ],
+      "consequences": "Discarded render work may compete with the final visible result; static layout may be entirely satisfactory.",
+      "recommendation": "Only if measured, coalesce to the latest requested size/style, add a suitable shared limit or cooperative cancellation. Do not replace generation checks with cancellation alone.",
+      "regression_risks": "Final render delivery, detach/disposal safety, theme changes and avoiding UI-thread rendering.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "A size/style change can schedule another Task.Run render. Generation checks prevent an obsolete result from being displayed but do not stop the obsolete CPU/allocation work already in flight."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Resize a window containing multiple preview cards continuously and change theme while rendering. Compare isolated-card and many-card cases.",
+        "measurements": [
+          "Peak in-flight render jobs",
+          "Started/completed/discarded render ratio",
+          "Allocated image buffers",
+          "GC/native memory",
+          "UI responsiveness and final-frame latency"
+        ],
+        "resources": [
+          "CPU",
+          "allocation",
+          "concurrency",
+          "native image memory"
+        ]
+      }
+    },
+    {
+      "id": "P08",
+      "title": "Layer composition may multiply tile decoding and rendering work",
+      "component": "Vector, relief, light-pollution and picture-in-picture maps",
+      "priority": "P2",
+      "confidence": "Moderate; workload strongly depends on viewport and caches",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/ThemedVectorTileSource.cs",
+          "line": 105,
+          "symbol": "Rendered tile retrieval"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/TerrainReliefTileSource.cs",
+          "line": null,
+          "symbol": "Relief tile rendering and neighbour loading"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Controls/NoctaxisMapView.cs",
+          "line": null,
+          "symbol": "Map composition and lifetime"
+        }
+      ],
+      "problem": "Vector geography/labels and environmental overlays have separate render/cache paths. Relief loads neighbouring tiles; light-pollution processing samples numeric data and produces images. Main and PiP views add consumers. Individual cache entry limits do not describe total active or native memory.",
+      "resource_types": [
+        "CPU",
+        "rendering",
+        "allocation",
+        "native memory",
+        "network/disk I/O"
+      ],
+      "scenario": "Compare individual layers versus all supported layers with and without PiP, across representative zoom levels and warm/cold cache states. Include a theme change after steady state.",
+      "measurements": [
+        "Frame delivery distribution and UI dispatch latency",
+        "Tile fetch/decode/render counts by layer",
+        "Duplicate source work across views",
+        "PNG/texture conversion cost",
+        "Peak working set, native image memory and cache bytes",
+        "In-flight jobs and cache hit rates"
+      ],
+      "consequences": "The composed experience may have a cost not evident from an isolated layer. No frame-rate or memory problem is proven.",
+      "recommendation": "Profile the integrated supported configuration before changing algorithms or cache sizes. Share only source/decoded data whose ownership and theme identity permit it.",
+      "regression_risks": "Visual ordering, attribution, theme correctness, PiP borrowed-resource ownership and stale-tile rejection.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "Vector geography/labels and environmental overlays have separate render/cache paths. Relief loads neighbouring tiles; light-pollution processing samples numeric data and produces images. Main and PiP views add consumers. Individual cache entry limits do not describe total active or native memory."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Compare individual layers versus all supported layers with and without PiP, across representative zoom levels and warm/cold cache states. Include a theme change after steady state.",
+        "measurements": [
+          "Frame delivery distribution and UI dispatch latency",
+          "Tile fetch/decode/render counts by layer",
+          "Duplicate source work across views",
+          "PNG/texture conversion cost",
+          "Peak working set, native image memory and cache bytes",
+          "In-flight jobs and cache hit rates"
+        ],
+        "resources": [
+          "CPU",
+          "rendering",
+          "allocation",
+          "native memory",
+          "network/disk I/O"
+        ]
+      }
+    },
+    {
+      "id": "P09",
+      "title": "Cache maintenance and cancelled waiters can weaken practical resource bounds",
+      "component": "Terrain disk and decoded raster caches",
+      "priority": "P3",
+      "confidence": "High for mechanisms; size and latency impact unmeasured",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrainDiskCache.cs",
+          "line": 129,
+          "symbol": "Release / eviction"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrainDiskCache.cs",
+          "line": 238,
+          "symbol": "Eviction candidate selection"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/BoundedDecodedRasterCache.cs",
+          "line": null,
+          "symbol": "GetOrCreate / EvictIfNeeded"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/EnvironmentalTileCache.cs",
+          "line": null,
+          "symbol": "Per-key locks"
+        }
+      ],
+      "problem": "Terrain release updates file timestamps and may run eviction under shared locking. Eviction examines candidates. In the decoded cache, eviction is reached by a successful waiter; if all waiters cancel while producers finish, capacity enforcement can be deferred until later activity. Some per-key coordination/failure dictionaries lack an obvious global lifetime bound.",
+      "resource_types": [
+        "Disk I/O",
+        "lock contention",
+        "memory",
+        "CPU"
+      ],
+      "scenario": "Use many distinct tiles with a deliberately small configured disk budget, concurrent readers and cancelled waiters. Separately inspect a long-session trace of unique tile keys.",
+      "measurements": [
+        "Lock hold/wait time",
+        "File-system calls per release",
+        "Eviction scan size and duration",
+        "Completed decoded entries after all waiters cancel",
+        "Retained coordination-key count",
+        "Bytes retained versus configured budget, distinguishing leased data"
+      ],
+      "consequences": "Cache work or retained entries may exceed what an entry-count setting suggests. Active leases legitimately prevent some eviction; that is not itself a defect.",
+      "recommendation": "Measure actual bounds and contention; if needed, enforce producer-completion cleanup and move slow maintenance outside critical sections while preserving generation/lease guarantees.",
+      "regression_risks": "Never evict active leases, resurrect old generations or dispose data still used by another view. Avoid replacing a correct cache with speculative complexity.",
+      "classification": "Potential performance bottleneck",
+      "severity": "medium",
+      "release_relevance": "Measurement candidate, not a demonstrated release blocker. ",
+      "evidence": [
+        "Terrain release updates file timestamps and may run eviction under shared locking. Eviction examines candidates. In the decoded cache, eviction is reached by a successful waiter; if all waiters cancel while producers finish, capacity enforcement can be deferred until later activity. Some per-key coordination/failure dictionaries lack an obvious global lifetime bound."
+      ],
+      "limitations": "No benchmark, profiling session or timing/allocation measurement was performed for this candidate.",
+      "proposed_benchmark": {
+        "scenario": "Use many distinct tiles with a deliberately small configured disk budget, concurrent readers and cancelled waiters. Separately inspect a long-session trace of unique tile keys.",
+        "measurements": [
+          "Lock hold/wait time",
+          "File-system calls per release",
+          "Eviction scan size and duration",
+          "Completed decoded entries after all waiters cancel",
+          "Retained coordination-key count",
+          "Bytes retained versus configured budget, distinguishing leased data"
+        ],
+        "resources": [
+          "Disk I/O",
+          "lock contention",
+          "memory",
+          "CPU"
+        ]
+      }
+    },
+    {
+      "id": "R01",
+      "title": "Response body reads can outlive configured HTTP timeouts and hold cache leases",
+      "component": "Environmental and vector downloads; terrain cache clear",
+      "classification": "Reliability or platform risk",
+      "confidence": "High for timeout semantics and ownership path; stalled server not simulated",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Validate bounded failure/recovery before early access, especially cache-clear and offline workflows.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/EnvironmentalTileCache.cs",
+          "line": 276,
+          "symbol": "EnvironmentalHttpDownloader streaming path"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrariumTerrainProvider.cs",
+          "line": 402,
+          "symbol": "Shared tile load"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrainDiskCache.cs",
+          "line": 145,
+          "symbol": "ClearAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/OpenFreeMapTileFetcher.cs",
+          "line": 82,
+          "symbol": "FetchCoreAsync"
+        }
+      ],
+      "problem": "ResponseHeadersRead completes the HTTP request at headers. Configured HttpClient.Timeout does not provide a deadline for subsequent body consumption. Some shared producers use CancellationToken.None or omit a body token, so caller cancellation does not bound that read. A terrain lease held by such work can prevent a clear operation from draining.",
+      "evidence": [
+        "EnvironmentalHttpDownloader reads streamed content using its supplied token; the Terrarium shared load is started without caller cancellation.",
+        "OpenFreeMap fetch uses ResponseHeadersRead and then ReadAsByteArrayAsync without a cancellation token.",
+        "TerrainDiskCache.ClearAsync waits for outstanding leases. The recorded implementation does not supply a cancellation escape from that drain.",
+        "Microsoft's documented HttpCompletionOption semantics explicitly limit the client timeout to headers in ResponseHeadersRead mode."
+      ],
+      "consequences": "A server that returns headers then stalls can leave a shared task and lease pending much longer than the configured timeout, potentially hanging a clear operation. Actual network stack termination and production frequency were not measured.",
+      "recommendation": "Give owned download producers a total/body deadline, separate from individual consumer cancellation, and enforce appropriate byte limits. Test headers-then-stall, slow progress, cancellation, cache clear and retry with a deterministic handler/server.",
+      "regression_risks": "Legitimate large/slow environmental files need suitable budgets. Do not let one cancelled consumer abort a shared download required by others; ensure timed-out temporary files and leases are released.",
+      "limitations": "Code and official API semantics establish the risk; no actual stalled connection or blocked settings action was executed.",
+      "external_sources": [
+        {
+          "title": "Microsoft: HttpCompletionOption and timeout behavior",
+          "url": "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpcompletionoption?view=net-10.0",
+          "supports": "With ResponseHeadersRead, apply a separate timeout to content reads; HttpClient.Timeout covers the request through headers."
+        }
+      ]
+    },
+    {
+      "id": "R02",
+      "title": "Compressed-input limits do not consistently bound decoded memory",
+      "component": "Raster, PNG and vector input handling",
+      "classification": "Reliability or platform risk",
+      "confidence": "High for missing/pre-late bounds; exhaustion not attempted",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Important availability hardening for downloaded data and user-opened plan images; no code-execution exploit is established.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/GeoTiffRaster.cs",
+          "line": 51,
+          "symbol": "Load raster allocation"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Export/PngMetadataWriter.cs",
+          "line": 24,
+          "symbol": "ReadText"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Export/NoctaxisPlanImage.cs",
+          "line": null,
+          "symbol": "Read"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Export/PlanImageSources.cs",
+          "line": 40,
+          "symbol": "File input size checks and clipboard path"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/Vector/OpenFreeMapTileFetcher.cs",
+          "line": 179,
+          "symbol": "Decompress"
+        }
+      ],
+      "problem": "A compressed byte limit is not a pixel/decompressed-memory limit. The inspected TIFF loader allocates a double array from dimensions before a downstream settlement scientific-raster dimension check. PNG metadata reads decode image rows; raw clipboard image bytes bypass the file-size gate. Vector body/gzip paths also lack a clear expanded-size budget.",
+      "evidence": [
+        "GeoTiffRaster.Load allocates double[checked(width*height)]; the recorded settlement validation of maximum dimensions occurs after Load, not before this allocation.",
+        "PNG plan extraction traverses image content to find metadata; OutOfMemoryException is intentionally not normalized by the plan-image parser.",
+        "File plan input has a 64 MB cap, while the inspected raw clipboard path does not use that same gate.",
+        "OpenFreeMap decompresses a GZipStream into a MemoryStream with CopyTo, without an explicit expanded-byte ceiling."
+      ],
+      "consequences": "A compact corrupt or pathological input could consume excessive memory or freeze synchronous import. Peak size was not measured and no dangerous exhaustion fixture was executed.",
+      "recommendation": "Validate dimensions and safe multiplication against decoded budgets before allocating; limit expanded data and streamed bytes; apply equivalent rules to file/drop/clipboard sources. Metadata-only PNG parsing should avoid decoding pixels where possible. Use bounded adversarial fixtures that assert rejection before allocation.",
+      "regression_risks": "Avoid rejecting legitimate scientific rasters or ordinary high-resolution images. Preserve decoder integrity checks, metadata compatibility and valid source fallback.",
+      "limitations": "This is an availability/resource-bound risk, not a demonstrated exploitable security vulnerability. The exact source line of the downstream settlement dimension validator was not retained; the pre-allocation GeoTiffRaster boundary and other listed paths were recorded."
+    },
+    {
+      "id": "R03",
+      "title": "State-file writes lack process-wide ownership",
+      "component": "Persistence and application restart",
+      "classification": "Reliability or platform risk",
+      "confidence": "High for per-instance locking; actual race unexecuted",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Validate intentional multiple launches and restart overlap before early access because user state is involved.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 60,
+          "symbol": "Instance save gate"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 110,
+          "symbol": "SaveAsync temporary path"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Services/ApplicationRestartService.cs",
+          "line": 131,
+          "symbol": "WaitForPreviousInstance"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Program.cs",
+          "line": 24,
+          "symbol": "Restart wait during startup"
+        }
+      ],
+      "problem": "Each store instance serializes its own saves, but all processes use the same final file and fixed temporary filename. No application-wide single-instance ownership was found in the inspected startup path. The restart wait has a finite timeout and its completion result is not used to prevent a new process continuing.",
+      "evidence": [
+        "The save semaphore belongs to the JsonUserDataStore instance.",
+        "SaveAsync uses the same state.json.tmp name for writers to a given data directory.",
+        "The inspected restart wait calls WaitForExit with a timeout and can continue afterward. A comment/intention to avoid overlap is not a guarantee."
+      ],
+      "consequences": "Two application processes can overwrite each other's snapshots or interfere with the temporary file. A stalled previous process can overlap its replacement. No actual lost-update race was run.",
+      "recommendation": "Choose and enforce a product contract: a single owner of the data directory, or an inter-process save protocol with unique temporary names and conflict detection. Add deterministic two-store/two-process and restart-timeout validation.",
+      "regression_risks": "Multiple portable data directories, relaunch handoff, crash recovery and avoiding a stale lock that prevents legitimate startup. Unique temporary files alone do not solve last-writer-wins data loss.",
+      "limitations": "A process ownership risk, not a reproduced user-data-loss incident. No user state or running application instance was used for a race test."
+    },
+    {
+      "id": "R04",
+      "title": "Shutdown flush is not a complete application-work lifetime boundary",
+      "component": "Desktop shutdown and DI-owned services",
+      "classification": "Reliability or platform risk",
+      "confidence": "Moderate to high for missing coordination; late write not reproduced",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Test shutdown during active work; ordinary process exit reclaims resources, so this is not evidence of an ongoing session leak.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Views/MainWindow.axaml.cs",
+          "line": 353,
+          "symbol": "Closing cleanup and state flush"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/App.axaml.cs",
+          "line": 31,
+          "symbol": "Root service provider lifetime"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/App.axaml.cs",
+          "line": 64,
+          "symbol": "Exit cleanup"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": null,
+          "symbol": "Outstanding refresh/search/derived work"
+        }
+      ],
+      "problem": "Close handling flushes state, but there is no recovered evidence of a single shutdown operation that first stops all new planner/derived work, joins or cancels producers, then captures the final state and disposes the root service graph. Theme disposal is explicit; equivalent root provider disposal was not found.",
+      "evidence": [
+        "MainWindow closing performs a final state flush and other cleanup, but several main-view-model task lifetimes are independent of that close sequence.",
+        "App retains the root services and explicitly disposes themes on exit; the inspected path does not dispose the provider as a whole.",
+        "MainViewModel has no general IDisposable/async shutdown boundary in the inspected implementation."
+      ],
+      "consequences": "Pending work may mutate state or request another save after the nominal final flush. Shutdown failures/lifetimes become harder to reason about. No such post-flush write was captured.",
+      "recommendation": "Specify shutdown ordering and add a controlled close-during-refresh/save test. Stop accepting new work, cancel/join owned producers as appropriate, capture/flush final state and dispose owned services in a defined order.",
+      "regression_risks": "Avoid synchronously waiting on UI continuations, losing the last user edit, cancelling shared borrowed services prematurely or disposing main-map resources before PiP releases them.",
+      "limitations": "Source-level lifecycle risk. OS process cleanup reduces the significance of undisposed resources at normal exit; a memory leak or data-loss event is not proven."
+    },
+    {
+      "id": "M01",
+      "title": "Existing tests emphasize completed happy paths more than cross-generation transitions",
+      "component": "Planner correctness and release validation",
+      "classification": "Maintainability or testability concern",
+      "confidence": "High for the specific uncovered scenarios; repository-wide coverage not measured",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Add deterministic regressions for D01–D06 and explicit release evidence before treating the passing subset as readiness.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop.Tests/MainViewModelTests.cs",
+          "line": null,
+          "symbol": "StagedPlanning and completed-environment refresh tests"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core.Tests/PersistenceAndWeatherTests.cs",
+          "line": null,
+          "symbol": "Weather and persistence fixtures"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop.Tests/PlanImageTests.cs",
+          "line": null,
+          "symbol": "Partial MainViewModelTests plan round trips"
+        },
+        {
+          "path": "H:/Noctaxis/.github/workflows/ci.yml",
+          "line": null,
+          "symbol": "CI matrix"
+        },
+        {
+          "path": "H:/Noctaxis/.github/workflows/package.yml",
+          "line": null,
+          "symbol": "Packaged startup checks"
+        }
+      ],
+      "problem": "Good deterministic test infrastructure exists, but passing completed-state cases do not cover the observed partial-refresh interleaving, DST fold, adjacent forecast-hour cache selection or structurally invalid state. Headless/source assertions and process-alive startup checks also cannot establish native usability.",
+      "evidence": [
+        "The targeted 77 existing cases passed while the separate probes exposed six failing mechanisms.",
+        "The recovered refresh tests reuse environment after it has completed; D01 requires changing time before completion.",
+        "The initial file-name-like test filter selected only eight scheduler cases, because several files contribute methods to a partial MainViewModelTests class.",
+        "The inspected package smoke checks process survival/log output; macOS CI is informational rather than a blocking job."
+      ],
+      "consequences": "A green narrow test run can coexist with ordinary interaction defects, and a package can launch without proving actual map rendering, focus, dialogs or accessibility.",
+      "recommendation": "Turn the small probes into meaningful regression tests during a later implementation phase. Maintain a concise native release-validation matrix for the supported platform. Make test selections use actual class/method identities and report case counts.",
+      "regression_risks": "Do not weaken assertions to match current behavior or replace deterministic scheduling with arbitrary sleeps. Avoid brittle source-text tests for behavioral contracts.",
+      "limitations": "No full-suite execution, test coverage metric or mutation analysis was performed. Existing tests outside the inspected subset may cover additional cases; absence claims here are limited to recovered evidence."
+    },
+    {
+      "id": "M02",
+      "title": "Future-version state is not explicitly protected from downgrade rewriting",
+      "component": "Persistence schema evolution",
+      "classification": "Reliability or platform risk",
+      "confidence": "Moderate to high from source; future-version round trip not executed",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Relevant before users move between early-access builds or roll back versions.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 154,
+          "symbol": "ToDomain version/migration handling"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": null,
+          "symbol": "CaptureState writes current schema version"
+        }
+      ],
+      "problem": "The inspected loader performs older-version migrations but does not establish a future-version refusal/read-only policy. The main view model captures the current version when saving. Loading a newer schema and saving from an older application can therefore discard unknown information or relabel it as the older schema.",
+      "evidence": [
+        "The recovered ToDomain path distinguishes old versions for migration, with no retained evidence of an upper-version guard.",
+        "CaptureState constructs the current version-4 state. Unknown fields are not a general preservation mechanism across that domain reconstruction."
+      ],
+      "consequences": "Rollback or parallel-version use may silently lose settings/data introduced by a newer build. This was not reproduced with a future-schema fixture.",
+      "recommendation": "Test a version-above-current fixture before changing behavior. Define explicit read-only/refusal/backup rules for newer state and document rollback expectations.",
+      "regression_risks": "Preserve supported legacy migrations and recovery from genuinely corrupt files. Do not quarantine a valid newer file as corruption or overwrite its backup.",
+      "limitations": "Source-supported schema policy gap; exact CaptureState line number was not recovered and a full forward-version round trip was not executed."
+    },
+    {
+      "id": "G01",
+      "title": "Core boundaries and canonical domain geometry support deterministic reasoning",
+      "component": "Core planning/calculation layer",
+      "confidence": "High",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Noctaxis.Core.csproj",
+          "line": null,
+          "symbol": "Project dependency boundary"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Calculations/CameraFrameGeometry.cs",
+          "line": null,
+          "symbol": "CameraFrameGeometry"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Planning/PlanningService.cs",
+          "line": null,
+          "symbol": "Provider composition"
+        }
+      ],
+      "evidence": [
+        "Core does not reference Avalonia and exposes injectable planning/data abstractions.",
+        "NodaTime/IClock and stable domain values permit deterministic time and state tests.",
+        "Canonical camera geometry is reused rather than independently reinvented by each consumer; ground/elevation concepts are explicitly represented."
+      ],
+      "why_good": "This separates mathematical/domain behavior from UI ownership and makes important computations independently testable. A shared geometric definition reduces disagreement between visual and scoring interpretations.",
+      "preserve": "Keep framework-specific rendering outside domain geometry, preserve explicit time/coordinate/elevation semantics, and keep provider boundaries usable by deterministic fakes.",
+      "limitations": "Core still contains native/image dependencies; this is not a claim that every Core function is pure or every scientific formula has been independently validated.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep framework-specific rendering outside domain geometry, preserve explicit time/coordinate/elevation semantics, and keep provider boundaries usable by deterministic fakes.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "This separates mathematical/domain behavior from UI ownership and makes important computations independently testable. A shared geometric definition reduces disagreement between visual and scoring interpretations."
+    },
+    {
+      "id": "G02",
+      "title": "Core-first planning and guarded commits are valuable responsiveness and correctness mechanisms",
+      "component": "Staged planner refresh",
+      "confidence": "High",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2014,
+          "symbol": "RefreshNowAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2157,
+          "symbol": "CommitCoreAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 2200,
+          "symbol": "CommitEnvironmentAsync"
+        }
+      ],
+      "evidence": [
+        "Core results can commit before optional weather/environment completion.",
+        "Generation/cancellation checks and guarded publication reject results for superseded requests.",
+        "The failing D01 interleaving was reproducible using staged planning fakes, making the boundary testable."
+      ],
+      "why_good": "Users do not need every external source to succeed before receiving basic astronomical results. Stale-result rejection is the correct foundation; D01 concerns missing ownership/rejoining, not an argument to remove generation checks.",
+      "preserve": "Retain incremental availability and stale-observer rejection while fixing pending environment handoff.",
+      "limitations": "This strength does not prove all interleavings correct, and the audit found one concrete failure.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Retain incremental availability and stale-observer rejection while fixing pending environment handoff.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "Users do not need every external source to succeed before receiving basic astronomical results. Stale-result rejection is the correct foundation; D01 concerns missing ownership/rejoining, not an argument to remove generation checks."
+    },
+    {
+      "id": "G03",
+      "title": "State-save scheduling coalesces snapshots and serializes writes",
+      "component": "Persistence scheduling",
+      "confidence": "High; eight targeted scheduler cases passed",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Services/StateSaveScheduler.cs",
+          "line": 38,
+          "symbol": "StateSaveScheduler"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Persistence/JsonUserDataStore.cs",
+          "line": 110,
+          "symbol": "SaveAsync"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Views/MainWindow.axaml.cs",
+          "line": 353,
+          "symbol": "Final flush"
+        }
+      ],
+      "evidence": [
+        "Save scheduling captures snapshots, coalesces pending updates and serializes writes rather than launching a file write for every property change.",
+        "Saving is not enabled before initialization has established valid loaded state.",
+        "The store writes a temporary file and replaces the final state; shutdown requests a flush.",
+        "The selected scheduler test group passed all eight cases."
+      ],
+      "why_good": "This avoids overlapping in-process writes and reduces unnecessary persistence while preserving the latest snapshot. Delaying saving during initialization prevents a default model from prematurely replacing user state.",
+      "preserve": "Keep snapshot capture, serialized draining, explicit error reporting and final-flush semantics. Strengthen process/shutdown ownership without discarding the useful scheduler.",
+      "limitations": "Per-process correctness is not inter-process ownership (R03), and a flush alone does not stop future producers (R04).",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep snapshot capture, serialized draining, explicit error reporting and final-flush semantics. Strengthen process/shutdown ownership without discarding the useful scheduler.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "This avoids overlapping in-process writes and reduces unnecessary persistence while preserving the latest snapshot. Delaying saving during initialization prevents a default model from prematurely replacing user state."
+    },
+    {
+      "id": "G04",
+      "title": "External plan/location payloads have explicit validation contracts",
+      "component": "Import/export and offline supporter verification",
+      "confidence": "High for inspected validation paths",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Export/NoctaxisPlan.cs",
+          "line": null,
+          "symbol": "Plan parsing and validation"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Locations/LocationTransferService.cs",
+          "line": null,
+          "symbol": "Location transfer validation"
+        }
+      ],
+      "evidence": [
+        "The minimal plan schema validates version, finite coordinates/angles and UTC time, and rejects duplicate JSON properties.",
+        "Location transfer requires constructor/nullability-sensitive data and validates coordinates rather than accepting deserialized objects as domain truth.",
+        "The inspected supporter path verifies an Ed25519 signature before parsing the payload, applies a size cap and canonical base64/field rules; its exact source location was not retained in recovery."
+      ],
+      "why_good": "Explicit validation at trust boundaries limits ambiguous inputs and keeps offline entitlement verification independent of a remote service. Minimal embedded plan data is easier to validate and evolve than serializing the entire application state.",
+      "preserve": "Keep validation before mutation, exact identity/version semantics and signature-before-parse ordering. Apply similarly explicit structural validation to state migration (D05).",
+      "limitations": "Not a cryptographic audit or proof of all input-budget safety. The supporter source reference is unavailable, so that part is retained as a recorded inspection finding rather than a precise navigable citation.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep validation before mutation, exact identity/version semantics and signature-before-parse ordering. Apply similarly explicit structural validation to state migration (D05).",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "Explicit validation at trust boundaries limits ambiguous inputs and keeps offline entitlement verification independent of a remote service. Minimal embedded plan data is easier to validate and evolve than serializing the entire application state."
+    },
+    {
+      "id": "G05",
+      "title": "Dataset generations and reader leases make light-pollution replacement tractable",
+      "component": "Optional light-pollution data and map consumers",
+      "confidence": "High from recorded source inspection",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/LightPollutionMapBinding.cs",
+          "line": null,
+          "symbol": "Light-pollution map binding and reader ownership"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.LightPollution.cs",
+          "line": null,
+          "symbol": "Install/remove orchestration"
+        }
+      ],
+      "evidence": [
+        "The inspected installation path stages a distinct dataset generation and switches a current manifest rather than modifying active reader data in place.",
+        "DataGate/read leases coordinate active access with removal/replacement.",
+        "Numerical region data can be copied and the gate released before pixel rendering; palette/version checks prevent stale themed results.",
+        "Main/PiP consumers distinguish owned versus borrowed provider lifetimes."
+      ],
+      "why_good": "These mechanisms address actual file/reader/render lifetime conflicts. Separating numeric data from palette rendering avoids making a theme change equivalent to rereading scientific source data.",
+      "preserve": "Keep generation identity, atomic activation, active-reader leases and explicit borrowing/disposal order.",
+      "limitations": "No real dataset swap during native rendering was executed. The exact Core installer/DataGate file locations were not retained; linked desktop consumers identify the integration boundary.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep generation identity, atomic activation, active-reader leases and explicit borrowing/disposal order.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "These mechanisms address actual file/reader/render lifetime conflicts. Separating numeric data from palette rendering avoids making a theme change equivalent to rereading scientific source data."
+    },
+    {
+      "id": "G06",
+      "title": "Terrain cache leases and selective data decoding protect correctness and resource use",
+      "component": "Environmental raster and horizon infrastructure",
+      "confidence": "High for recorded source paths",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrainDiskCache.cs",
+          "line": null,
+          "symbol": "Lease and generation ownership"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Environment/TerrariumTerrainProvider.cs",
+          "line": null,
+          "symbol": "Tile acquisition and validity"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Terrain/TerrainProviders.cs",
+          "line": null,
+          "symbol": "Shared horizon consumers"
+        }
+      ],
+      "evidence": [
+        "Active readers hold disk-cache leases so cleanup can respect files currently in use.",
+        "Generations and identity-sensitive in-flight cleanup guard against old work disturbing newer entries.",
+        "WorldCover interpretation is selectively used for relevant negative-elevation cases and can read needed TIFF blocks instead of expanding an entire large raster.",
+        "Missing/invalid data is represented separately from valid water/terrain, and horizon consumers have explicit shared-request ownership."
+      ],
+      "why_good": "These are concrete safeguards around expensive shared data. They reduce unnecessary decoding and prevent unsafe file eviction without relying on arbitrary delays.",
+      "preserve": "Keep lease/generation identity and data-validity distinctions while fixing upper-level cancellation and negative caching. Do not replace safe sharing with per-caller duplicate downloads.",
+      "limitations": "Upper-layer cancellation can defeat lower-layer consumer intent (A01); clear waits still require bounded producers (R01). No throughput advantage was measured.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep lease/generation identity and data-validity distinctions while fixing upper-level cancellation and negative caching. Do not replace safe sharing with per-caller duplicate downloads.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "These are concrete safeguards around expensive shared data. They reduce unnecessary decoding and prevent unsafe file eviction without relying on arbitrary delays."
+    },
+    {
+      "id": "G07",
+      "title": "Central map/theme and dock policies reduce inconsistent UI behavior",
+      "component": "Map composition, appearance and docking",
+      "confidence": "High for source structure; native accessibility unvalidated",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/MapComposition.cs",
+          "line": null,
+          "symbol": "Map composition"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Mapping/MapAttribution.cs",
+          "line": null,
+          "symbol": "Map attribution"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Themes/ThemeService.cs",
+          "line": null,
+          "symbol": "Theme role/default handling"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/Controls/Docking/DockWorkspace.cs",
+          "line": null,
+          "symbol": "DockWorkspace"
+        }
+      ],
+      "evidence": [
+        "Layer/capability and attribution concerns are centralized instead of being repeated independently by each UI entry point.",
+        "Theme roles and high-contrast/non-colour state cues are explicit.",
+        "Docking keeps existing child controls rather than recreating them, preserving editing state, and includes layout bounds/minimum central-area policies."
+      ],
+      "why_good": "Central policies make consistency testable and reduce accidental variation between views. Retaining controls during docking avoids destroying in-progress interaction state.",
+      "preserve": "Keep attribution complete, maintain theme-role semantics and preserve child identity/focus/editing state across layout changes.",
+      "limitations": "Source review and tests do not establish screen-reader behavior, keyboard usability or visual contrast in an actual native window.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Keep attribution complete, maintain theme-role semantics and preserve child identity/focus/editing state across layout changes.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "Central policies make consistency testable and reduce accidental variation between views. Retaining controls during docking avoids destroying in-progress interaction state."
+    },
+    {
+      "id": "G08",
+      "title": "Distribution checks and fallback behavior acknowledge real platform constraints",
+      "component": "Build, packaging and platform resilience",
+      "confidence": "High for inspected configuration; artifacts not executed",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/.github/workflows/ci.yml",
+          "line": null,
+          "symbol": "Platform test matrix"
+        },
+        {
+          "path": "H:/Noctaxis/.github/workflows/package.yml",
+          "line": null,
+          "symbol": "Distribution packaging"
+        },
+        {
+          "path": "H:/Noctaxis/scripts/package.ps1",
+          "line": null,
+          "symbol": "Windows packaging checks"
+        },
+        {
+          "path": "H:/Noctaxis/scripts/package.sh",
+          "line": null,
+          "symbol": "Unix packaging checks"
+        },
+        {
+          "path": "H:/Noctaxis/README.md",
+          "line": null,
+          "symbol": "Supported versus courtesy builds"
+        }
+      ],
+      "evidence": [
+        "Packaging is self-contained/untrimmed and checks required native payloads and notices rather than assuming managed publish output is sufficient.",
+        "Platform-specific native image processing has a managed fallback in the inspected implementation.",
+        "Public support claims distinguish the primary Windows target from courtesy packages and acknowledge unsigned distribution.",
+        "The test suite includes compatibility fixtures and deliberately injectable providers."
+      ],
+      "why_good": "These choices are practical for an early desktop release with native graphics/image dependencies. Honest support boundaries prevent configuration from being mistaken for validated platform support.",
+      "preserve": "Retain native asset checks, compatibility fixtures, supported/courtesy distinctions and fallback paths. Add real package validation rather than treating process survival as sufficient.",
+      "limitations": "No package archive, clean-machine install, native GUI, current CI result or legal completeness was validated during this phase.",
+      "classification": "Positive engineering finding",
+      "severity": "informational",
+      "priority": "Preserve",
+      "release_relevance": "Preserve this property during corrective work.",
+      "recommendation": "Retain native asset checks, compatibility fixtures, supported/courtesy distinctions and fallback paths. Add real package validation rather than treating process survival as sufficient.",
+      "regression_risks": "Changes that remove the stated property can regress the supported behavior.",
+      "consequences": "These choices are practical for an early desktop release with native graphics/image dependencies. Honest support boundaries prevent configuration from being mistaken for validated platform support."
+    },
+    {
+      "id": "U01",
+      "title": "Export may combine a current snapshot with older timeline-derived content",
+      "component": "Plan image export coherence",
+      "classification": "Unverified hypothesis requiring further investigation",
+      "confidence": "Moderate",
+      "severity": "medium",
+      "priority": "P1",
+      "release_relevance": "Validate before describing exported plans as coherent snapshots of the current observer/time.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.PlanImage.cs",
+          "line": 56,
+          "symbol": "CreateExportPng"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.PlanImage.cs",
+          "line": 110,
+          "symbol": "Export target selection"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.Timeline.cs",
+          "line": 149,
+          "symbol": "Timeline path request/update"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.cs",
+          "line": 211,
+          "symbol": "CanExport"
+        }
+      ],
+      "problem": "Export captures Snapshot but also reads independently maintained timeline/window/target state. Existing paths can remain available while new timeline work is pending. Target identity checks alone do not establish that observer/window/generation match the snapshot.",
+      "evidence": [
+        "The recovered export path selects target timeline data by target identity.",
+        "The timeline path retains previous results until replacement work completes or while a request fails.",
+        "CanExport requires an available snapshot and suitable interaction state, but a complete cross-result generation identity check was not recovered."
+      ],
+      "consequences": "A plan image could contain stale target paths or labels alongside newer core data. This is plausible, not a reproduced incorrect image.",
+      "recommendation": "Use staged timeline/core providers: change observer or window with the same focused target, complete only core, then export before timeline completion. Inspect exported values and pixels/metadata. If mixed, capture a validated immutable export bundle or gate on matching data identities.",
+      "regression_risks": "Do not unnecessarily disable valid exports during unrelated weather updates. Preserve minimal payload compatibility and responsive export when all required data already match.",
+      "limitations": "No mixed-generation PNG was generated or visually inspected. A behavior-changing fix is not justified until the scenario is executed."
+    },
+    {
+      "id": "U02",
+      "title": "Scientific event and horizon precision needs an independent reference corpus",
+      "component": "Astronomy, visibility and useful-window algorithms",
+      "classification": "Unverified hypothesis requiring further investigation",
+      "confidence": "Low for an actual defect; high that validation remains incomplete",
+      "severity": "low",
+      "priority": "P2",
+      "release_relevance": "Define and demonstrate expected accuracy for public planning claims; do not label approximations incorrect without a tolerance.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Astronomy/AstronomyService.cs",
+          "line": 127,
+          "symbol": "Sampled event calculations"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Calculations/FramingVisibilityCalculator.cs",
+          "line": null,
+          "symbol": "Framing visibility calculations"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Planning/PlanningService.cs",
+          "line": null,
+          "symbol": "Derived event/path composition"
+        }
+      ],
+      "problem": "Sampled event/path calculations, linear crossings, atmospheric/refraction assumptions and terrain interpolation have finite accuracy. Sampling can theoretically miss short intervals or narrow horizon features, but this investigation did not establish an actual unacceptable result.",
+      "evidence": [
+        "The inspected algorithms use different sample intervals for event/path operations and interpolate between samples.",
+        "Ground/refraction and terrain validity are explicit but remain modelling choices requiring accuracy expectations.",
+        "No independent ephemeris/event/horizon reference corpus was run."
+      ],
+      "consequences": "Possible edge-case inaccuracies are unquantified. Scientific approximation is not itself an engineering defect.",
+      "recommendation": "Define acceptable event-time/angular tolerances and compare trusted reference cases across ordinary/polar latitudes, DST transitions, negative horizon elevations, grazing events and narrow terrain obstructions. Keep computation correctness separate from astronomical model uncertainty.",
+      "regression_risks": "Increasing sample density indiscriminately can add cost without improving the limiting model; changing refraction or conventions can invalidate existing expectations.",
+      "limitations": "No scientific accuracy defect is asserted. Exact source locations for the useful-window and terrain-crossing helpers were not retained, so those are validation areas rather than precise findings against those helpers."
+    },
+    {
+      "id": "U03",
+      "title": "Partial terrain coverage may be treated as sufficient for downstream confidence",
+      "component": "Terrain-informed visibility and shot viability",
+      "classification": "Unverified hypothesis requiring further investigation",
+      "confidence": "Moderate for semantics question; user-facing error unverified",
+      "severity": "medium",
+      "priority": "P2",
+      "release_relevance": "Validate whether unknown terrain is clearly distinguished from known-clear terrain before making strong viability claims.",
+      "sources": [
+        {
+          "path": "H:/Noctaxis/Noctaxis.Core/Domain/Models.cs",
+          "line": null,
+          "symbol": "TerrainHorizonProfile coverage/completeness"
+        },
+        {
+          "path": "H:/Noctaxis/Noctaxis.Desktop/ViewModels/MainViewModel.ShotViability.cs",
+          "line": null,
+          "symbol": "Terrain-informed viability inputs"
+        }
+      ],
+      "problem": "The recorded scoring path treats a complete computation with some terrain coverage as usable. Partial azimuth/range data and interpolation across gaps may still leave important directions unknown. It is unclear whether downstream confidence is sufficiently conservative in those cases.",
+      "evidence": [
+        "IsComplete and HasTerrainCoverage are distinct properties; completion of a computation is not necessarily full spatial coverage.",
+        "The investigation recorded nearest-known/interpolated terrain behavior and a downstream usable-terrain check, but did not retain every source location or execute a missing-sector fixture."
+      ],
+      "consequences": "A score could be more confident than available coverage warrants, or the existing policy may already be acceptable for the intended model. Evidence is insufficient to choose between those outcomes.",
+      "recommendation": "Construct profiles with known missing sectors/ranges and compare score/state/export output for targets inside and outside those sectors. Establish explicit semantics for unknown, partial and obstructed terrain before changing scoring.",
+      "regression_risks": "Do not make useful partial data unusable everywhere or replace unknown data with a false obstruction. Preserve the distinction between data absence and valid zero/negative horizons.",
+      "limitations": "No wrong score was reproduced. Precise scoring-helper lines were unavailable during recovery; the linked files identify the data and integration boundaries only."
+    }
+  ],
+  "prioritized_recommendations": [
+    {
+      "order": 1,
+      "priority": "P1",
+      "finding_ids": [
+        "D01"
+      ],
+      "action": "Fix pending observer environment handoff with a deterministic interleaving regression; preserve stale observer rejection."
+    },
+    {
+      "order": 2,
+      "priority": "P1",
+      "finding_ids": [
+        "D02",
+        "D03"
+      ],
+      "action": "Preserve absolute instants and canonical nearest-hour weather selection; add boundary tests."
+    },
+    {
+      "order": 3,
+      "priority": "P1",
+      "finding_ids": [
+        "D04",
+        "A01",
+        "R01"
+      ],
+      "action": "Define availability/retry, shared-producer lifetime and bounded body-read behavior; validate with deterministic handlers."
+    },
+    {
+      "order": 4,
+      "priority": "P1",
+      "finding_ids": [
+        "U01",
+        "R02",
+        "R03"
+      ],
+      "action": "Validate export coherence, input decoded-size bounds and process-wide state ownership; correct only supported failures."
+    },
+    {
+      "order": 5,
+      "priority": "P2",
+      "finding_ids": [
+        "D05",
+        "D06",
+        "R04",
+        "M02"
+      ],
+      "action": "Harden malformed data, shutdown and forward-version behavior with narrow regressions."
+    },
+    {
+      "order": 6,
+      "priority": "P1",
+      "finding_ids": [
+        "M01"
+      ],
+      "action": "Run the approved full correctness suite and supported-platform package/native validation in a subsequent phase."
+    },
+    {
+      "order": 7,
+      "priority": "P2/P3",
+      "finding_ids": [
+        "P01",
+        "P02",
+        "P03",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09"
+      ],
+      "action": "Measure the listed workloads in a separately authorized performance phase; optimize only demonstrated impact."
+    },
+    {
+      "order": 8,
+      "priority": "P2",
+      "finding_ids": [
+        "A02",
+        "U02",
+        "U03"
+      ],
+      "action": "Clarify state invariants and scientific/coverage expectations without a wholesale rewrite."
+    }
+  ],
+  "potential_release_blockers": [
+    {
+      "finding_ids": [
+        "D01"
+      ],
+      "status": "Recommended blocker for the inspected working-tree snapshot",
+      "reason": "Ordinary time change while terrain is pending can leave incomplete results with a Ready state."
+    },
+    {
+      "finding_ids": [
+        "D02"
+      ],
+      "status": "Recommended blocker if plan/timeline fidelity is a release promise",
+      "reason": "A known absolute instant can shift by an hour across a DST overlap."
+    },
+    {
+      "finding_ids": [
+        "D03",
+        "D04"
+      ],
+      "status": "Recommended pre-release correctness/recovery fixes",
+      "reason": "Wrong-hour weather and session-persistent unavailable environment results affect normal planning; not catastrophic failures."
+    },
+    {
+      "finding_ids": [
+        "U01",
+        "R01",
+        "R02",
+        "R03"
+      ],
+      "status": "Validation gates, not proven release blockers",
+      "reason": "Export coherence, bounded downloads/inputs and user-state ownership need direct failure-path evidence."
+    },
+    {
+      "finding_ids": [
+        "M01"
+      ],
+      "status": "Release evidence missing from this phase",
+      "reason": "No complete correctness suite, native supported-platform package run or clean-machine validation was performed."
+    }
+  ],
+  "unresolved_evidence": [
+    "Live GUI reproduction of the confirmed refresh and import conversion failures.",
+    "Export snapshot/timeline coherence under controlled partial completion.",
+    "Headers-then-stall termination and cache-clear completion.",
+    "Multi-process writes and restart timeout behavior.",
+    "Decoded size rejection before expensive allocation for every input path.",
+    "Real recovery after offline/unavailable data and clarity of partial coverage.",
+    "Scientific reference tolerances and extreme/polar date cases.",
+    "Actual Windows package/native input/rendering/accessibility validation and courtesy-platform evidence.",
+    "Full current test suite and auxiliary tool correctness.",
+    "Current advisory/transitive dependency and complete legal/provenance checks.",
+    "Original full raw test logs and source-hash inventory could not be recovered."
+  ],
+  "remediation_references_2026_10_16": {
+    "appended": "2026-10-16",
+    "note": "Appended after the investigation; all content above is the unchanged historical record. Current status lives in artifacts/engineering-investigation/noctaxis-unified-findings-register.json.",
+    "findings": {
+      "A01": {
+        "unified_id": "NX-20",
+        "status": "Deferred"
+      },
+      "A02": {
+        "unified_id": "NX-24",
+        "status": "Deferred"
+      },
+      "D01": {
+        "unified_id": "NX-09",
+        "status": "Verified"
+      },
+      "D02": {
+        "unified_id": "NX-10",
+        "status": "Verified"
+      },
+      "D03": {
+        "unified_id": "NX-11",
+        "status": "Verified"
+      },
+      "D04": {
+        "unified_id": "NX-03",
+        "status": "Verified"
+      },
+      "D05": {
+        "unified_id": "NX-12",
+        "status": "Verified"
+      },
+      "D06": {
+        "unified_id": "NX-13",
+        "status": "Verified"
+      },
+      "G01": {
+        "unified_id": "PG-01",
+        "status": "Positive (preserve)"
+      },
+      "G02": {
+        "unified_id": "PG-02",
+        "status": "Positive (preserve)"
+      },
+      "G03": {
+        "unified_id": "PG-05",
+        "status": "Positive (preserve)"
+      },
+      "G04": {
+        "unified_id": "PG-06",
+        "status": "Positive (preserve)"
+      },
+      "G05": {
+        "unified_id": "PG-17",
+        "status": "Positive (preserve)"
+      },
+      "G06": {
+        "unified_id": "PG-03",
+        "status": "Positive (preserve)"
+      },
+      "G07": {
+        "unified_id": "PG-12",
+        "status": "Positive (preserve)"
+      },
+      "G08": {
+        "unified_id": "PG-07",
+        "status": "Positive (preserve)"
+      },
+      "M01": {
+        "unified_id": "NX-55",
+        "status": "Partially Resolved"
+      },
+      "M02": {
+        "unified_id": "NX-06",
+        "status": "Verified"
+      },
+      "P01": {
+        "unified_id": "PF-01",
+        "status": "Profiling backlog"
+      },
+      "P02": {
+        "unified_id": "NX-21",
+        "status": "Deferred"
+      },
+      "P03": {
+        "unified_id": "PF-05",
+        "status": "Profiling backlog"
+      },
+      "P04": {
+        "unified_id": "PF-18",
+        "status": "Profiling backlog"
+      },
+      "P05": {
+        "unified_id": "PF-06",
+        "status": "Profiling backlog"
+      },
+      "P06": {
+        "unified_id": "PF-14",
+        "status": "Profiling backlog"
+      },
+      "P07": {
+        "unified_id": "PF-17",
+        "status": "Profiling backlog"
+      },
+      "P08": {
+        "unified_id": "PF-16",
+        "status": "Profiling backlog"
+      },
+      "P09": {
+        "unified_id": "NX-36",
+        "status": "Deferred"
+      },
+      "R01": {
+        "unified_id": "NX-30",
+        "status": "Verified"
+      },
+      "R02": {
+        "unified_id": "NX-32",
+        "status": "Partially Resolved"
+      },
+      "R03": {
+        "unified_id": "NX-31",
+        "status": "Open"
+      },
+      "R04": {
+        "unified_id": "NX-37",
+        "status": "Deferred"
+      },
+      "U01": {
+        "unified_id": "NX-43",
+        "status": "Verified"
+      },
+      "U02": {
+        "unified_id": "NX-44",
+        "status": "Deferred"
+      },
+      "U03": {
+        "unified_id": "NX-45",
+        "status": "Deferred"
+      }
+    }
+  }
+}

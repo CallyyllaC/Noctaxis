@@ -1,3 +1,4 @@
+#requires -Version 5.1
 param([Parameter(Mandatory=$true)][string]$Path)
 $pinRun = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
 $pinRun.results | ForEach-Object {

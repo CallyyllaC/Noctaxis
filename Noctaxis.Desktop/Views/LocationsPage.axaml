@@ -8,7 +8,6 @@
              SizeChanged="OnPageSizeChanged">
   <UserControl.Resources>
     <!-- Shared glyphs, 24×24. -->
-    <StreamGeometry x:Key="LocationPinGlyph">M12,2 C8.13,2 5,5.13 5,9 C5,14.25 12,22 12,22 C12,22 19,14.25 19,9 C19,5.13 15.87,2 12,2 Z M12,11.5 A2.5,2.5 0 1 1 12,6.5 A2.5,2.5 0 1 1 12,11.5 Z</StreamGeometry>
     <StreamGeometry x:Key="LocationStarGlyph">M12,2 L15.09,8.26 L22,9.27 L17,14.14 L18.18,21.02 L12,17.77 L5.82,21.02 L7,14.14 L2,9.27 L8.91,8.26 Z</StreamGeometry>
   </UserControl.Resources>
   <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
@@ -16,10 +15,8 @@
          Saved locations heading is the page's heading. -->
     <StackPanel x:Name="PageContent" Margin="32,20,32,32" Spacing="20" HorizontalAlignment="Stretch" MaxWidth="1720">
       <!-- The Add location tile is the one place that stands for the Planner's active pin, so there is no
-           separate current-location panel repeating it. Device location, which has no tile, stays here. -->
-      <StackPanel Orientation="Horizontal" Spacing="10" IsVisible="{Binding Locations.CanUseDeviceLocation}">
-        <Button Content="{loc:Text Locations_UseDeviceLocation_Button}" Command="{Binding Locations.UseDeviceLocationCommand}"/>
-      </StackPanel>
+           separate current-location panel repeating it. Places are chosen by search, on the map or from saved
+           locations; Noctaxis does not ask the device where it is. -->
       <controls:StatusText Kind="Information" Text="{Binding Locations.ResolutionMessage}" FontSize="{DynamicResource TextSmall}"/>
 
       <Border Classes="emptyLocationPanel" IsVisible="{Binding Locations.IsFirstRun}">
@@ -84,13 +81,15 @@
                            then falls away gradually into the artwork. The stops are close enough together
                            that no single step is visible as an edge, and the text-safe area stays at or
                            above the scrim alpha the contrast tests require. -->
+                      <!-- The stops move with the text size so the solid region always reaches past the
+                           text, and the fade always ends before the card's right edge. -->
                       <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
                         <GradientStop Color="{DynamicResource CardOpaque}" Offset="0"/>
-                        <GradientStop Color="{DynamicResource CardOpaque}" Offset="0.30"/>
-                        <GradientStop Color="{DynamicResource CardScrim}" Offset="0.42"/>
-                        <GradientStop Color="{DynamicResource CardFade}" Offset="0.52"/>
-                        <GradientStop Color="{DynamicResource CardSoft}" Offset="0.62"/>
-                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="0.74"/>
+                        <GradientStop Color="{DynamicResource CardOpaque}" Offset="{DynamicResource CardStopSolid}"/>
+                        <GradientStop Color="{DynamicResource CardScrim}" Offset="{DynamicResource CardStopScrim}"/>
+                        <GradientStop Color="{DynamicResource CardFade}" Offset="{DynamicResource CardStopFade}"/>
+                        <GradientStop Color="{DynamicResource CardSoft}" Offset="{DynamicResource CardStopSoft}"/>
+                        <GradientStop Color="{DynamicResource CardTransparent}" Offset="{DynamicResource CardStopClear}"/>
                         <GradientStop Color="{DynamicResource CardTransparent}" Offset="1"/>
                       </LinearGradientBrush>
                     </Border.Background>
@@ -100,7 +99,7 @@
                   <Button Grid.ColumnSpan="2" Classes="locationCardBody" Command="{Binding OpenCommand}"
                           AutomationProperties.Name="{Binding OpenAccessibleName}"/>
 
-                  <controls:LocationCardTextGrid Grid.ColumnSpan="2" FullWidth="{DynamicResource LocationCardFullWidth}" IsHitTestVisible="False">
+                  <controls:LocationCardTextGrid Grid.ColumnSpan="2" TextShare="{DynamicResource LocationCardTextShare}" IsHitTestVisible="False">
                     <Border Padding="22,18,12,62" Background="Transparent">
                       <StackPanel Spacing="6">
                         <TextBlock TextWrapping="Wrap" Text="{Binding Eyebrow}" Classes="eyebrow"/>
@@ -111,12 +110,12 @@
                           </StackPanel>
                         </Border>
                         <TextBlock Text="{Binding Name}" FontSize="{DynamicResource TextHeading}" FontWeight="SemiBold"
-                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
+                                   TextWrapping="Wrap" MaxLines="{DynamicResource LocationCardTextLines}" TextTrimming="CharacterEllipsis"/>
                         <TextBlock TextWrapping="Wrap" Text="{Binding Coordinates}" Foreground="{DynamicResource SecondaryText}" FontSize="{DynamicResource TextBodyStrong}"/>
                         <TextBlock TextWrapping="Wrap" Text="{Binding RegionDescription}" IsVisible="{Binding HasRegionDescription}"
                                    Foreground="{DynamicResource MutedText}" FontSize="{DynamicResource TextLabel}" MaxLines="1" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding UserDescription}" IsVisible="{Binding HasUserDescription}"
-                                   Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" MaxLines="2"
+                                   Foreground="{DynamicResource SecondaryText}" TextWrapping="Wrap" MaxLines="{DynamicResource LocationCardTextLines}"
                                    TextTrimming="CharacterEllipsis"/>
                       </StackPanel>
                     </Border>

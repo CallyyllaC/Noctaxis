@@ -7,8 +7,9 @@ namespace Noctaxis.Desktop.ViewModels;
 
 public sealed record AppearanceOption(string Id, string Label, bool IsSupporter, bool IsAvailable)
 {
-    public string AvailabilityLabel => IsSupporter
-        ? Strings.Get(IsAvailable ? "Settings_Appearance_Theme_Supporter" : "Settings_Appearance_Theme_LockedSupporter") : string.Empty;
+    /// <summary>What kind of theme this is, never empty: Standard, Supporter, or Locked · Supporter.</summary>
+    public string AvailabilityLabel => Strings.Get(!IsSupporter ? "Settings_Appearance_Theme_Standard"
+        : IsAvailable ? "Settings_Appearance_Theme_Supporter" : "Settings_Appearance_Theme_LockedSupporter");
 
     /// <summary>
     /// A theme's name: its translatable name where it has one (key

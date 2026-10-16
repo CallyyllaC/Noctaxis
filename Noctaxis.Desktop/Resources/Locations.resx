@@ -118,15 +118,6 @@
   <data name="Locations_DeleteLocation_MenuItem" xml:space="preserve">
     <value>Delete location</value>
   </data>
-  <data name="Locations_Device_NotResolved" xml:space="preserve">
-    <value>Device location could not be resolved. The current planning location was not changed.</value>
-  </data>
-  <data name="Locations_Device_Selected" xml:space="preserve">
-    <value>Device location selected.</value>
-  </data>
-  <data name="Locations_Device_Unavailable" xml:space="preserve">
-    <value>Device location is unavailable.</value>
-  </data>
   <data name="Locations_Edit_AddLocation_Button" xml:space="preserve">
     <value>Add location</value>
   </data>
@@ -165,6 +156,9 @@
   <data name="Locations_NoSavedLocationsYet_Label" xml:space="preserve">
     <value>No saved locations yet</value>
   </data>
+  <data name="Locations_NumberedName_Format" xml:space="preserve">
+    <value>{0} ({1})</value>
+  </data>
   <data name="Locations_RefreshSettlementImagery_MenuItem" xml:space="preserve">
     <value>Refresh settlement imagery</value>
   </data>
@@ -182,9 +176,6 @@
   </data>
   <data name="Locations_Save_Saved" xml:space="preserve">
     <value>Location saved</value>
-  </data>
-  <data name="Locations_Save_Updated" xml:space="preserve">
-    <value>Location updated</value>
   </data>
   <data name="Locations_SaveCurrentLocation_Button" xml:space="preserve">
     <value>Save current location</value>
@@ -238,9 +229,6 @@
   </data>
   <data name="Locations_Summary_One" xml:space="preserve">
     <value>1 saved location</value>
-  </data>
-  <data name="Locations_UseDeviceLocation_Button" xml:space="preserve">
-    <value>Use device location</value>
   </data>
   <data name="Locations_Edit_EditLocation_Label" xml:space="preserve">
     <value>Edit location</value>

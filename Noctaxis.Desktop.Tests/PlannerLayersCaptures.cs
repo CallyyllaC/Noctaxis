@@ -52,10 +52,15 @@ public sealed partial class MainViewModelTests
                 settings.SelectedItem = settings.Items.Cast<TabItem>().Single(x => (string?)x.Header == "Planner map");
                 vm.SettingsLightPollutionColorMap = LightPollutionColorMaps.Resolve("cividis");
                 Dispatcher.UIThread.RunJobs();
+                // The palette's description is behind the colour map's info button.
+                var info = window.FindControl<InfoButton>("LightPollutionColourMapInfo")!;
+                info.BringIntoView(); Dispatcher.UIThread.RunJobs();
+                info.Flyout!.ShowAt(info); Dispatcher.UIThread.RunJobs();
                 var description = window.FindControl<TextBlock>("LightPollutionPaletteDescription")!;
                 description.BringIntoView(); Dispatcher.UIThread.RunJobs();
                 Assert.Equal(vm.LightPollutionColorMapDescription, description.Text);
                 Capture(window, $"{id}-{scale * 100:0}-settings");
+                info.Flyout.Hide(); Dispatcher.UIThread.RunJobs();
             }
             map.Layers.LightPollutionOpacityPercent = 64;
             Assert.Equal(.64, vm.LightPollutionMapPreferences.Opacity);

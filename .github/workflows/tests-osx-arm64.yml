@@ -1,0 +1,29 @@
+name: macOS ARM64 tests
+
+# Builds the solution and runs the Core and Desktop test suites on a hosted osx-arm64 runner
+# (platform-tests.yml). Its status is this platform's README test badge.
+# Informational: pixel-level tests were written against Windows and Linux Skia output, so a failure here
+# is reported honestly in its own workflow and badge but does not fail the other platforms' runs.
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer push to a pull request replaces its run; runs for main and dev always finish, so their badges
+  # show a result rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    uses: ./.github/workflows/platform-tests.yml
+    with:
+      runner: macos-latest
+      rid: osx-arm64

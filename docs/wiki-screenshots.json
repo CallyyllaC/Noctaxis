@@ -1,0 +1,84 @@
+[
+  {
+    "id": "planner-overview",
+    "pages": [
+      "getting-started.md",
+      "planner.md"
+    ],
+    "alt": "Noctaxis Planner with map, Camera frame, Inspector and Timeline",
+    "caption": "Planner brings the camera position, composition and target paths into one workspace."
+  },
+  {
+    "id": "planner-map-context-menu",
+    "pages": [],
+    "alt": "Noctaxis Planner map context menu with Set pin here, Save current pin and Open in Maps",
+    "caption": "Open in Maps opens the clicked position in the external map provider selected in Settings, without moving the Planner pin."
+  },
+  {
+    "id": "timeline",
+    "pages": [
+      "planner.md"
+    ],
+    "alt": "Twenty-four-hour Timeline with celestial paths and darkness periods",
+    "caption": "Scrub within the 24-hour window to compare target altitude and available light."
+  },
+  {
+    "id": "map-layers",
+    "pages": [
+      "planner.md"
+    ],
+    "alt": "Planner Layers controls beside the main and Picture-in-Picture maps",
+    "caption": "Layer opacity changes the map presentation; PiP keeps a separate geographical view."
+  },
+  {
+    "id": "shot-viability",
+    "pages": [
+      "planner.md"
+    ],
+    "alt": "Shot viability details showing contributing factors and unavailable data",
+    "caption": "Read the contributing factors, warnings and coverage alongside the headline score."
+  },
+  {
+    "id": "equipment-settings",
+    "pages": [
+      "getting-started.md",
+      "settings.md"
+    ],
+    "alt": "Camera and lens profiles in Noctaxis Equipment settings",
+    "caption": "Sensor dimensions define framing; optional pixel resolution supports sampling information."
+  },
+  {
+    "id": "celestial-objects",
+    "pages": ["getting-started.md"],
+    "alt": "M31 catalogue search with galaxy, constellation and Messier filters, above configured Sun, Moon and Andromeda targets",
+    "caption": "Search and filters find catalogue objects; the configured list below controls visibility and order."
+  },
+  {
+    "id": "viability-favourable",
+    "pages": ["getting-started.md"],
+    "alt": "Favourable M31 Shot viability assessment with low cloud cover, darkness and the target centred high in the sky",
+    "caption": "Favourable demonstration: M31 at Eryri on 9 October 2026, 23:00 Europe/London, with the camera following at 70 mm and simulated 5% cloud cover. Noctaxis calculates the assessment; the uninstalled light-pollution atlas remains unavailable."
+  },
+  {
+    "id": "viability-compromised",
+    "pages": ["getting-started.md"],
+    "alt": "Compromised M31 Shot viability assessment with heavy cloud, twilight and a lower target altitude",
+    "caption": "Compromised demonstration: the same place, target and equipment at 19:00 Europe/London on 9 October 2026, with simulated 95% cloud cover. Twilight and the lower target compound the cloud warning; light-pollution data is still unavailable."
+  },
+  {
+    "id": "locations",
+    "pages": [
+      "locations.md"
+    ],
+    "alt": "Saved observing locations in Noctaxis",
+    "caption": "Saved cards keep reusable places separate from the temporary Planner pin."
+  },
+  {
+    "id": "plan-sheet",
+    "pages": [
+      "planner.md"
+    ],
+    "alt": "Plan PNG exported by Noctaxis with location, equipment, weather and target chart",
+    "caption": "A plan sheet shares the focused target and includes a limited reopenable plan record."
+  }
+]

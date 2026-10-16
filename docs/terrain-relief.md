@@ -120,9 +120,8 @@ Tests check that adjacent tiles meet without a step and that a plane shades unif
   planning lines and markers are all above the relief in every theme.
 - **Controls:** Planner → Layers has a Terrain relief checkbox and an Opacity slider, consistent with
   light pollution. The choice is saved in `AppSettings.TerrainRelief`.
-- **Export:** Save PNG / Copy PNG export the scouting card, whose map panel is a bearing and field-of-view
-  schematic without map tiles, basemap or light pollution. Terrain relief is therefore not part of the
-  export either, consistent with the other map layers.
+- **Export:** a plan image's map is the clean themed basemap with no Planner overlay or layer, so terrain
+  relief is not part of it, consistent with the other map layers (see `docs/plan-images.md`).
 
 ## Failure and performance
 

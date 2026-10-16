@@ -218,15 +218,16 @@ public sealed class TerrainSurfaceResolverTests
     }
 
     [Fact]
-    public async Task LocalTerrainMap_UsesProductionResolvedOceanSurfaceRatherThanBathymetry()
+    public async Task ASurfaceBatchUsesTheResolvedOceanSurfaceRatherThanBathymetry()
     {
-        var service = new TerrainDebugMapService(Resolver(new ConstantTerrain(-3000),
-            new ConstantCover(LandCoverClass.PermanentWater)));
-        var map = await service.GetMapAsync(new GeoCoordinate(53, -1), new TerrainDebugMapRequest(), default);
-        Assert.All(map.RawTerrainElevationsMetres, value => Assert.Equal(-3000, value));
-        Assert.All(map.SurfaceElevationsMetres, value => Assert.Equal(0, value));
-        Assert.All(map.AdjustedSamples, Assert.True);
-        Assert.All(map.SampleStatuses, status => Assert.Equal(TerrainSampleStatus.Water, status));
+        var resolver = Resolver(new ConstantTerrain(-3000), new ConstantCover(LandCoverClass.PermanentWater));
+        GeoCoordinate[] points = [new(53, -1), new(53.05, -1), new(53, -1.05)];
+        var batch = await resolver.GetSurfaceElevationsAsync(points,
+            await resolver.GetClassificationsAsync(points, default), default);
+        Assert.All(batch.RawTerrainElevationsMetres, value => Assert.Equal(-3000, value));
+        Assert.All(batch.SurfaceElevationsMetres, value => Assert.Equal(0, value));
+        Assert.All(batch.AdjustedSamples, Assert.True);
+        Assert.All(batch.SampleStatuses, status => Assert.Equal(TerrainSampleStatus.Water, status));
     }
 
     private sealed class UnavailableCover : ILandCoverProvider

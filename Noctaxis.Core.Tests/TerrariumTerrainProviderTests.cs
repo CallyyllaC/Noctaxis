@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
+using Noctaxis.Core.Terrain;
 using SkiaSharp;
 
 namespace Noctaxis.Core.Tests;
@@ -354,6 +355,71 @@ public sealed class TerrariumTerrainProviderTests : IDisposable
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(16, 0, 0), default));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(1, 2, 0), default));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => provider.GetTerrainTileAsync(new TerrariumTileKey(1, 0, -1), default));
+    }
+
+    [Fact]
+    public async Task RequestTimeoutIsAnUnavailableTileWithBackoffNotACancelledHorizon()
+    {
+        // V-02: HttpClient.Timeout surfaces as TaskCanceledException although no caller cancelled.
+        var handler = new StallingHandler();
+        using var http = new HttpClient(handler) { Timeout = TimeSpan.FromMilliseconds(200) };
+        var paths = new TerrainPaths(_directory);
+        var cache = new EnvironmentalTileCache(paths, NullLogger<EnvironmentalTileCache>.Instance);
+        var provider = new TerrariumTerrainProvider(http, cache, NullLogger<TerrariumTerrainProvider>.Instance,
+            new TerrariumTerrainOptions(1, 4, FailureRetryDelay: TimeSpan.FromMinutes(5)));
+        var coordinate = CoordinateAtGlobalPixelCentre(1, 256, 256);
+
+        var batch = await provider.GetElevationsAsync([coordinate], default);
+        Assert.Equal(EnvironmentalDataState.Unavailable, batch.State);
+        Assert.Null(Assert.Single(batch.ElevationsMetres));
+        var calls = handler.Calls;
+        Assert.Equal(1, calls);
+
+        // The timeout is in the failure backoff: the slow tile is not requested again at once.
+        await provider.GetElevationsAsync([coordinate], default);
+        Assert.Equal(calls, handler.Calls);
+
+        // And a horizon over that tile completes degraded instead of failing as cancelled.
+        var profile = await new HorizonService(provider, NullLogger<HorizonService>.Instance, 1)
+            .GetProfileAsync(coordinate, new TerrainProfileRequest(8, 100, 50), default);
+        Assert.True(profile.IsComplete);
+        Assert.False(profile.HasTerrainCoverage);
+        Assert.True(HorizonService.IsDegraded(profile));
+    }
+
+    [Fact]
+    public async Task SourceTimeoutMapsToSourceUnavailableButCallerCancellationStillPropagates()
+    {
+        var cache = new EnvironmentalTileCache(new TerrainPaths(_directory), NullLogger<EnvironmentalTileCache>.Instance);
+        var descriptor = new EnvironmentalTileDescriptor("fixture", "1", "layer", "tile", "bin");
+
+        var timedOut = await cache.GetOrCreateDetailedAsync(descriptor,
+            _ => throw new TaskCanceledException("The request timed out.", new TimeoutException()),
+            _ => true, CancellationToken.None);
+        Assert.Equal(EnvironmentalDataState.SourceUnavailable, timedOut.State);
+        Assert.False(timedOut.IsAvailable);
+
+        using var caller = new CancellationTokenSource();
+        var pending = cache.GetOrCreateDetailedAsync(descriptor, async token =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return EnvironmentalAcquisitionResult.Available([1]);
+        }, _ => true, caller.Token);
+        caller.CancelAfter(TimeSpan.FromMilliseconds(50));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        Assert.Empty(Directory.GetFiles(cache.RootDirectory, "*", SearchOption.AllDirectories));
+    }
+
+    private sealed class StallingHandler : HttpMessageHandler
+    {
+        private int _calls;
+        public int Calls => Volatile.Read(ref _calls);
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Interlocked.Increment(ref _calls);
+            await Task.Delay(Timeout.Infinite, token);
+            throw new InvalidOperationException("Unreachable.");
+        }
     }
 
     private sealed class TerrainPaths(string path) : Noctaxis.Core.Persistence.IUserDataPathProvider

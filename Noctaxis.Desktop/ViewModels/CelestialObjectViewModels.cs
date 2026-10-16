@@ -12,18 +12,18 @@ public sealed record ObjectTypeOption(string Label, AstralTargetCategory? Value)
 public partial class CelestialObjectItemViewModel : ObservableObject
 {
     private readonly Action<CelestialObjectItemViewModel> _changed;
-    private readonly Action<CelestialObjectItemViewModel> _makePrimary;
+    private readonly Action<CelestialObjectItemViewModel> _focus;
     private readonly Action<CelestialObjectItemViewModel> _remove;
     private readonly Action<CelestialObjectItemViewModel, int> _move;
     private bool _suppressVisibility;
 
     public CelestialObjectItemViewModel(AstralTarget target, bool isVisible, int order, bool isPrimary,
         Action<CelestialObjectItemViewModel> changed,
-        Action<CelestialObjectItemViewModel> makePrimary, Action<CelestialObjectItemViewModel> remove,
+        Action<CelestialObjectItemViewModel> focus, Action<CelestialObjectItemViewModel> remove,
         Action<CelestialObjectItemViewModel, int>? move = null)
     {
         Target = target; _isVisible = isVisible; _order = order; _isPrimary = isPrimary;
-        _changed = changed; _makePrimary = makePrimary; _remove = remove; _move = move ?? ((_, _) => { });
+        _changed = changed; _focus = focus; _remove = remove; _move = move ?? ((_, _) => { });
     }
 
     public AstralTarget Target { get; }
@@ -41,8 +41,8 @@ public partial class CelestialObjectItemViewModel : ObservableObject
     public Noctaxis.Desktop.Controls.CelestialRole Role => Noctaxis.Desktop.Controls.CelestialPalette.Role(Target, Order);
     public bool CanRemove => !Target.IsSun && !Target.IsMoon;
     [ObservableProperty] private bool _isVisible;
+    /// <summary>The focused target: the one the Planner calculates for, draws boldest and can aim the camera at. One at a time.</summary>
     [ObservableProperty] private bool _isPrimary;
-    public string PrimaryLabel => IsPrimary ? Strings.Get("Planner_Targets_Primary_Label") : Strings.Get("Planner_Targets_SetPrimary_Button");
 
     public void SetVisibilitySilently(bool value)
     {
@@ -52,8 +52,8 @@ public partial class CelestialObjectItemViewModel : ObservableObject
     }
 
     partial void OnIsVisibleChanged(bool value) { if (!_suppressVisibility) _changed(this); }
-    partial void OnIsPrimaryChanged(bool value) => OnPropertyChanged(nameof(PrimaryLabel));
-    [RelayCommand] private void MakePrimary() => _makePrimary(this);
+    /// <summary>Focuses this target and aims the camera at it, even when it is already the focused one.</summary>
+    [RelayCommand] private void Focus() => _focus(this);
     [RelayCommand] private void Remove() { if (CanRemove) _remove(this); }
     [RelayCommand] private void MoveUp() => _move(this, -1);
     [RelayCommand] private void MoveDown() => _move(this, 1);

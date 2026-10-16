@@ -15,6 +15,8 @@ internal sealed record StateSaveResult(bool Succeeded, Exception? Failure = null
 /// save hands it to <see cref="UnexpectedBackgroundFailure"/>.
 /// Nothing is written until <see cref="Enable"/> is called, i.e. until persisted state has been
 /// fully loaded; otherwise a failed or incomplete startup could overwrite the user's saved file.
+/// <see cref="CloseAsync"/> writes the final snapshot and then refuses every later request, so work that
+/// finishes while the application is shutting down cannot write after the final flush.
 /// <para>
 /// Threading: this class never reads live view-model state. The caller captures the snapshot on its
 /// own thread and passes the immutable <see cref="PersistedState"/> in, so the debounce timer, the
@@ -36,6 +38,7 @@ internal sealed class StateSaveScheduler
     /// <summary>The newest snapshot that has not been written yet, or null when nothing is pending.</summary>
     private PersistedState? _pending;
     private bool _enabled;
+    private bool _closed;
     private bool _lastWriteFailed;
     private CancellationTokenSource? _debounceCancellation;
     private int _busy;
@@ -58,6 +61,8 @@ internal sealed class StateSaveScheduler
 
     public bool IsEnabled { get { lock (_gate) return _enabled; } }
 
+    public bool IsClosed { get { lock (_gate) return _closed; } }
+
     public void Enable() { lock (_gate) _enabled = true; }
 
     /// <summary>
@@ -70,6 +75,11 @@ internal sealed class StateSaveScheduler
         lock (_gate)
         {
             if (!_enabled) return;
+            if (_closed)
+            {
+                _logger.LogDebug("Ignoring a state save requested after the final save");
+                return;
+            }
             _pending = state;
             // A pending debounce will pick this snapshot up when it fires.
             if (_debounceCancellation is not null) return;
@@ -90,7 +100,32 @@ internal sealed class StateSaveScheduler
         lock (_gate)
         {
             if (!_enabled) return true;
+            if (_closed)
+            {
+                _logger.LogWarning("A state change made after the final save was not written");
+                return false;
+            }
             // A flush always writes, including for changes that never requested a save.
+            _pending = state;
+            CancelDebounce();
+            EnterBusy();
+        }
+        try { return await SaveLatestAsync(); }
+        finally { ExitBusy(); }
+    }
+
+    /// <summary>
+    /// The final save: writes <paramref name="state"/> after any write already running, then closes the scheduler so
+    /// later requests write nothing. Returns false when the final write failed for an expected filesystem reason.
+    /// Writes nothing if the scheduler was never enabled.
+    /// </summary>
+    public async Task<bool> CloseAsync(PersistedState state)
+    {
+        lock (_gate)
+        {
+            if (_closed) return true;
+            _closed = true;
+            if (!_enabled) return true;
             _pending = state;
             CancelDebounce();
             EnterBusy();

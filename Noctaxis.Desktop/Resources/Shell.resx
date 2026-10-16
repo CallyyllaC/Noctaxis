@@ -46,6 +46,17 @@
     <value>Noctaxis could not start: {0}</value>
     <comment>{0} is the error message.</comment>
   </data>
+  <data name="Shell_Notice_StateNewerVersion_Format" xml:space="preserve">
+    <value>Your saved Noctaxis data comes from a newer version of Noctaxis (data version {0}; this version understands up to {1}). To keep it intact, nothing you change in this session will be saved. Use the newer version to keep working with your saved data.</value>
+    <comment>{0} is the data version in the file; {1} is the newest data version this build understands.</comment>
+  </data>
+  <data name="Shell_Notice_StateUnrecognised" xml:space="preserve">
+    <value>Some of your saved Noctaxis settings come from a newer version of Noctaxis and are not recognised here. To keep them intact, nothing you change in this session will be saved. Use the newer version to keep working with your saved data.</value>
+  </data>
+  <data name="Shell_Status_StateUnavailable_Format" xml:space="preserve">
+    <value>Your saved Noctaxis data could not be read, so nothing will be saved this session to protect it. Close any other copy of Noctaxis or anything else using {0}, then restart Noctaxis.</value>
+    <comment>{0} is the path of the saved-state file.</comment>
+  </data>
   <data name="Shell_Status_Starting" xml:space="preserve">
     <value>Starting Noctaxis…</value>
   </data>
@@ -70,5 +81,27 @@
   <data name="Shell_Search_Clear_AccessibleName" xml:space="preserve">
     <value>Clear search</value>
     <comment>Name of the button that empties the header search field.</comment>
+  </data>
+  <data name="Shell_Instance_Notice_Title" xml:space="preserve">
+    <value>Noctaxis</value>
+    <comment>Title of the small window shown when this launch of Noctaxis cannot start.</comment>
+  </data>
+  <data name="Shell_Instance_Notice_Close" xml:space="preserve">
+    <value>Close</value>
+    <comment>Button that closes the notice window.</comment>
+  </data>
+  <data name="Shell_Instance_AlreadyRunning" xml:space="preserve">
+    <value>Noctaxis is already running. Switch to its window to continue planning.</value>
+    <comment>Shown when Noctaxis is started a second time and its existing window could not be brought forward.</comment>
+  </data>
+  <data name="Shell_Instance_DataFolderInUse_Format" xml:space="preserve">
+    <value>Noctaxis cannot start because its data folder is in use by another Noctaxis or another program:
+{0}
+Close the other program, then start Noctaxis again. Nothing was changed.</value>
+    <comment>{0} is the path of the data folder.</comment>
+  </data>
+  <data name="Shell_Instance_RestartIncomplete" xml:space="preserve">
+    <value>Noctaxis could not restart because the previous window has not finished closing. When it has closed, start Noctaxis again. Nothing was changed.</value>
+    <comment>Shown when a restart waited for the previous instance and it was still running.</comment>
   </data>
 </root>

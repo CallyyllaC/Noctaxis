@@ -139,6 +139,52 @@ public sealed class StateSaveSchedulerTests
         Assert.IsType<InvalidOperationException>(reported);
     }
 
+    [Fact]
+    public async Task CloseWritesTheFinalStateAfterAnInFlightWriteAndNothingAfterIt()
+    {
+        // NX-37: work finishing while the application shuts down must not write after the final save.
+        var harness = new Harness(immediate: true);
+        harness.BlockWrites();
+        harness.Request(1);
+        var close = harness.Scheduler.CloseAsync(Harness.State(2));
+        harness.Request(3);
+        Assert.False(close.IsCompleted);
+
+        harness.UnblockWrites();
+        Assert.True(await close);
+        harness.Request(4);
+        Assert.False(await harness.FlushAsync(5));
+        await harness.Scheduler.WhenIdleAsync();
+
+        Assert.Equal([1, 2], harness.Written);
+        Assert.True(harness.Scheduler.IsClosed);
+        Assert.Equal(1, harness.MaximumConcurrentWrites);
+    }
+
+    [Fact]
+    public async Task CloseDuringADebounceWritesOnceAndTheDebounceNeverFires()
+    {
+        var harness = new Harness();
+        harness.Request(1);
+        Assert.True(await harness.Scheduler.CloseAsync(Harness.State(2)));
+        harness.Delay.ReleaseAll();
+        await harness.Scheduler.WhenIdleAsync();
+
+        Assert.Equal([2], harness.Written);
+    }
+
+    [Fact]
+    public async Task CloseBeforeStartupFinishedWritesNothing()
+    {
+        var harness = new Harness(immediate: true, enable: false);
+        Assert.True(await harness.Scheduler.CloseAsync(Harness.State(1)));
+        harness.Scheduler.Enable();
+        harness.Request(2);
+        await harness.Scheduler.WhenIdleAsync();
+
+        Assert.Empty(harness.Written);
+    }
+
     private sealed class Harness
     {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);

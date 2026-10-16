@@ -94,17 +94,21 @@ public partial class MainViewModel
         // Everything that shows a physical quantity is drawn again in the new units.
         new(nameof(SettingsUnits), Strings.Get("Settings_Name_MeasurementSystem"), s => MeasurementUnits.NormaliseId(s.Units),
             AlsoNotify: [nameof(Measurements), nameof(WeatherDetails), nameof(ConfiguredWeatherDetails), nameof(GroundObstructionText),
-                nameof(FramingVisibilityStatus), nameof(GroundElevationDisplay), nameof(GroundElevationUnitText),
-                nameof(GroundElevationSourceText), nameof(TerrainDatumText), nameof(EffectiveObserverAltitudeText),
+                nameof(FramingVisibilityStatus),
+                nameof(GroundElevationSourceText), nameof(EffectiveObserverAltitudeText),
+                nameof(EffectiveCameraAltitudeShortText), nameof(EffectiveCameraAltitudeDetail),
                 // The limit before the value, so the control ends on the value in the new unit.
                 nameof(CameraHeightMaximum), nameof(SettingsCameraHeightAboveGround), nameof(CameraHeightLabel),
-                nameof(CameraHeightAccessibleName), nameof(SettingsWeatherCacheDistanceDisplay), nameof(WeatherCacheDistanceLabel),
+                nameof(CameraHeightAccessibleName), nameof(SettingsWeatherCacheDistanceDisplay), nameof(WeatherCacheDistanceLabel), nameof(WeatherCacheDistanceUnit),
                 nameof(WeatherCacheDistanceAccessibleName)]),
         new(nameof(SettingsExternalMapProvider), Strings.Get("Settings_Name_ExternalMapProvider"), s => s.ExternalMapProvider),
         new(nameof(SettingsTimeZoneId), Strings.Get("Settings_Name_TimeZone"), s => s.SelectedTimeZoneId),
         new(nameof(SettingsTimeSnapMinutes), Strings.Get("Settings_Name_TimeSnapInterval"), s => s.TimeSnapMinutes),
         new(nameof(SettingsCameraHeightAboveGroundMetres), Strings.Get("Settings_Name_CameraHeight"), s => s.EffectiveCameraHeightAboveGroundMetres,
-            AlsoNotify: [nameof(SettingsCameraHeightAboveGround)]),
+            AlsoNotify: [nameof(SettingsCameraHeightAboveGround),
+                // The Planner overlay shows the effective camera altitude, which is the ground plus this height.
+                nameof(EffectiveCameraAltitudeMetres), nameof(EffectiveObserverAltitudeText),
+                nameof(EffectiveCameraAltitudeShortText), nameof(EffectiveCameraAltitudeDetail)]),
         new(nameof(SettingsWeatherCacheDistance), Strings.Get("Settings_Name_ForecastReuseDistance"), s => s.EffectiveWeather.CacheDistanceKilometres,
             AlsoNotify: [nameof(SettingsWeatherCacheDistanceDisplay)]),
         new(nameof(SettingsTerrainCacheLimitGiB), Strings.Get("Settings_Name_TerrainCacheSize"), s => s.EffectiveTerrainCacheLimitBytes),
@@ -115,10 +119,17 @@ public partial class MainViewModel
         new(nameof(SettingsEnableTerrainCalculations), Strings.Get("Settings_Name_TerrainCalculations"), s => s.EnableTerrainCalculations),
         new(nameof(SettingsMinimumTerrainFrameCoveragePercent), Strings.Get("Settings_Name_MinimumTerrainFrameCoverage"),
             s => s.EffectiveCameraFraming.MinimumTerrainFrameCoveragePercent),
-        new(nameof(SettingsTerrainMinimapContext), Strings.Get("Settings_Name_TerrainMinimapContext"), s => s.EffectiveTerrainMinimapContext),
+        new(nameof(SettingsPlannerPipEnabled), Strings.Get("Settings_Name_PlannerPip"), s => s.EffectivePlannerPip.IsEnabled,
+            AlsoNotify: [nameof(IsPlannerPipEnabled)]),
+        new(nameof(SettingsPlannerPipShowRoadsAndLabels), Strings.Get("Settings_Name_PlannerPipRoadsAndLabels"),
+            s => s.EffectivePlannerPip.ShowRoadsAndLabels, AlsoNotify: [nameof(PlannerPipShowRoadsAndLabels)]),
+        new(nameof(SettingsPlannerPipEnhanceContrast), Strings.Get("Settings_Name_PlannerPipEnhanceContrast"),
+            s => s.EffectivePlannerPip.EnhanceContrast, AlsoNotify: [nameof(PlannerPipEnhanceContrast)]),
         new(nameof(SettingsCameraFramingOverlayVisible), Strings.Get("Settings_Name_CameraFramingOnMap"), s => s.EffectiveCameraFraming.IsOverlayVisible),
         new(nameof(SettingsShowFramingVisibilityLimits), Strings.Get("Settings_Name_VisibilityLimits"),
             s => s.EffectiveCameraFraming.ShowVisibilityLimits),
+        new(nameof(SettingsInvertHorizontalDrag), Strings.Get("Settings_Name_InvertHorizontalDrag"), s => s.EffectiveCameraFraming.InvertHorizontalDrag),
+        new(nameof(SettingsInvertVerticalDrag), Strings.Get("Settings_Name_InvertVerticalDrag"), s => s.EffectiveCameraFraming.InvertVerticalDrag),
         new(nameof(SettingsFramingShadingOpacityPercent), Strings.Get("Settings_Name_CameraOverlayOpacity"), s => s.EffectiveCameraFraming.ShadingOpacityPercent),
         new(nameof(SettingsTerrainTintStrengthPercent), Strings.Get("Settings_Name_TerrainTintStrength"), s => s.EffectiveCameraFraming.TerrainTintStrengthPercent),
         new(nameof(SettingsTerrainObstructionColour), Strings.Get("Settings_Name_TerrainObstructionColour"), s => s.EffectiveCameraFraming.TerrainObstructionColour,
@@ -226,8 +237,9 @@ public partial class MainViewModel
         }
     }
 
-    public string WeatherCacheDistanceLabel =>
-        Strings.Format("Settings_Weather_ForecastReuseDistance_Label_Format", Settings.MeasurementProfile.LongDistance.Symbol);
+    public string WeatherCacheDistanceLabel => Strings.Get("Settings_Weather_ForecastReuseDistance_Label");
+    /// <summary>The reuse distance's unit, shown after its value.</summary>
+    public string WeatherCacheDistanceUnit => Settings.MeasurementProfile.LongDistance.Symbol;
     public string WeatherCacheDistanceAccessibleName =>
         Strings.Format("Settings_Weather_ForecastReuseDistance_AccessibleName_Format", Settings.MeasurementProfile.LongDistance.Name);
 
@@ -275,12 +287,25 @@ public partial class MainViewModel
         set => ChangeSetting(s => WithFraming(s, f => f with { MinimumTerrainFrameCoveragePercent = Math.Clamp(double.IsFinite(value) ? value : 5, 0, 50) }));
     }
 
-    public double SettingsTerrainMinimapContext
+    /// <summary>Whether the Planner shows its Picture-in-Picture map. Off, the map is not created at all.</summary>
+    public bool SettingsPlannerPipEnabled
     {
-        // Only the minimap's drawn extent changes, so dragging previews it live.
-        get => Settings.EffectiveTerrainMinimapContext;
-        set => ChangeSetting(s => s with { TerrainMinimapContext = Math.Clamp(
-            double.IsFinite(value) ? value : AppSettings.DefaultTerrainMinimapContext, 1.0, 2.5) });
+        get => Settings.EffectivePlannerPip.IsEnabled;
+        set => ChangeSetting(s => s with { PlannerPip = s.EffectivePlannerPip with { IsEnabled = value } });
+    }
+
+    /// <summary>Whether the Picture-in-Picture map draws roads, boundaries and names. The main map always does.</summary>
+    public bool SettingsPlannerPipShowRoadsAndLabels
+    {
+        get => Settings.EffectivePlannerPip.ShowRoadsAndLabels;
+        set => ChangeSetting(s => s with { PlannerPip = s.EffectivePlannerPip with { ShowRoadsAndLabels = value } });
+    }
+
+    /// <summary>Whether the Picture-in-Picture map draws its terrain relief in the stronger tone. The main map never does.</summary>
+    public bool SettingsPlannerPipEnhanceContrast
+    {
+        get => Settings.EffectivePlannerPip.EnhanceContrast;
+        set => ChangeSetting(s => s with { PlannerPip = s.EffectivePlannerPip with { EnhanceContrast = value } });
     }
 
     public bool SettingsCameraFramingOverlayVisible
@@ -294,6 +319,20 @@ public partial class MainViewModel
     {
         get => Settings.EffectiveCameraFraming.ShowVisibilityLimits;
         set => ShowFramingVisibilityLimits = value;
+    }
+
+    /// <summary>Whether a drag across the Camera frame turns it the other way. The bearing itself is unchanged.</summary>
+    public bool SettingsInvertHorizontalDrag
+    {
+        get => Settings.EffectiveCameraFraming.InvertHorizontalDrag;
+        set => ChangeSetting(s => WithFraming(s, f => f with { InvertHorizontalDrag = value }));
+    }
+
+    /// <summary>Whether a drag up and down the Camera frame tilts it the other way. The pitch itself is unchanged.</summary>
+    public bool SettingsInvertVerticalDrag
+    {
+        get => Settings.EffectiveCameraFraming.InvertVerticalDrag;
+        set => ChangeSetting(s => WithFraming(s, f => f with { InvertVerticalDrag = value }));
     }
 
     public double SettingsFramingShadingOpacityPercent

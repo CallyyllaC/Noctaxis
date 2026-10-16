@@ -46,7 +46,8 @@ public sealed class ApplicationHardeningTests
         using var client = new HttpClient(new TimeoutHandler()) { BaseAddress = new Uri("https://test.invalid/") };
         var provider = new OpenMeteoLocationSearchProvider(client, SystemClock.Instance,
             NullLogger<OpenMeteoLocationSearchProvider>.Instance);
-        await Assert.ThrowsAsync<InvalidOperationException>(() => provider.SearchAsync("London", CancellationToken.None));
+        var failure = await Assert.ThrowsAsync<LocationSearchUnavailableException>(() => provider.SearchAsync("London", CancellationToken.None));
+        Assert.Equal("Location search is unavailable. Check the network connection and try again.", failure.Message);
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => provider.SearchAsync("London", cancelled.Token));

@@ -1,3 +1,4 @@
+#requires -Version 5.1
 param(
     [string]$Baseline = 'docs/terrain-compute-baseline.json',
     [string]$After = 'docs/terrain-compute-final.json',

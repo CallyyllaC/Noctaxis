@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Noctaxis.app's Info.plist. scripts/package.sh fills in @VERSION@; see docs/releasing.md. -->
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key>
+  <string>Noctaxis</string>
+  <key>CFBundleDisplayName</key>
+  <string>Noctaxis</string>
+  <key>CFBundleIdentifier</key>
+  <string>io.github.callyyllac.noctaxis</string>
+  <key>CFBundleExecutable</key>
+  <string>Noctaxis.Desktop</string>
+  <key>CFBundleIconFile</key>
+  <string>Noctaxis.icns</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
+  <key>CFBundleShortVersionString</key>
+  <string>@VERSION@</string>
+  <key>CFBundleVersion</key>
+  <string>@VERSION@</string>
+  <key>LSMinimumSystemVersion</key>
+  <string>14.0</string>
+  <key>LSApplicationCategoryType</key>
+  <string>public.app-category.photography</string>
+  <key>NSHighResolutionCapable</key>
+  <true/>
+  <key>NSPrincipalClass</key>
+  <string>NSApplication</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>Noctaxis. See LICENSE.</string>
+</dict>
+</plist>

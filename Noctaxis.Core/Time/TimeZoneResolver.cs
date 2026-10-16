@@ -1,4 +1,5 @@
 using NodaTime;
+using NodaTime.TimeZones;
 using Noctaxis.Core.Domain;
 
 namespace Noctaxis.Core.Time;
@@ -43,7 +44,19 @@ public sealed class TimeZoneResolver : ITimeZoneResolver
 
     private static DateTimeZone? TryResolve(string requestedId) =>
         DateTimeZoneProviders.Bcl.GetZoneOrNull(requestedId)
-        ?? DateTimeZoneProviders.Tzdb.GetZoneOrNull(requestedId);
+        ?? ResolveWithoutSystemZones(requestedId);
+
+    /// <summary>
+    /// Resolves an identifier from NodaTime's own data only. A zone saved on Windows carries a Windows identifier
+    /// ("GMT Standard Time"); on a system whose time-zone support cannot read it (Linux without ICU, for example)
+    /// it is mapped through the CLDR Windows mapping bundled with NodaTime, so a saved location keeps its zone
+    /// instead of silently taking the machine's.
+    /// </summary>
+    internal static DateTimeZone? ResolveWithoutSystemZones(string requestedId) =>
+        DateTimeZoneProviders.Tzdb.GetZoneOrNull(requestedId)
+        ?? (TzdbDateTimeZoneSource.Default.WindowsMapping.PrimaryMapping.TryGetValue(requestedId, out var iana)
+            ? DateTimeZoneProviders.Tzdb.GetZoneOrNull(iana)
+            : null);
 
     public ZonedDateTime InZone(Instant instant, string? requestedId) => instant.InZone(Resolve(requestedId));
 

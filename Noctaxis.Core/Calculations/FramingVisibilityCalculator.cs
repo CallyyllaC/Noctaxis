@@ -95,7 +95,8 @@ public sealed class FramingVisibilityCalculator : IFramingVisibilityCalculator
                 terrain, left + spacing * index, cameraFrame, pixels, index, coarseSamples.Length);
         depth = pixels is null || !coarseSamples.Any(s => s.FrameTerrainHorizonDegrees.HasValue) ? null
             : new CameraTerrainDepth(System.Collections.Immutable.ImmutableArray.CreateRange(coarseSamples.Select(s => s.BearingDegrees)),
-                cameraFrame!.Lower, cameraFrame.Upper, System.Collections.Immutable.ImmutableArray.CreateRange(pixels));
+                cameraFrame!.Lower, cameraFrame.Upper, System.Collections.Immutable.ImmutableArray.CreateRange(pixels),
+                System.Collections.Immutable.ImmutableArray.CreateRange(coarseSamples.Select(s => s.FrameTerrainHorizonDegrees ?? double.NaN)));
         if (coarseSamples.Length < 2) return coarseSamples;
 
         var samples = new List<FramingTerrainObstructionSample>(coarseSamples.Length + 8)

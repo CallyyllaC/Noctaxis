@@ -3,10 +3,13 @@
              xmlns:themes="clr-namespace:Noctaxis.Desktop.Themes"
              xmlns:controls="clr-namespace:Noctaxis.Desktop.Controls"
              x:Class="Noctaxis.Desktop.App"
+             Name="Noctaxis"
              RequestedThemeVariant="Dark">
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+    <!-- The Planner's dockable panels: their chrome, their edge tabs and their resize grips. -->
+    <StyleInclude Source="avares://Noctaxis.Desktop/Controls/Docking/DockingStyles.axaml" />
     <Style Selector="TextBlock">
       <Setter Property="FontSize" Value="{DynamicResource TextBody}"/>
     </Style>
@@ -87,7 +90,10 @@
     <Style Selector="Button.compactDelete">
       <Setter Property="Width" Value="34" />
       <Setter Property="MinWidth" Value="34" />
+      <Setter Property="Height" Value="34" />
       <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
       <Setter Property="Foreground" Value="{DynamicResource Error}" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="Opacity" Value="1" />
@@ -101,6 +107,14 @@
     <Style Selector="Button.compactDelete:focus">
       <Setter Property="Opacity" Value="1" />
       <Setter Property="Background" Value="{DynamicResource ErrorBackground}" />
+    </Style>
+    <!-- A state in a row of actions, such as Focused: plain text, accented, and nothing to press. -->
+    <Style Selector="TextBlock.focusedState">
+      <Setter Property="FontStyle" Value="Italic" />
+      <Setter Property="Foreground" Value="{DynamicResource Accent}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Margin" Value="0,0,8,0" />
     </Style>
     <Style Selector="Button.secondaryAction">
       <Setter Property="MinHeight" Value="30" />
@@ -147,7 +161,6 @@
     <Style Selector="StackPanel.settingsCategory">
       <Setter Property="Margin" Value="16" />
       <Setter Property="Spacing" Value="12" />
-      <Setter Property="MaxWidth" Value="860" />
     </Style>
     <Style Selector="TextBlock.settingsTitle">
       <Setter Property="FontSize" Value="{DynamicResource TextTitle}" />
@@ -158,6 +171,154 @@
       <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
       <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
       <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- In Settings a setting's name leads: body size and weight in the primary colour, clearly above the
+         small secondary text of a status or a hint. Section headings start a group with clear space above. -->
+    <Style Selector="StackPanel.settingsCategory TextBlock.fieldLabel">
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+      <Setter Property="FontSize" Value="{DynamicResource TextBody}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+    <Style Selector="StackPanel.settingsCategory > TextBlock.section, StackPanel.settingsCategory > Grid.sectionHeader">
+      <Setter Property="Margin" Value="0,14,0,0" />
+    </Style>
+    <!-- One content column for every page, its title and sections on one left edge, wide enough for any form;
+         Equipment's two-column cards take a little more. -->
+    <Style Selector="StackPanel.settingsCategory">
+      <Setter Property="MaxWidth" Value="720" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="StackPanel.settingsCategory.wide">
+      <Setter Property="MaxWidth" Value="920" />
+    </Style>
+    <!-- Choices from a list share one width, neither stretched across the column nor squeezed. -->
+    <Style Selector="StackPanel.setting > ComboBox">
+      <Setter Property="MinWidth" Value="340" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="StackPanel.numberWithUnit > NumericUpDown">
+      <Setter Property="Width" Value="140" />
+    </Style>
+    <!-- Settings that only apply while another is on: indented beneath it, and unavailable while it is off. -->
+    <Style Selector="StackPanel.dependentSettings">
+      <Setter Property="Margin" Value="28,0,0,0" />
+      <Setter Property="Spacing" Value="12" />
+    </Style>
+    <Style Selector="StackPanel.dependentSettings:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+    <!-- An equipment profile: one quiet outline, its fields a label above a control. -->
+    <Style Selector="Border.equipmentCard">
+      <Setter Property="BorderBrush" Value="{DynamicResource SurfaceBorder}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="6" />
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="Margin" Value="0,0,0,8" />
+    </Style>
+    <Style Selector="StackPanel.field">
+      <Setter Property="Spacing" Value="4" />
+    </Style>
+    <Style Selector="Border.equipmentCard TextBlock.fieldLabel">
+      <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
+      <Setter Property="FontWeight" Value="Normal" />
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+    </Style>
+    <!-- Prime or zoom, derived from the focal lengths: a quiet note inside the name field's end. -->
+    <Style Selector="TextBlock.lensType">
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+      <Setter Property="FontSize" Value="{DynamicResource TextSmall}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="6,0,10,0" />
+    </Style>
+    <!-- Supporting Noctaxis: a small card set apart from the licence's own actions by a quiet accent tint. -->
+    <Style Selector="Border.supportCard">
+      <Setter Property="Background" Value="{DynamicResource ElevatedSurface}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource Accent}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="14,12" />
+      <Setter Property="Margin" Value="0,18,0,0" />
+      <Setter Property="MaxWidth" Value="480" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+    </Style>
+    <Style Selector="TextBlock.supportHeading">
+      <Setter Property="FontSize" Value="{DynamicResource TextBodyStrong}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="TextBlock.weatherTopicGroup">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="{DynamicResource TextBody}" />
+      <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+    <!-- One setting: its label row (the name, and an info button when there is more to say), then its control. -->
+    <Style Selector="StackPanel.setting">
+      <Setter Property="Spacing" Value="6" />
+    </Style>
+    <Style Selector="StackPanel.settingLabel">
+      <Setter Property="Orientation" Value="Horizontal" />
+      <Setter Property="Spacing" Value="2" />
+    </Style>
+    <Style Selector="StackPanel.settingLabel > TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- A number with its unit after it, the unit quieter than the number. -->
+    <Style Selector="StackPanel.numberWithUnit">
+      <Setter Property="Orientation" Value="Horizontal" />
+      <Setter Property="Spacing" Value="8" />
+    </Style>
+    <Style Selector="StackPanel.numberWithUnit > TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- The explicit ⓘ (Controls/InfoButton): small to look at, a full touch target, and its flyout opened by
+         click, tap or keyboard. -->
+    <Style Selector="Button.settingInfo">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="6,2" />
+      <Setter Property="MinWidth" Value="32" />
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Foreground" Value="{DynamicResource SecondaryText}" />
+    </Style>
+    <Style Selector="Button.settingInfo:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource PrimaryText}" />
+    </Style>
+    <Style Selector="TextBlock.infoText">
+      <Setter Property="MaxWidth" Value="320" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <!-- Icon actions in a list row: delete and reorder, each a 34 px target with its glyph centred. -->
+    <Style Selector="Button.compactDelete > Path, Button.reorder > Path">
+      <Setter Property="Width" Value="16" />
+      <Setter Property="Height" Value="16" />
+      <Setter Property="Stretch" Value="Uniform" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.compactDelete > Path">
+      <Setter Property="Fill" Value="{Binding $parent[Button].Foreground}" />
+    </Style>
+    <Style Selector="Button.reorder">
+      <Setter Property="Width" Value="34" />
+      <Setter Property="MinWidth" Value="34" />
+      <Setter Property="Height" Value="34" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="HorizontalContentAlignment" Value="Center" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.reorder > Path">
+      <Setter Property="Stroke" Value="{Binding $parent[Button].Foreground}" />
+      <Setter Property="StrokeThickness" Value="2" />
+      <Setter Property="Width" Value="14" />
+      <Setter Property="Height" Value="14" />
+    </Style>
+    <Style Selector="Button.reorder:disabled > Path">
+      <Setter Property="Opacity" Value="0.4" />
     </Style>
     <!-- Application navigation (Locations / Planner / Settings): lightweight text navigation, not a row of
          contained tabs. An inactive page is plain text on the page background; the selected page is named by
@@ -562,4 +723,16 @@
       <Setter Property="Stroke" Value="{DynamicResource SelectionForeground}"/>
     </Style>
   </Application.Styles>
+  <!-- Glyphs shared across pages: the pin marks a planning or saved location wherever one is named; the
+       export glyph (a tray with an arrow out of it) marks the Planner's Export menu. -->
+  <Application.Resources>
+    <StreamGeometry x:Key="LocationPinGlyph">M12,2 C8.13,2 5,5.13 5,9 C5,14.25 12,22 12,22 C12,22 19,14.25 19,9 C19,5.13 15.87,2 12,2 Z M12,11.5 A2.5,2.5 0 1 1 12,6.5 A2.5,2.5 0 1 1 12,11.5 Z</StreamGeometry>
+    <!-- Delete: a bin, filled, so it reads at small sizes. Reorder: open chevrons, stroked. -->
+    <StreamGeometry x:Key="DeleteGlyph">F0 M9,3 L15,3 L15,5 L20,5 L20,7 L4,7 L4,5 L9,5 Z M5.5,8.5 L18.5,8.5 L17.4,21 L6.6,21 Z M9,11 L9,18.5 L10.6,18.5 L10.6,11 Z M13.4,11 L13.4,18.5 L15,18.5 L15,11 Z</StreamGeometry>
+    <StreamGeometry x:Key="MoveUpGlyph">M5,15 L12,8 L19,15</StreamGeometry>
+    <StreamGeometry x:Key="MoveDownGlyph">M5,9 L12,16 L19,9</StreamGeometry>
+    <StreamGeometry x:Key="ExportGlyph">M12,3 L12,14 M7.5,9.5 L12,14 L16.5,9.5 M4,15 L4,20 L20,20 L20,15</StreamGeometry>
+    <!-- Import: the arrow out of the tray, the mirror of Export's arrow into it. -->
+    <StreamGeometry x:Key="ImportGlyph">M12,14 L12,3 M7.5,7.5 L12,3 L16.5,7.5 M4,15 L4,20 L20,20 L20,15</StreamGeometry>
+  </Application.Resources>
 </Application>

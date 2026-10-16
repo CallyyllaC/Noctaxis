@@ -70,8 +70,8 @@ public sealed partial class MainViewModelTests
 
         Assert.Equal((1.7, "Camera height above ground (m)", "Camera height above ground in metres"),
             (vm.SettingsCameraHeightAboveGround, vm.CameraHeightLabel, vm.CameraHeightAccessibleName));
-        Assert.Equal((5d, "Forecast reuse distance (km)", "Forecast reuse distance in kilometres"),
-            (vm.SettingsWeatherCacheDistanceDisplay, vm.WeatherCacheDistanceLabel, vm.WeatherCacheDistanceAccessibleName));
+        Assert.Equal((5d, "Reuse forecasts within", "km", "Forecast reuse distance in kilometres"),
+            (vm.SettingsWeatherCacheDistanceDisplay, vm.WeatherCacheDistanceLabel, vm.WeatherCacheDistanceUnit, vm.WeatherCacheDistanceAccessibleName));
 
         // UK Mixed: heights stay in metres, the long distance is in miles.
         var notified = new List<string?>();
@@ -79,12 +79,12 @@ public sealed partial class MainViewModelTests
         vm.SettingsUnits = "UK";
         await vm.SettleSettingsAsync();
         Assert.Equal((1.7, "Camera height above ground (m)"), (vm.SettingsCameraHeightAboveGround, vm.CameraHeightLabel));
-        Assert.Equal((3.1, "Forecast reuse distance (mi)", "Forecast reuse distance in miles"),
-            (vm.SettingsWeatherCacheDistanceDisplay, vm.WeatherCacheDistanceLabel, vm.WeatherCacheDistanceAccessibleName));
+        Assert.Equal((3.1, "mi", "Forecast reuse distance in miles"),
+            (vm.SettingsWeatherCacheDistanceDisplay, vm.WeatherCacheDistanceUnit, vm.WeatherCacheDistanceAccessibleName));
         Assert.Subset(new HashSet<string?>(notified), new HashSet<string?>
         {
             nameof(vm.Measurements), nameof(vm.ConfiguredWeatherDetails), nameof(vm.GroundObstructionText), nameof(vm.FramingVisibilityStatus),
-            nameof(vm.EffectiveObserverAltitudeText), nameof(vm.GroundElevationDisplay), nameof(vm.GroundElevationUnitText),
+            nameof(vm.EffectiveObserverAltitudeText), nameof(vm.EffectiveCameraAltitudeShortText), nameof(vm.EffectiveCameraAltitudeDetail),
             nameof(vm.SettingsWeatherCacheDistanceDisplay), nameof(vm.WeatherCacheDistanceLabel), nameof(vm.CameraHeightLabel)
         });
 
@@ -174,8 +174,8 @@ public sealed partial class MainViewModelTests
     {
         var vm = await CreateMeasuredViewModelAsync(DefaultStore(new AppSettings(Units: units, EnableTerrainCalculations: false)));
         Assert.Equal(expected, TestCulture.InRegion("en-GB", () => vm.GroundElevationSourceText));
-        // The same wording is the datum line while terrain is off.
-        Assert.Equal(expected, TestCulture.InRegion("en-GB", () => vm.TerrainDatumText));
+        // The same wording explains the altitude on the map overlay while terrain is off.
+        Assert.EndsWith(expected, TestCulture.InRegion("en-GB", () => vm.EffectiveCameraAltitudeDetail));
         Assert.Equal("m", MeasurementProfile.Metric.Height.Symbol);
     }
 
@@ -192,7 +192,7 @@ public sealed partial class MainViewModelTests
 
         Assert.Equal("Terrain disabled · 0 ft MSL fallback", TestCulture.InRegion("en-GB", () => vm.GroundElevationSourceText));
         Assert.Contains(nameof(vm.GroundElevationSourceText), notified);
-        Assert.Contains(nameof(vm.TerrainDatumText), notified);
+        Assert.Contains(nameof(vm.EffectiveCameraAltitudeDetail), notified);
     }
 
     [Theory]
@@ -201,13 +201,30 @@ public sealed partial class MainViewModelTests
     [InlineData("Imperial", "ft ASL", 1 / 0.3048, "ft")]
     public async Task ElevationIsShownInTheProfilesHeightUnit(string units, string unitText, double scale, string symbol)
     {
-        var vm = await CreateMeasuredViewModelAsync(DefaultStore(new AppSettings(Units: units, CameraHeightAboveGroundMetres: 2)));
-        Assert.Equal(unitText, vm.GroundElevationUnitText);
-        if (vm.ResolvedGroundElevationMetres is not double ground) return;
-        Assert.Equal(Math.Round(ground * scale, 1), vm.GroundElevationDisplay);
-        var expected = TestCulture.InRegion("en-GB", () => $"Effective camera altitude: {((ground + 2) * scale).ToString("F1", CultureInfo.CurrentCulture)} {symbol} ASL " +
-            $"(ground + {(2 * scale).ToString("F1", CultureInfo.CurrentCulture)} {symbol} camera height)");
+        // A ground elevation that does not wait on terrain data: 6.3 m, under a 2 m camera.
+        var session = PlanningSession.Default(NodaTime.Instant.FromUtc(2024, 1, 1, 0, 0), "UTC") with
+        {
+            ObserverElevation = new ObserverElevationState(ManualGroundElevationOverrideAslMetres: 6.3)
+        };
+        var vm = await CreateMeasuredViewModelAsync(new FakeStore(new Noctaxis.Core.Persistence.PersistedState(4,
+            new AppSettings(Units: units, CameraHeightAboveGroundMetres: 2), [], session, null)));
+        Assert.Equal(6.3, vm.ResolvedGroundElevationMetres!.Value, 6);
+        // The one sum: ground plus camera height.
+        Assert.Equal(8.3, vm.EffectiveCameraAltitudeMetres!.Value, 6);
+        static string F1(double value) => value.ToString("F1", CultureInfo.CurrentCulture);
+
+        // The overlay's line, in the profile's height unit.
+        Assert.Equal(TestCulture.InRegion("en-GB", () => $"{F1(8.3 * scale)} {unitText}"),
+            TestCulture.InRegion("en-GB", () => vm.EffectiveCameraAltitudeShortText));
+        // The full sentence, unchanged, which the overlay's tooltip opens with.
+        var expected = TestCulture.InRegion("en-GB", () => $"Effective camera altitude: {F1(8.3 * scale)} {symbol} ASL " +
+            $"(ground + {F1(2 * scale)} {symbol} camera height)");
         Assert.Equal(expected, TestCulture.InRegion("en-GB", () => vm.EffectiveObserverAltitudeText));
+        // The tooltip adds the ground under the camera, and where that number came from.
+        var detail = TestCulture.InRegion("en-GB", () => vm.EffectiveCameraAltitudeDetail);
+        Assert.StartsWith(expected, detail);
+        Assert.Contains(TestCulture.InRegion("en-GB", () => $"Ground elevation: {F1(6.3 * scale)} {unitText}"), detail);
+        Assert.EndsWith(vm.GroundElevationSourceText, detail);
     }
 
     [Fact]
