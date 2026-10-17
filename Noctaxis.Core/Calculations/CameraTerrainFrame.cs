@@ -13,7 +13,7 @@ public sealed record CameraTerrainFrame(double PitchDegrees, double VerticalFovD
     public FramingTerrainObstructionSample Scan(TerrainHorizonProfile terrain, double bearing,
         double[]? depth = null, int column = 0, int width = 1)
     {
-        var sightline = terrain.SightlineAt(bearing);
+        var sightline = terrain.SightlineViewAt(bearing);
         double? horizon = null, first = null;
         var row = CameraTerrainDepth.Rows - 1;
         foreach (var point in sightline)

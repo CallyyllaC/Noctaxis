@@ -257,7 +257,11 @@ public sealed class TerrariumTerrainProvider : ITerrainElevationProvider, ITerra
                 required.Add(GlobalPixel(x, y + 1, _options.Zoom).Tile);
                 required.Add(GlobalPixel(x + 1, y + 1, _options.Zoom).Tile);
             }
-            return required.ToArray();
+            // Preloading fetches what is not stored yet, so its downloads overlap. A stored tile is left for
+            // the calculation to load when it needs it: loading (validating) it here decoded every stored
+            // tile of the profile, and the decoded cache cannot hold them all, so most were decoded again
+            // by the calculation (PF-02).
+            return required.Where(key => !_cache.Contains(Descriptor(key))).ToArray();
         });
         await Parallel.ForEachAsync(keys, new ParallelOptions
         {

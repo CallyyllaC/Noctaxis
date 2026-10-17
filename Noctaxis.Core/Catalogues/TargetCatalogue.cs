@@ -32,65 +32,188 @@ public sealed class LocalTargetSearchService(ITargetCatalogue catalogue) : ITarg
     public Task<IReadOnlyList<AstralTarget>> SearchAsync(string query, int maximumResults, CancellationToken cancellationToken) =>
         SearchAsync(new CatalogueSearchQuery(query), maximumResults, cancellationToken);
 
-    public Task<IReadOnlyList<AstralTarget>> SearchAsync(CatalogueSearchQuery query, int maximumResults, CancellationToken cancellationToken)
+    // The catalogue's searchable text, normalised once (PF-05). Rebuilt only if the catalogue hands out a
+    // different target list.
+    private volatile SearchIndex? _index;
+
+    private sealed record SearchIndex(IReadOnlyList<AstralTarget> Source, int SourceCount, TargetSearchEntry[] Entries);
+
+    // Runs off the caller's thread: the Planner searches as the user types, and a query over every catalogue
+    // target must never hold the UI.
+    public Task<IReadOnlyList<AstralTarget>> SearchAsync(CatalogueSearchQuery query, int maximumResults, CancellationToken cancellationToken) =>
+        Task.Run(() => Search(query, maximumResults, cancellationToken), cancellationToken);
+
+    private IReadOnlyList<AstralTarget> Search(CatalogueSearchQuery query, int maximumResults, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var text = TargetSearchNormalization.NormalizeText(query.Text);
-        if (text.Length is > 0 and < 2) return Task.FromResult<IReadOnlyList<AstralTarget>>([]);
-        IEnumerable<AstralTarget> candidates = catalogue.Targets.Where(target => !target.IsSun && !target.IsMoon);
-        if (query.ObjectType.HasValue) candidates = candidates.Where(target => target.Category == query.ObjectType);
-        if (!string.IsNullOrWhiteSpace(query.Constellation)) candidates = candidates.Where(target => string.Equals(target.Constellation, query.Constellation, StringComparison.OrdinalIgnoreCase));
-        if (!string.IsNullOrWhiteSpace(query.DesignationFamily))
-            candidates = candidates.Where(target => Identifiers(target).Any(id =>
-                TargetSearchNormalization.DesignationFamily(id).Equals(query.DesignationFamily, StringComparison.OrdinalIgnoreCase)));
-        var ranked = text.Length >= 2
-            ? candidates.Select(target => (Target: target, Rank: TargetSearchNormalization.MatchRank(target, query.Text)))
-                .Where(match => match.Rank.HasValue)
-            : candidates.Select(target => (Target: target, Rank: (int?)0));
-        IReadOnlyList<AstralTarget> result = ranked.OrderBy(match => match.Rank)
-            .ThenBy(match => match.Target.DisplayName, StringComparer.CurrentCultureIgnoreCase)
-            .ThenBy(match => match.Target.Id, StringComparer.OrdinalIgnoreCase)
-            .Select(match => match.Target)
+        if (text.Length is > 0 and < 2) return [];
+        var searchText = text.Length >= 2 ? new TargetSearchText(query.Text) : null;
+        var matches = new List<(TargetSearchEntry Entry, int Rank)>();
+        var entries = Index().Entries;
+        for (var index = 0; index < entries.Length; index++)
+        {
+            if ((index & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
+            var entry = entries[index];
+            var target = entry.Target;
+            if (query.ObjectType.HasValue && target.Category != query.ObjectType) continue;
+            if (!string.IsNullOrWhiteSpace(query.Constellation) &&
+                !string.Equals(target.Constellation, query.Constellation, StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.IsNullOrWhiteSpace(query.DesignationFamily) && !entry.HasDesignationFamily(query.DesignationFamily)) continue;
+            if (searchText is null) matches.Add((entry, 0));
+            else if (entry.Rank(searchText) is int rank) matches.Add((entry, rank));
+        }
+        return matches.OrderBy(match => match.Rank)
+            .ThenBy(match => match.Entry.Target.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(match => match.Entry.Target.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(match => match.Entry.Target)
             .Take(Math.Clamp(maximumResults, 1, 50)).ToArray();
-        return Task.FromResult(result);
     }
 
-    private static IEnumerable<string> Identifiers(AstralTarget target) =>
-        new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? []).Where(value => !string.IsNullOrWhiteSpace(value))!;
+    private SearchIndex Index()
+    {
+        var targets = catalogue.Targets;
+        if (_index is { } current && ReferenceEquals(current.Source, targets) && current.SourceCount == targets.Count) return current;
+        var built = new SearchIndex(targets, targets.Count,
+            targets.Where(target => !target.IsSun && !target.IsMoon).Select(target => new TargetSearchEntry(target)).ToArray());
+        _index = built;
+        return built;
+    }
+}
+
+/// <summary>
+/// One target's searchable text, normalised once. <see cref="Rank"/> applies exactly the rules of
+/// <see cref="TargetSearchNormalization.MatchRank"/> (0 best, null no match).
+/// </summary>
+internal sealed class TargetSearchEntry
+{
+    private readonly string _normalizedDisplay;
+    private readonly string[] _trimmedIdentifiers;
+    private readonly string[] _normalizedIdentifiers;
+    private readonly TargetSearchNormalization.Designation?[] _designations;
+    private readonly string[] _normalizedAliases;
+    private readonly string[] _normalizedAny;
+    private readonly string[] _families;
+
+    public TargetSearchEntry(AstralTarget target)
+    {
+        Target = target;
+        var identifiers = new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? [])
+            .Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        var aliases = (target.Aliases ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+        _normalizedDisplay = TargetSearchNormalization.NormalizeText(target.DisplayName);
+        _trimmedIdentifiers = identifiers.Select(value => value.Trim()).ToArray();
+        _normalizedIdentifiers = identifiers.Select(TargetSearchNormalization.NormalizeText).ToArray();
+        _designations = identifiers.Select(value => TargetSearchNormalization.TryParseDesignation(value, out var designation) ? designation : null).ToArray();
+        _normalizedAliases = aliases.Select(TargetSearchNormalization.NormalizeText).ToArray();
+        // Display name, id, constellation, aliases and identifiers, each normalised once (the lists above are
+        // already free of blank values).
+        var any = new List<string>(3 + _normalizedAliases.Length + _normalizedIdentifiers.Length);
+        if (!string.IsNullOrWhiteSpace(target.DisplayName)) any.Add(_normalizedDisplay);
+        if (!string.IsNullOrWhiteSpace(target.Id)) any.Add(TargetSearchNormalization.NormalizeText(target.Id));
+        if (!string.IsNullOrWhiteSpace(target.Constellation)) any.Add(TargetSearchNormalization.NormalizeText(target.Constellation));
+        any.AddRange(_normalizedAliases);
+        any.AddRange(_normalizedIdentifiers);
+        _normalizedAny = any.ToArray();
+        // An identifier's family comes from its designation; identifiers equal but for case parse alike, so
+        // the distinct identifiers give every family of the full list.
+        _families = _designations.Select(designation => designation?.Family ?? "Other")
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    public AstralTarget Target { get; }
+
+    public bool HasDesignationFamily(string family)
+    {
+        foreach (var value in _families)
+            if (value.Equals(family, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
+
+    public int? Rank(TargetSearchText query)
+    {
+        var normalizedQuery = query.Normalized;
+        if (normalizedQuery.Length == 0) return 0;
+        if (_normalizedDisplay.Equals(normalizedQuery, StringComparison.Ordinal)) return 0;
+        foreach (var value in _trimmedIdentifiers)
+            if (value.Equals(query.Trimmed, StringComparison.OrdinalIgnoreCase)) return 1;
+        if (AnyEquals(_normalizedIdentifiers, normalizedQuery)) return 2;
+        if (query.Designation is { } designation)
+            foreach (var value in _designations)
+                if (value == designation) return 2;
+        if (_normalizedDisplay.StartsWith(normalizedQuery, StringComparison.Ordinal) ||
+            AnyStartsWith(_normalizedIdentifiers, normalizedQuery)) return 3;
+        if (AnyEquals(_normalizedAliases, normalizedQuery)) return 4;
+        if (AnyStartsWith(_normalizedAliases, normalizedQuery) || AnyContains(_normalizedIdentifiers, normalizedQuery)) return 5;
+        return AnyContains(_normalizedAny, normalizedQuery) ? 6 : null;
+    }
+
+    private static bool AnyEquals(string[] values, string query)
+    {
+        foreach (var value in values) if (value.Equals(query, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    private static bool AnyStartsWith(string[] values, string query)
+    {
+        foreach (var value in values) if (value.StartsWith(query, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
+    private static bool AnyContains(string[] values, string query)
+    {
+        foreach (var value in values) if (value.Contains(query, StringComparison.Ordinal)) return true;
+        return false;
+    }
+}
+
+/// <summary>A search query in each form <see cref="TargetSearchEntry.Rank"/> compares, computed once.</summary>
+internal sealed class TargetSearchText
+{
+    public TargetSearchText(string query)
+    {
+        Trimmed = query.Trim();
+        Normalized = TargetSearchNormalization.NormalizeText(query);
+        Designation = TargetSearchNormalization.TryParseDesignation(query, out var designation) ? designation : null;
+    }
+
+    public string Trimmed { get; }
+    public string Normalized { get; }
+    public TargetSearchNormalization.Designation? Designation { get; }
 }
 
 internal static class TargetSearchNormalization
 {
-    private sealed record Designation(string Family, string Number, string Suffix);
+    internal sealed record Designation(string Family, string Number, string Suffix);
 
-    internal static string NormalizeText(string? value) =>
-        new((value ?? string.Empty).Where(char.IsLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
+    private static readonly (string Prefix, string Family)[] Families =
+    [
+        ("CALDWELL", "Caldwell"), ("BARNARD", "Barnard"), ("MESSIER", "Messier"),
+        ("NGC", "NGC"), ("HIP", "HIP"), ("IC", "IC"),
+        ("C", "Caldwell"), ("B", "Barnard"), ("M", "Messier")
+    ];
+
+    /// <summary>The letters and digits of <paramref name="value"/>, upper-cased invariantly.</summary>
+    internal static string NormalizeText(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var length = 0;
+        foreach (var character in value)
+            if (char.IsLetterOrDigit(character)) length++;
+        if (length == 0) return string.Empty;
+        return string.Create(length, value, static (destination, source) =>
+        {
+            var index = 0;
+            foreach (var character in source)
+                if (char.IsLetterOrDigit(character)) destination[index++] = char.ToUpperInvariant(character);
+        });
+    }
 
     internal static string DesignationFamily(string identifier) =>
         TryParseDesignation(identifier, out var designation) ? designation.Family : "Other";
 
-    internal static int? MatchRank(AstralTarget target, string query)
-    {
-        var normalizedQuery = NormalizeText(query);
-        if (normalizedQuery.Length == 0) return 0;
-        var identifiers = new[] { target.PrimaryIdentifier }.Concat(target.CatalogueIdentifiers ?? [])
-            .Where(value => !string.IsNullOrWhiteSpace(value)).Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var aliases = (target.Aliases ?? []).Where(value => !string.IsNullOrWhiteSpace(value)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var normalizedDisplay = NormalizeText(target.DisplayName);
-
-        if (normalizedDisplay.Equals(normalizedQuery, StringComparison.Ordinal)) return 0;
-        if (identifiers.Any(value => value.Trim().Equals(query.Trim(), StringComparison.OrdinalIgnoreCase))) return 1;
-        if (identifiers.Any(value => NormalizeText(value).Equals(normalizedQuery, StringComparison.Ordinal)) ||
-            TryParseDesignation(query, out var queryDesignation) && identifiers.Any(value => SameDesignation(value, queryDesignation))) return 2;
-        if (normalizedDisplay.StartsWith(normalizedQuery, StringComparison.Ordinal) ||
-            identifiers.Any(value => NormalizeText(value).StartsWith(normalizedQuery, StringComparison.Ordinal))) return 3;
-        if (aliases.Any(value => NormalizeText(value).Equals(normalizedQuery, StringComparison.Ordinal))) return 4;
-        if (aliases.Any(value => NormalizeText(value).StartsWith(normalizedQuery, StringComparison.Ordinal)) ||
-            identifiers.Any(value => NormalizeText(value).Contains(normalizedQuery, StringComparison.Ordinal))) return 5;
-        return new[] { target.DisplayName, target.Id, target.Constellation }.Concat(aliases).Concat(identifiers)
-            .Where(value => !string.IsNullOrWhiteSpace(value))
-            .Any(value => NormalizeText(value).Contains(normalizedQuery, StringComparison.Ordinal)) ? 6 : null;
-    }
+    internal static int? MatchRank(AstralTarget target, string query) =>
+        new TargetSearchEntry(target).Rank(new TargetSearchText(query));
 
     internal static bool IsExactDesignation(string value, string query) =>
         TryParseDesignation(query, out var queryDesignation) && SameDesignation(value, queryDesignation);
@@ -98,24 +221,18 @@ internal static class TargetSearchNormalization
     private static bool SameDesignation(string value, Designation expected) =>
         TryParseDesignation(value, out var actual) && actual == expected;
 
-    private static bool TryParseDesignation(string? value, out Designation designation)
+    internal static bool TryParseDesignation(string? value, out Designation designation)
     {
         designation = null!;
         var compact = NormalizeText(value);
-        var families = new (string Prefix, string Family)[]
-        {
-            ("CALDWELL", "Caldwell"), ("BARNARD", "Barnard"), ("MESSIER", "Messier"),
-            ("NGC", "NGC"), ("HIP", "HIP"), ("IC", "IC"),
-            ("C", "Caldwell"), ("B", "Barnard"), ("M", "Messier")
-        };
-        foreach (var (prefix, family) in families)
+        foreach (var (prefix, family) in Families)
         {
             if (!compact.StartsWith(prefix, StringComparison.Ordinal)) continue;
-            var remainder = compact[prefix.Length..];
-            var digitCount = remainder.TakeWhile(char.IsDigit).Count();
+            var digitCount = 0;
+            while (prefix.Length + digitCount < compact.Length && char.IsDigit(compact[prefix.Length + digitCount])) digitCount++;
             if (digitCount == 0) continue;
-            var number = remainder[..digitCount].TrimStart('0');
-            designation = new Designation(family, number.Length == 0 ? "0" : number, remainder[digitCount..]);
+            var number = compact.Substring(prefix.Length, digitCount).TrimStart('0');
+            designation = new Designation(family, number.Length == 0 ? "0" : number, compact[(prefix.Length + digitCount)..]);
             return true;
         }
         return false;

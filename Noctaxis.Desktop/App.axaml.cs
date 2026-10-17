@@ -89,7 +89,8 @@ public partial class App : Application
             .SetHandlerLifetime(Timeout.InfiniteTimeSpan));
         services.AddSingleton<ITimeZoneResolver, TimeZoneResolver>();
         services.AddSingleton<IClock>(SystemClock.Instance);
-        services.AddSingleton<ITargetCatalogue, OpenNgcTargetCatalogue>();
+        services.AddSingleton<ITargetCatalogue>(_ =>
+            Program.CatalogueLoad?.GetAwaiter().GetResult() ?? new OpenNgcTargetCatalogue());
         services.AddSingleton<ITargetSearchService, LocalTargetSearchService>();
         services.AddSingleton<IAstronomyService, AstronomyEngineService>();
         services.AddSingleton<ILensCalculator, LensCalculator>();

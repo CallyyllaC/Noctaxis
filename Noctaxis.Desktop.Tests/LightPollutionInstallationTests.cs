@@ -101,6 +101,26 @@ public sealed class LightPollutionInstallationTests
         await store.DetectAsync(); Assert.False(store.IsAvailable);
     }
 
+    [Fact]
+    public async Task DetectionChecksEveryTileSizeFromOneListing()
+    {
+        // PF-09: detection lists the tile folder once instead of querying each of the 2,016 files; every tile must
+        // still be present at its manifest size.
+        await using var paths = new AtlasTestData();
+        using var http = new HttpClient(new Handler((_, _) => throw new Exception("No network allowed")));
+        var store = new LorenzInstallation(paths, http);
+        var directory = await paths.SeedAsync(store);
+        await store.DetectAsync(); Assert.True(store.IsAvailable);
+        var tile = Path.Combine(directory, "binary", LorenzAtlas.FileName(36, 14));
+        var bytes = await File.ReadAllBytesAsync(tile);
+        await File.WriteAllBytesAsync(tile, bytes[..^1]);
+        await store.DetectAsync(); Assert.False(store.IsAvailable);
+        await File.WriteAllBytesAsync(tile, bytes);
+        await store.DetectAsync(); Assert.True(store.IsAvailable);
+        File.Move(tile, tile + ".moved");
+        await store.DetectAsync(); Assert.False(store.IsAvailable);
+    }
+
     internal sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
     { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => send(request, cancellationToken); }
     /// <summary>A response body that never sends a byte; only cancellation ends a read.</summary>

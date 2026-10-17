@@ -54,11 +54,51 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
         public BuildEntry(Func<BuildEntry, Task<PlannerEnvironmentSnapshot>> build) =>
             Task = new(() => build(this), LazyThreadSafetyMode.ExecutionAndPublication);
         public Lazy<Task<PlannerEnvironmentSnapshot>> Task { get; }
+
+        /// <summary>The build's own lifetime, never a caller's token (see <see cref="RemoveAbandonedBuilds"/>). It has
+        /// no timer or wait handle, so it is not disposed: a superseded build may still be cancelling.</summary>
+        public CancellationTokenSource Cancellation { get; } = new();
+
+        /// <summary>Callers waiting for this build right now. Guarded by the service gate.</summary>
+        public int Consumers;
     }
 
     public void InvalidateCache()
     {
         lock (_gate) { _generation++; _completed.Clear(); _snapshots.Clear(); }
+    }
+
+    /// <summary>
+    /// Called under the gate when a build for a new observer or request starts. Builds nobody is waiting for
+    /// any more (their callers moved on) are forgotten, so nobody can join them, and returned for the caller to
+    /// cancel once it has left the gate: rapid observer moves leave one build running rather than one per move
+    /// (PF-01, NX-20). A build is never cancelled while a caller waits for it, and an abandoned build stays
+    /// joinable until something else supersedes it: an astronomy refresh that carries the observer's work on
+    /// rejoins it for the same observer without a new build (NX-09).
+    /// </summary>
+    private List<BuildEntry>? RemoveAbandonedBuilds(EnvironmentCacheKey current)
+    {
+        List<KeyValuePair<EnvironmentCacheKey, BuildEntry>>? abandoned = null;
+        foreach (var pair in _snapshots)
+            if (pair.Value.Consumers == 0 && !pair.Key.Equals(current))
+                (abandoned ??= []).Add(pair);
+        if (abandoned is null) return null;
+        foreach (var (key, _) in abandoned) _snapshots.Remove(key);
+        return abandoned.ConvertAll(pair => pair.Value);
+    }
+
+    // Outside the gate: cancellation runs the builds' continuations inline.
+    private static void Cancel(List<BuildEntry>? superseded)
+    {
+        if (superseded is null) return;
+        foreach (var entry in superseded)
+        {
+            entry.Cancellation.Cancel();
+            // Nobody awaits it; keep a failure other than the cancellation from going unobserved.
+            if (entry.Task.IsValueCreated)
+                _ = entry.Task.Value.ContinueWith(static task => _ = task.Exception, CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+        }
     }
 
     public async Task<PlannerEnvironmentSnapshot> GetSnapshotAsync(GeoCoordinate observer,
@@ -71,17 +111,23 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
         var normalised = observer.Normalised();
         var key = EnvironmentCacheKey.For(normalised, terrainRequest);
         BuildEntry entry;
+        List<BuildEntry>? superseded = null;
         lock (_gate)
         {
             if (_completed.TryGetValue(key, out var cached)) return cached;
             if (!_snapshots.TryGetValue(key, out entry!))
             {
+                superseded = RemoveAbandonedBuilds(key);
                 var generation = _generation;
                 entry = new BuildEntry(current => BuildAndCacheAsync(key, current, generation, normalised, terrainRequest));
                 _snapshots.Add(key, entry);
             }
+            entry.Consumers++;
         }
-        return await entry.Task.Value.WaitAsync(cancellationToken).ConfigureAwait(false);
+        Cancel(superseded);
+        // No await between the count and the try: every counted caller reaches its finally.
+        try { return await entry.Task.Value.WaitAsync(cancellationToken).ConfigureAwait(false); }
+        finally { lock (_gate) entry.Consumers--; }
     }
 
     private async Task<PlannerEnvironmentSnapshot> BuildAndCacheAsync(EnvironmentCacheKey key,
@@ -89,7 +135,8 @@ public sealed class PlannerEnvironmentService : IPlannerEnvironmentService
     {
         try
         {
-            var result = await BuildAsync(observer, request, CancellationToken.None).ConfigureAwait(false);
+            // The build's own token: caller cancellation only detaches that caller (above).
+            var result = await BuildAsync(observer, request, entry.Cancellation.Token).ConfigureAwait(false);
             lock (_gate) { if (_generation == generation) _completed.TryAdd(key, result, CompletedLifetime(result)); }
             return result;
         }

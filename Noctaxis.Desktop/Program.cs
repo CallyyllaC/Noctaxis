@@ -21,6 +21,9 @@ internal static class Program
     /// </summary>
     internal static ApplicationInstanceOwnership? Ownership { get; private set; }
 
+    /// <summary>The catalogue, loading since start-up; null in tests, where no Program runs.</summary>
+    internal static Task<Noctaxis.Core.Catalogues.OpenNgcTargetCatalogue>? CatalogueLoad { get; private set; }
+
     [STAThread]
     public static int Main(string[] args)
     {
@@ -61,6 +64,10 @@ internal static class Program
         log.LogInformation("Noctaxis {Version} starting on {Os} ({Architecture})", version,
             System.Runtime.InteropServices.RuntimeInformation.OSDescription,
             System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture);
+        // The catalogue (about 13,000 OpenNGC targets) is read on a worker while Avalonia starts, rather than on the
+        // UI thread when the main view model is first built (PF-09). That build still waits for it, and a failure
+        // surfaces there, as before.
+        CatalogueLoad = Task.Run(() => new Noctaxis.Core.Catalogues.OpenNgcTargetCatalogue());
         try
         {
             var exitCode = BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
