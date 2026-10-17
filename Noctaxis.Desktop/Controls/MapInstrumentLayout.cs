@@ -26,7 +26,9 @@ public static class MapInstrumentLayout
     /// inside its padding) keeps its bearing and pitch (182 px) and its horizon and obstruction (187 px at their
     /// widest ordinary values) each on one line, unclipped. In the default window (1440 × 900, the Timeline docked
     /// below the map) the map is about 466 px tall and the Camera frame card about 303, which leaves the PiP
-    /// about 131 px: so its minimum is 120, not more, for it to be shown there without overlapping.
+    /// about 131 px: so its minimum is 120, not more, for it to be shown there without overlapping. The Camera frame's
+    /// figures are for the font it was measured with; where the system's font sets the readings wider, the window
+    /// passes the width they need instead (the <c>minimumCameraFrameWidth</c> parameters below).
     /// </summary>
     public const double MinimumPipSide = 120, MinimumCameraFrameWidth = 210;
 
@@ -39,11 +41,13 @@ public static class MapInstrumentLayout
     public readonly record struct Result(double PipSide, bool PipShown, double CameraFrameWidth);
 
     /// <summary>The size each would be by preference alone on a map this wide, before the two are fitted together.</summary>
-    public static (double PipSide, double CameraFrameWidth) Preferred(double mapWidth, PlannerOverlaySizes preferred)
+    /// <param name="minimumCameraFrameWidth">The Camera frame's least width, at least <see cref="MinimumCameraFrameWidth"/>.</param>
+    public static (double PipSide, double CameraFrameWidth) Preferred(double mapWidth, PlannerOverlaySizes preferred,
+        double minimumCameraFrameWidth = MinimumCameraFrameWidth)
     {
         var sizes = preferred.Normalised();
         return (Bound(sizes.PipWidthFraction * mapWidth, MinimumPipSide, mapWidth),
-            Bound(sizes.CameraFrameWidthFraction * mapWidth, MinimumCameraFrameWidth, mapWidth));
+            Bound(sizes.CameraFrameWidthFraction * mapWidth, minimumCameraFrameWidth, mapWidth));
     }
 
     /// <summary>A width as the share of the map it is, for saving as a preference, within the drawable bounds.</summary>
@@ -54,36 +58,39 @@ public static class MapInstrumentLayout
     /// <param name="preferred">The user's preferences.</param>
     /// <param name="pipEnabled">Whether the PiP is on at all.</param>
     /// <param name="rowHeight">The bottom-left row's height for a Camera frame card of a given width.</param>
-    public static Result Resolve(Size map, PlannerOverlaySizes preferred, bool pipEnabled, Func<double, double> rowHeight)
+    /// <param name="minimumCameraFrameWidth">The Camera frame's least width, at least <see cref="MinimumCameraFrameWidth"/>.</param>
+    public static Result Resolve(Size map, PlannerOverlaySizes preferred, bool pipEnabled, Func<double, double> rowHeight,
+        double minimumCameraFrameWidth = MinimumCameraFrameWidth)
     {
         ArgumentNullException.ThrowIfNull(rowHeight);
-        var (pip, frame) = Preferred(map.Width, preferred);
+        var minimumFrame = Math.Max(MinimumCameraFrameWidth, minimumCameraFrameWidth);
+        var (pip, frame) = Preferred(map.Width, preferred, minimumFrame);
         var height = map.Height - 2 * Margin;
         if (map.Width <= 0 || map.Height <= 0) return new(pip, pipEnabled, frame);
-        if (!pipEnabled) return new(0, false, FitAlone(frame, height, rowHeight));
+        if (!pipEnabled) return new(0, false, FitAlone(frame, minimumFrame, height, rowHeight));
         bool Fits(double side, double width) => side + Gap + rowHeight(width) <= height + 1e-6;
         if (Fits(pip, frame)) return new(pip, true, frame);
-        if (Fits(MinimumPipSide, MinimumCameraFrameWidth))
+        if (Fits(MinimumPipSide, minimumFrame))
         {
             // Shrink both in proportion; each stops at its minimum.
             double low = 0, high = 1;
             for (var i = 0; i < 40; i++)
             {
                 var scale = (low + high) / 2;
-                if (Fits(Math.Max(MinimumPipSide, pip * scale), Math.Max(MinimumCameraFrameWidth, frame * scale))) low = scale;
+                if (Fits(Math.Max(MinimumPipSide, pip * scale), Math.Max(minimumFrame, frame * scale))) low = scale;
                 else high = scale;
             }
-            return new(Math.Max(MinimumPipSide, pip * low), true, Math.Max(MinimumCameraFrameWidth, frame * low));
+            return new(Math.Max(MinimumPipSide, pip * low), true, Math.Max(minimumFrame, frame * low));
         }
-        return new(0, false, FitAlone(frame, height, rowHeight));
+        return new(0, false, FitAlone(frame, minimumFrame, height, rowHeight));
     }
 
     // The Camera frame alone: as preferred where it fits, else as wide as fits, never below its minimum.
-    private static double FitAlone(double frame, double height, Func<double, double> rowHeight)
+    private static double FitAlone(double frame, double minimum, double height, Func<double, double> rowHeight)
     {
-        if (rowHeight(frame) <= height + 1e-6 || rowHeight(MinimumCameraFrameWidth) > height) return
-            rowHeight(frame) <= height + 1e-6 ? frame : MinimumCameraFrameWidth;
-        double low = MinimumCameraFrameWidth, high = frame;
+        if (rowHeight(frame) <= height + 1e-6 || rowHeight(minimum) > height) return
+            rowHeight(frame) <= height + 1e-6 ? frame : minimum;
+        double low = minimum, high = frame;
         for (var i = 0; i < 40; i++)
         {
             var width = (low + high) / 2;

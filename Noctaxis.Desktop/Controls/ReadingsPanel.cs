@@ -49,6 +49,31 @@ public sealed class ReadingsPanel : Panel
         return lines;
     }
 
+    /// <summary>
+    /// The narrowest width at which the pairs, as they measure now, take no more than two lines: the best place to
+    /// break the line, as the wrapping above would at that width.
+    /// </summary>
+    internal double TwoLineWidth
+    {
+        get
+        {
+            var items = new List<(double Joined, double Alone)>();
+            Control? separator = null;
+            foreach (var child in Children)
+            {
+                if (!child.IsVisible) continue;
+                if (IsSeparator(child)) { separator = child; continue; }
+                items.Add((2 * Spacing + (separator?.DesiredSize.Width ?? 0) + child.DesiredSize.Width, child.DesiredSize.Width));
+                separator = null;
+            }
+            double Line(int from, int to) => from >= to ? 0 : items[from].Alone + items.Skip(from + 1).Take(to - from - 1).Sum(item => item.Joined);
+            var narrowest = Line(0, items.Count);
+            for (var split = 1; split < items.Count; split++)
+                narrowest = Math.Min(narrowest, Math.Max(Line(0, split), Line(split, items.Count)));
+            return narrowest;
+        }
+    }
+
     private static double LineWidth(List<(Control? Separator, Control Pair)> line, double spacing) =>
         line.Sum(item => item.Pair.DesiredSize.Width + (item.Separator is { } separator ? separator.DesiredSize.Width + 2 * spacing : 0));
 

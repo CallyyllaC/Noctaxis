@@ -229,14 +229,19 @@ there. Do not re-run a job that shows the old failure: something has reopened th
 
 ### Known platform test differences
 
-On Linux and macOS the following fail because of the system font, not the code under test. The window style
-names the `Inter` family, which resolves to each system's own font for that name: Segoe UI on Windows,
-which the layout tests were written against, and wider fonts on the hosted Linux and macOS runners. They
-point to real text-fitting problems on those systems at large text sizes.
-- Linux x64: `ANarrowWindowShrinksTheLocationFirstAndKeepsEverythingElse`,
-  `LongerTranslatedTextStillFitsOnEveryScreenAtEveryTextSize`, `TheFourValuesAreOneStatusLine`,
-  `HorizonAndObstructionShareOneLine`.
-- macOS Apple silicon: `ANarrowWindowShrinksTheLocationFirstAndKeepsEverythingElse`.
+The window style names the `Inter` family. `WithInterFont()` registers the bundled Inter as the `fonts:Inter`
+collection, but a plain `Inter` is looked up among the system's fonts only, so it resolves to each system's
+default: Segoe UI on Windows, which the layouts were measured with, and wider fonts on Linux (DejaVu Sans on
+the hosted runner) and macOS. The layouts now allow for a wider font: at the narrowest window the Planner's
+bar gives Export's word up as it does Import's, and the Camera frame card is never narrower than its readings
+need for two lines. Rendering the Desktop suite with DejaVu Sans on Windows reproduces the Linux runner's
+results, which is how these were checked.
+
+One test still fails on Linux x64, and it points to a real text-fitting limit:
+- `LongerTranslatedTextStillFitsOnEveryScreenAtEveryTextSize`, for the Planner at 200 % text size with every
+  text about a third longer: the shell search field's placeholder is about 50 px longer than the field
+  beside the page names. English at 200 % fits. Fitting it needs a design decision (a shorter placeholder,
+  smaller page names at large sizes, or a search field that can wrap), not a test change.
 
 ## Signing and distribution trust
 
