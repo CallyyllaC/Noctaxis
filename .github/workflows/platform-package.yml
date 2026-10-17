@@ -1,9 +1,10 @@
-name: Package and start (reusable)
+name: Package and verify (reusable)
 
-# Builds one release package on a hosted runner of its own operating system and processor, checks it and
-# starts it. Called by the per-platform build workflows (build-<rid>.yml) for pushes and pull requests, and
-# by package.yml for version tags and manual runs, which alone keep the package. Nothing is released or
-# published, and nothing is signed beyond macOS's free ad-hoc signature (docs/releasing.md).
+# Builds one release package on a hosted runner of its own operating system and processor, then checks the
+# archive itself as a user receives it: its name and version, its layout and contents, and that it starts.
+# Only then is it kept as a workflow artifact, which release.yml attaches to a GitHub Release when it
+# publishes one. Nothing is published here, and nothing is signed beyond macOS's free ad-hoc signature
+# (docs/releasing.md).
 on:
   workflow_call:
     inputs:
@@ -15,29 +16,33 @@ on:
         description: Runtime identifier of the package.
         required: true
         type: string
-      keep-package:
-        description: Keep the package as a workflow artifact for 7 days.
-        required: false
-        type: boolean
-        default: false
+      sha:
+        description: Commit to package.
+        required: true
+        type: string
+      version:
+        description: X.Y.Z the package must be (release_plan.py); Z is passed to the build.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
   package:
-    name: Package and start (${{ inputs.rid }})
+    name: Package (${{ inputs.rid }})
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 30
     env:
       DOTNET_NOLOGO: true
       DOTNET_CLI_TELEMETRY_OPTOUT: true
       AVALONIA_TELEMETRY_OPTOUT: 1
-      NoctaxisBuildNumber: ${{ github.run_number }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha }}
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -46,6 +51,20 @@ jobs:
       - name: Confirm the runner's operating system and processor
         shell: bash
         run: bash scripts/check-runner-platform.sh ${{ inputs.rid }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ inputs.rid }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj') }}
+          restore-keys: nuget-${{ inputs.rid }}-
+
+      # Z of X.Y.Z comes from the plan, so the build cannot drift from the version being released.
+      - name: Use the planned version
+        shell: bash
+        run: echo "NoctaxisBuildNumber=${VERSION##*.}" >> "$GITHUB_ENV"
+        env:
+          VERSION: ${{ inputs.version }}
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
@@ -56,15 +75,41 @@ jobs:
         if: runner.os != 'Windows'
         run: bash scripts/package.sh ${{ inputs.rid }} packages
 
-      # Starts the package as a user would and checks it is still running after 25 s, having logged its
-      # start and nothing fatal. It proves the package starts on that system: the runtime and native
-      # libraries load and the main window opens. It does not exercise the interface.
+      # From here on, everything is checked from the archive itself, extracted as a user would.
+      - name: Extract the package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Expand-Archive (Get-ChildItem packages -Filter *.zip | Select-Object -First 1).FullName -DestinationPath run
+
+      - name: Extract the package (Linux)
+        if: runner.os == 'Linux'
+        run: mkdir run && tar -C run -xzf packages/*.tar.gz
+
+      - name: Extract the package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          # The zip holds Noctaxis.app and README.txt at its root, as Finder extracts it.
+          mkdir run && ditto -x -k packages/*.zip run
+          codesign --verify --deep --strict run/Noctaxis.app
+
+      - name: Check the package's name, version, layout and contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          archives=(packages/*)
+          [ "${#archives[@]}" = 1 ] || { echo "::error::Expected one package, found: ${archives[*]}"; exit 1; }
+          bash scripts/check-package.sh ${{ inputs.rid }} "${archives[0]}" ${{ inputs.version }} run
+          echo "PACKAGE=${archives[0]}" >> "$GITHUB_ENV"
+
+      # Starts the package as a user would and checks it is still running after 25 s, having logged its start
+      # as the expected version and nothing fatal. It proves the package starts on that system: the runtime and
+      # native libraries load and the main window opens. It does not exercise the interface.
       - name: Start the package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
-          $zip = Get-ChildItem packages -Filter *.zip | Select-Object -First 1
-          Expand-Archive $zip.FullName -DestinationPath run
           $exe = Get-ChildItem run -Recurse -Filter Noctaxis.Desktop.exe | Select-Object -First 1
           $process = Start-Process $exe.FullName -PassThru
           Start-Sleep -Seconds 25
@@ -76,39 +121,39 @@ jobs:
           if (-not $alive) { throw "Noctaxis exited during startup (code $($process.ExitCode))." }
           if (-not $log) { throw "Noctaxis wrote no log in $logs." }
           if (-not (Select-String -Path $log.FullName -Pattern ' starting on ' -Quiet)) { throw 'Noctaxis did not log its start.' }
+          $started = (Select-String -Path $log.FullName -SimpleMatch "Noctaxis $env:VERSION+" -Quiet) -or
+            (Select-String -Path $log.FullName -SimpleMatch "Noctaxis $env:VERSION starting on " -Quiet)
+          if (-not $started) { throw "Noctaxis did not start as version $env:VERSION." }
           if (Select-String -Path $log.FullName -Pattern '\[CRT\]' -Quiet) { throw 'Noctaxis logged a fatal error.' }
 
       - name: Start the package (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q xvfb libice6 libsm6 fontconfig
-          mkdir run && tar -C run -xzf packages/*.tar.gz
           app=$(find run -name Noctaxis.Desktop -type f | head -1)
           xvfb-run -a "$app" & runner=$!
           sleep 25
           alive=0; pgrep -f "$app" >/dev/null && alive=1
           pkill -f "$app" || true; wait $runner || true
-          bash scripts/check-startup-log.sh "$HOME/.config/Noctaxis/logs" "$alive"
+          bash scripts/check-startup-log.sh "$HOME/.config/Noctaxis/logs" "$alive" ${{ inputs.version }}
 
       - name: Start the package (macOS)
         if: runner.os == 'macOS'
         run: |
-          # The zip holds Noctaxis.app and README.txt at its root, as Finder extracts it.
-          mkdir run && ditto -x -k packages/*.zip run
-          app=run/Noctaxis.app
-          codesign --verify --deep --strict "$app"
-          test -f run/README.txt
-          "$app/Contents/MacOS/Noctaxis.Desktop" & pid=$!
+          "run/Noctaxis.app/Contents/MacOS/Noctaxis.Desktop" & pid=$!
           sleep 25
           alive=0; kill -0 $pid 2>/dev/null && alive=1
           kill $pid 2>/dev/null || true; wait $pid || true
-          bash scripts/check-startup-log.sh "$HOME/Library/Application Support/Noctaxis/logs" "$alive"
+          bash scripts/check-startup-log.sh "$HOME/Library/Application Support/Noctaxis/logs" "$alive" ${{ inputs.version }}
 
+      # Kept for the release job to attach, and for 14 days for anyone to download from the run. A workflow
+      # artifact is not a release: it needs a GitHub sign-in and expires.
       - name: Keep the package
-        if: inputs.keep-package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: noctaxis-${{ inputs.rid }}
-          path: packages/*
-          retention-days: 7
+          name: package-${{ inputs.rid }}
+          path: ${{ env.PACKAGE }}
+          retention-days: 14
           if-no-files-found: error
+          # Already compressed.
+          compression-level: 0

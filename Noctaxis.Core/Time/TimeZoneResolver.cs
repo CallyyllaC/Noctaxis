@@ -19,8 +19,14 @@ public sealed class TimeZoneResolver : ITimeZoneResolver
 {
     public string MachineTimeZoneId => TimeZoneInfo.Local.Id;
 
+    /// <summary>
+    /// The system's zones, always including the machine's own: macOS can report the machine's zone by an alias
+    /// ("Universal") that its list of zones leaves out.
+    /// </summary>
     public IReadOnlyList<string> AvailableIds { get; } = TimeZoneInfo.GetSystemTimeZones()
         .Select(zone => zone.Id)
+        .Append(TimeZoneInfo.Local.Id)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
         .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
         .ToArray();
 

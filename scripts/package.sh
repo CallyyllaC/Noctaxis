@@ -107,9 +107,12 @@ else
     fi
     # Ad-hoc: seals the bundle so macOS can verify it is intact. It identifies no publisher, so
     # Gatekeeper still asks the user to confirm the first launch (docs/releasing.md).
-    # As Avalonia's macOS deployment guide does: every file in Contents/MacOS (the app, the runtime, the
-    # managed assemblies and their data) first, then the bundle, which seals them and Info.plist.
-    find "$app/Contents/MacOS" -type f -print0 | xargs -0 -n 1 codesign --force --sign - --timestamp=none
+    # As Avalonia's macOS deployment guide does: every file in Contents/MacOS (the runtime, the managed
+    # assemblies and their data) first, then the bundle, which signs its main executable and seals them and
+    # Info.plist. The main executable must not be signed on its own before the rest: codesign then checks
+    # the files beside it as its subcomponents and fails on the first one not yet signed.
+    find "$app/Contents/MacOS" -type f ! -path "$app/Contents/MacOS/Noctaxis.Desktop" -print0 |
+        xargs -0 -n 1 codesign --force --sign - --timestamp=none
     codesign --force --sign - --timestamp=none "$app"
     codesign --verify --deep --strict "$app"
     echo "Ad-hoc signed and verified $app"

@@ -1,0 +1,233 @@
+name: Release
+
+# Builds, tests and packages Noctaxis for all six targets and, when the version calls for it, publishes them as
+# a GitHub Release. docs/releasing.md explains how to use it.
+#
+#   plan      scripts/release_plan.py reads X.Y from Directory.Build.props and decides whether this run
+#             publishes vX.Y.Z (Z = this run's number), or fails if the request is inconsistent.
+#   package   each target built, checked and started from its archive on a runner of its own operating system
+#             and processor (platform-package.yml), and kept as a workflow artifact for 14 days.
+#   tests     the Core and Desktop suites on Windows x64, the supported platform (platform-tests.yml). They
+#             build the solution themselves, so they run beside the packages rather than after them.
+#   publish   only when the plan says so and every package and test job succeeded: one GitHub Release with
+#             the six packages and their SHA-256 checksums, a pre-release while X is 0.
+#
+# Runs:
+#   - by hand (Actions -> Release -> Run workflow): packages without publishing unless "publish" is ticked;
+#   - for a push to main that changes the version or the packaging, which publishes only if X.Y changed;
+#   - from version-bump.yml after it advances X.Y on main (its commit triggers no push run).
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Also publish a GitHub Release (main only, for an X.Y not yet released). Leave unticked to only build, test and package.
+        type: boolean
+        default: false
+  push:
+    branches:
+      - main
+    paths:
+      - Directory.Build.props
+      - Directory.Packages.props
+      - Noctaxis.Desktop/Noctaxis.Desktop.csproj
+      - packaging/**
+      - scripts/package.sh
+      - scripts/package.ps1
+      - scripts/check-*.sh
+      - scripts/release_plan.py
+      - scripts/noctaxis_version.py
+      - .github/workflows/release.yml
+      - .github/workflows/platform-package.yml
+      - .github/workflows/platform-tests.yml
+  workflow_call:
+    inputs:
+      sha:
+        description: The main commit carrying the new version.
+        required: true
+        type: string
+      previous-version:
+        description: X.Y before the bump.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      xy: ${{ steps.plan.outputs.xy }}
+      tag: ${{ steps.plan.outputs.tag }}
+      publish: ${{ steps.plan.outputs.publish }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      title: ${{ steps.plan.outputs.title }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          # The commit before a push, to see whether it changed X.Y.
+          fetch-depth: 0
+
+      - name: Resolve the commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Plan the version and whether to publish
+        id: plan
+        env:
+          # Called by version-bump.yml, this run's event and ref are that pull request's.
+          EVENT: ${{ inputs.previous-version && 'version-bump' || github.event_name }}
+          REF: ${{ inputs.previous-version && 'refs/heads/main' || github.ref }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          BUILD: ${{ github.run_number }}
+          BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}
+          PREVIOUS: ${{ inputs.previous-version }}
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+        # bash with pipefail, so a refused plan fails this step rather than being hidden by tee.
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/release_plan.py --event "$EVENT" --ref "$REF" --sha "$SHA" --build "$BUILD" \
+            --before "$BEFORE" --previous "$PREVIOUS" --publish "$PUBLISH" --output "$GITHUB_OUTPUT" | tee plan.txt
+          {
+            echo "### Release plan"
+            echo '```'
+            cat plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  package:
+    name: Package
+    needs: plan
+    strategy:
+      # Every target reports its own result; one failing does not cancel the others.
+      fail-fast: false
+      matrix:
+        # Every package is built and started on a hosted runner of its own operating system and processor, never
+        # cross-compiled. These runners are free for public repositories.
+        include:
+          - { runner: windows-latest, rid: win-x64 }
+          - { runner: windows-11-arm, rid: win-arm64 }
+          - { runner: ubuntu-latest, rid: linux-x64 }
+          - { runner: ubuntu-24.04-arm, rid: linux-arm64 }
+          - { runner: macos-latest, rid: osx-arm64 }
+          - { runner: macos-15-intel, rid: osx-x64 }
+    uses: ./.github/workflows/platform-package.yml
+    with:
+      runner: ${{ matrix.runner }}
+      rid: ${{ matrix.rid }}
+      sha: ${{ needs.plan.outputs.sha }}
+      version: ${{ needs.plan.outputs.version }}
+
+  # The required tests: the officially supported platform. The best-effort platforms' suites run for every code
+  # change in platform-tests-best-effort.yml and do not gate a release.
+  tests:
+    name: Tests
+    needs: plan
+    uses: ./.github/workflows/platform-tests.yml
+    with:
+      runner: windows-latest
+      rid: win-x64
+      sha: ${{ needs.plan.outputs.sha }}
+      build-number: ${{ github.run_number }}
+
+  publish:
+    name: Publish ${{ needs.plan.outputs.tag }}
+    # Without a status function, `if` also requires every needed job to have succeeded: a failed or cancelled
+    # package or test job means nothing is published.
+    needs: [plan, package, tests]
+    if: needs.plan.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    # One publication at a time; a queued one is never cancelled by another.
+    concurrency:
+      group: noctaxis-publish
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      XY: ${{ needs.plan.outputs.xy }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      TITLE: ${{ needs.plan.outputs.title }}
+      PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+    steps:
+      - name: Collect the verified packages
+        uses: actions/download-artifact@v7
+        with:
+          pattern: package-*
+          path: assets
+          merge-multiple: true
+
+      - name: Check the release assets
+        run: |
+          set -euo pipefail
+          cd assets
+          expected=$(printf '%s\n' "Noctaxis-$VERSION-win-x64.zip" "Noctaxis-$VERSION-win-arm64.zip" \
+            "Noctaxis-$VERSION-linux-x64.tar.gz" "Noctaxis-$VERSION-linux-arm64.tar.gz" \
+            "Noctaxis-$VERSION-osx-arm64.zip" "Noctaxis-$VERSION-osx-x64.zip" | sort)
+          actual=$(ls -1 | sort)
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::The packages are not exactly the six for $VERSION. Found:"; echo "$actual"; exit 1
+          fi
+          sha256sum -- * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Check X.Y has not been released meanwhile
+        run: |
+          set -euo pipefail
+          # Every tag starting vX.Y. (the prefix match keeps v0.10.* out of v0.1.*) except this release's own.
+          refs=$(gh api "repos/$GH_REPO/git/matching-refs/tags/v$XY." --jq '.[].ref')
+          others=$(printf '%s\n' "$refs" | sed 's#^refs/tags/##' | grep -E '\.[0-9]+$' | grep -vxF "$TAG" || true)
+          if [ -n "$others" ]; then
+            echo "::error::$XY was released as $others while this run was in progress; not publishing $TAG."; exit 1
+          fi
+
+      - name: Write the release notes
+        run: |
+          stage=$([ "$PRERELEASE" = true ] && echo "an alpha pre-release" || echo "a release")
+          base="https://github.com/$GH_REPO/blob/$SHA"
+          cat > notes.md <<EOF
+          Noctaxis $VERSION is $stage, built from $SHA.
+
+          | Download | Platform |
+          |---|---|
+          | \`Noctaxis-$VERSION-win-x64.zip\` | **Windows x64 (officially supported)** |
+          | \`Noctaxis-$VERSION-win-arm64.zip\` | Windows Arm64 (best effort) |
+          | \`Noctaxis-$VERSION-linux-x64.tar.gz\` | Linux x64 (best effort) |
+          | \`Noctaxis-$VERSION-linux-arm64.tar.gz\` | Linux Arm64 (best effort) |
+          | \`Noctaxis-$VERSION-osx-arm64.zip\` | macOS Apple silicon (best effort) |
+          | \`Noctaxis-$VERSION-osx-x64.zip\` | macOS Intel (best effort) |
+
+          Each package is self-contained: extract it and run Noctaxis; nothing else needs installing. Its README.txt
+          has the steps for that system, and [Installing Noctaxis]($base/docs/user-guide/installing.md) covers all of
+          them. The packages are not code-signed, so Windows and macOS may warn before the first start
+          ([what you will see]($base/docs/releasing.md#what-users-see-without-trusted-signing)).
+
+          Every package was built, checked and started on a GitHub-hosted runner of its own system and processor,
+          and the test suites passed on Windows x64, which is also tested by hand. SHA-256 checksums are in
+          \`SHA256SUMS.txt\`.
+          EOF
+
+      # Created as a draft with every asset attached, then published in one step, so a release is never public
+      # without its packages. A re-run finishes its own draft; a published release is left untouched.
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          prerelease=$([ "$PRERELEASE" = true ] && echo --prerelease || true)
+          if state=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            if [ "$state" = false ]; then echo "$TAG is already published."; exit 0; fi
+            gh release upload "$TAG" assets/* --clobber
+          else
+            gh release create "$TAG" assets/* --draft $prerelease --target "$SHA" --title "$TITLE" --notes-file notes.md
+          fi
+          gh release edit "$TAG" --draft=false
+          echo "Published [$TITLE](https://github.com/$GH_REPO/releases/tag/$TAG)." >> "$GITHUB_STEP_SUMMARY"

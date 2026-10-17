@@ -6,6 +6,9 @@ obj/
 TestResults/
 artifacts/
 *.tmp
+# Backups left by in-place edits (sed -i, perl -pi) and merge tools; never project files.
+*.bak
+*.orig
 *.corrupt-*
 appsettings.local.json
 secrets.json

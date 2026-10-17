@@ -10,7 +10,9 @@
 #   VERIFY_VERSION command run in the working tree as `$VERIFY_VERSION <X.Y.0>` after each version
 #                  commit and before it is pushed (scripts/verify-msbuild-version.sh in CI); a
 #                  non-zero exit aborts before anything is pushed
-# Optional: REMOTE (default origin), MAIN_BRANCH (main), DEV_BRANCH (dev), MAX_ATTEMPTS (5)
+# Optional: REMOTE (default origin), MAIN_BRANCH (main), DEV_BRANCH (dev), MAX_ATTEMPTS (5),
+#           RESULT_FILE: once main carries the bump, main-sha=, previous-version= and version= lines are
+#           appended to it (GITHUB_OUTPUT in CI, so release.yml can build that commit)
 set -euo pipefail
 
 : "${PR_NUMBER:?}" "${MERGE_SHA:?}" "${VERSION_TOOL:?}" "${VERIFY_VERSION:?}"
@@ -55,13 +57,14 @@ git merge-base --is-ancestor "$MERGE_SHA" "$REMOTE/$MAIN_BRANCH" \
   || fail "Merge commit $MERGE_SHA is not on $MAIN_BRANCH; refusing to bump."
 
 # 1. main: increment Y exactly once for this pull request.
-before="" after=""
+before="" after="" main_sha=""
 for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   fetch "$MAIN_BRANCH"
   existing=$(bump_commit)
   if [ -n "$existing" ]; then
     before=$(version_at "$existing^"); after=$(version_at "$existing")
     echo "$MAIN_BRANCH already bumped for #$PR_NUMBER in $existing ($before -> $after)."
+    main_sha=$existing
     break
   fi
   base=$(git rev-parse "$REMOTE/$MAIN_BRANCH")
@@ -73,12 +76,16 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
   verify "$after"
   if push_or_classify "$MAIN_BRANCH" "$base"; then
     echo "$MAIN_BRANCH: $before -> $after"
+    main_sha=$(git rev-parse HEAD)
     break
   fi
   echo "$MAIN_BRANCH moved during attempt $attempt; retrying."
   before="" after=""
 done
 [ -n "$after" ] || fail "Could not update $MAIN_BRANCH after $MAX_ATTEMPTS attempts."
+if [ -n "${RESULT_FILE:-}" ]; then
+  printf 'main-sha=%s\nprevious-version=%s\nversion=%s\n' "$main_sha" "$before" "$after" >> "$RESULT_FILE"
+fi
 
 # 2. dev: apply the same X.Y, but only over the value that was merged (never over a manual change).
 git ls-remote --exit-code --heads "$REMOTE" "$DEV_BRANCH" > /dev/null \

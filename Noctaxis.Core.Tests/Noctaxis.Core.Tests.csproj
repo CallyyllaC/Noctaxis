@@ -7,6 +7,9 @@
     <ProjectReference Include="..\Noctaxis.Core\Noctaxis.Core.csproj" />
     <!-- A separate process for the single-instance tests; its output is copied beside the tests. -->
     <ProjectReference Include="..\Noctaxis.InstanceProbe\Noctaxis.InstanceProbe.csproj" />
+    <!-- SkiaSharp carries its Windows and macOS libraries but not Linux's. The app gets that one through
+         Avalonia.Skia; these tests use Skia without Avalonia, so they need it themselves. -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />

@@ -243,6 +243,7 @@
       <Setter Property="HorizontalAlignment" Value="Left" />
     </Style>
     <Style Selector="TextBlock.supportHeading">
+      <Setter Property="TextWrapping" Value="Wrap" />
       <Setter Property="FontSize" Value="{DynamicResource TextBodyStrong}" />
       <Setter Property="FontWeight" Value="SemiBold" />
     </Style>

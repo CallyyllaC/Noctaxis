@@ -137,6 +137,9 @@ A self-contained, extract-and-run zip for x64 and Arm64 (`scripts/package.ps1`),
 ### ⬜ Theme dropdown presentation polish
 Separate the visible theme availability label from tooltip details: standard themes show no redundant status beside their names, while tooltips identify them as Standard. Supporter and locked-theme labels remain informative. Keep this independent of the tooltip crash/full-row selection fixes.
 
+### ⬜ Decide whether to render the bundled Inter font
+`App.axaml` names `Inter` and `Program.cs` calls `WithInterFont()`, but a plain family name is looked up among the system's fonts only, so the bundled Inter is never used: Windows renders Segoe UI, and Linux and macOS their own default fonts. Decide whether Noctaxis should render Inter everywhere, for one look on every platform. It changes every text measurement, so re-run the layout, localisation and accessibility tests on all three platforms before changing it. Keep the font asset until this is decided.
+
 ### ⬜ Settings page layout and space utilisation
 Review every Settings page for sensible use of available horizontal and vertical space across typical and constrained window sizes and text scales. Eliminate excessive empty space, awkward stretching and unnecessary scrolling without sacrificing readability, accessibility or responsive behaviour.
 

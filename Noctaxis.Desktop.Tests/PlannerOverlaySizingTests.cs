@@ -86,7 +86,7 @@ public sealed partial class MainViewModelTests
             Roomy(window);
             var width = MainMap(window).Bounds.Width;
             Assert.Equal(Math.Round(width * .25), window.FindControl<Border>("PlannerPip")!.Bounds.Width, 0);
-            Assert.Equal(Math.Round(Math.Max(MapInstrumentLayout.MinimumCameraFrameWidth, width * PlannerOverlaySizes.DefaultCameraFrameWidthFraction)),
+            Assert.Equal(Math.Round(Math.Max(window.CameraFrameMinimumWidthForTesting, width * PlannerOverlaySizes.DefaultCameraFrameWidthFraction)),
                 window.FindControl<Border>("PlannerTerrainFrame")!.Bounds.Width, 0);
             AssertInstrumentsFit(window);
         }
@@ -211,7 +211,7 @@ public sealed partial class MainViewModelTests
             // Nothing in the card is clipped at its smallest.
             for (var i = 0; i < 40; i++) grip.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Left });
             Settle(window);
-            Assert.Equal(MapInstrumentLayout.MinimumCameraFrameWidth, card.Bounds.Width, 0);
+            Assert.Equal(window.CameraFrameMinimumWidthForTesting, card.Bounds.Width, 0);
             var inside = new Rect(card.Bounds.Size);
             foreach (var name in new[] { "CameraDirectionInstrument", "CameraFrameReadings", "PlannerTerrainLegendButton" })
             {

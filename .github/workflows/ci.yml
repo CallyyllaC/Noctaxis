@@ -1,15 +1,51 @@
 name: CI
 
-# Validation only: the version scheme's own logic. Building and testing on each platform is in the
-# per-platform workflows (tests-<rid>.yml through platform-tests.yml; build-<rid>.yml through
-# platform-package.yml), so each platform has a status badge of its own. Nothing here tags, releases
-# or publishes anything.
+# Validation for ordinary development on the officially supported platform: every push to main or dev, every
+# pull request, and on demand.
+#   - The version and release scripts' own tests.
+#   - The solution built and the Core and Desktop suites run natively on Windows x64 (platform-tests.yml).
+# The best-effort platforms' suites run in platform-tests-best-effort.yml, with a badge of their own.
+# Nothing is packaged, tagged, released or published: packages and releases are release.yml.
+# Changes only to documentation, images, the roadmap or the AWOO website files skip it; the documents the
+# tests read (README.md, the licence, notice and supporter files, and the licensing documents) do not.
 on:
   push:
     branches:
       - main
       - dev
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!images/**'
+      - '!ROADMAP.md'
+      - '!awoo.project.json'
+      - '!.github/workflows/trigger-awoo-rebuild.yml'
+      # The documents LicensingTests reads are checked like code.
+      - docs/licensing.md
+      - docs/awoo.md
+      - docs/supporter-themes.md
+      - docs/supporter-licensing.md
+      - docs/branding.md
+      - docs/user-guide/README.md
+      - docs/user-guide/settings.md
+      - docs/user-guide/about.md
   pull_request:
+    paths:
+      - '**'
+      - '!docs/**'
+      - '!images/**'
+      - '!ROADMAP.md'
+      - '!awoo.project.json'
+      - '!.github/workflows/trigger-awoo-rebuild.yml'
+      # The documents LicensingTests reads are checked like code.
+      - docs/licensing.md
+      - docs/awoo.md
+      - docs/supporter-themes.md
+      - docs/supporter-licensing.md
+      - docs/branding.md
+      - docs/user-guide/README.md
+      - docs/user-guide/settings.md
+      - docs/user-guide/about.md
   workflow_dispatch:
 
 permissions:
@@ -17,14 +53,23 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push to a pull request replaces its run; runs for main and dev always finish, so the badge shows a
+  # result rather than a cancellation.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  version-scheme:
-    name: Version scheme logic
+  scripts:
+    name: Version and release scripts
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - name: Test X.Y parsing and increment
+      - uses: actions/checkout@v5
+      - name: Test version parsing, bumping and release planning
         run: python3 -m unittest discover -s scripts -p "test_*.py" -v
+
+  tests:
+    name: Tests
+    uses: ./.github/workflows/platform-tests.yml
+    with:
+      runner: windows-latest
+      rid: win-x64

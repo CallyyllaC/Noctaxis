@@ -193,6 +193,10 @@
             <Style Selector="Button.barAction:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.barAction:pressed /template/ ContentPresenter#PART_ContentPresenter">
               <Setter Property="BorderBrush" Value="{DynamicResource Accent}"/>
             </Style>
+            <!-- The bar's spacing is set here rather than on the panels, so the compact styles below can
+                 override it (a value set on the element itself would win over any style). -->
+            <Style Selector="Grid#PlannerTopBar"><Setter Property="ColumnSpacing" Value="8"/></Style>
+            <Style Selector="StackPanel#PlannerTimeBar"><Setter Property="Spacing" Value="14"/></Style>
             <!-- When the window is too narrow for the bar at its ease (the location has already given all its
                  room), the same controls draw closer: nothing is shortened or wrapped, and only
                  Export's menu chevron is set aside (the button still opens its menu). These come after the
@@ -216,9 +220,12 @@
             <Style Selector="Border.compact Path.exportChevron"><Setter Property="IsVisible" Value="False"/></Style>
             <!-- Import gives up its word before anything else does: its glyph and accessible name stay, and its menu items are labelled. -->
             <Style Selector="Border.compact TextBlock.importLabel"><Setter Property="IsVisible" Value="False"/></Style>
+            <!-- Tight, when even compact is not enough (a wider system font, a larger text size): Export gives up
+                 its word too, as Import has, keeping its glyph, accessible name and tooltip. -->
+            <Style Selector="Border.tight TextBlock.exportLabel"><Setter Property="IsVisible" Value="False"/></Style>
           </Border.Styles>
-          <Grid x:Name="PlannerTopBar" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="8">
-            <StackPanel x:Name="PlannerTimeBar" Orientation="Horizontal" VerticalAlignment="Center" Spacing="14">
+          <Grid x:Name="PlannerTopBar" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto">
+            <StackPanel x:Name="PlannerTimeBar" Orientation="Horizontal" VerticalAlignment="Center">
               <StackPanel x:Name="PlannerDateControl" Orientation="Horizontal" Spacing="2">
                 <Button x:Name="PlannerPreviousDay" Classes="timeStep" Command="{Binding PreviousDayCommand}"
                         AutomationProperties.Name="{loc:Text Planner_PreviousDay_Button}"><Path Data="M6,0 L0,5 L6,10"/></Button>
@@ -284,11 +291,12 @@
                     Command="{Binding ResetGroundElevationCommand}" IsVisible="{Binding IsElevationManualOverride}"
                     IsEnabled="{Binding CanResetGroundElevation}"/>
             <Button x:Name="PlannerExportMenu" Grid.Column="5" Classes="barAction exportAction" VerticalAlignment="Center"
-                    Margin="6,0,0,0" IsEnabled="{Binding CanExport}">
+                    Margin="6,0,0,0" IsEnabled="{Binding CanExport}"
+                    AutomationProperties.Name="{loc:Text Planner_Export_Button}" ToolTip.Tip="{loc:Text Planner_Export_Button}">
               <StackPanel Orientation="Horizontal" Spacing="7">
                 <Path Data="{StaticResource ExportGlyph}" Width="14" Height="14" Stretch="Uniform" StrokeThickness="1.8"
                       StrokeLineCap="Round" StrokeJoin="Round" Stroke="{Binding $parent[Button].Foreground}" VerticalAlignment="Center"/>
-                <TextBlock Text="{loc:Text Planner_Export_Button}" VerticalAlignment="Center"/>
+                <TextBlock Classes="exportLabel" Text="{loc:Text Planner_Export_Button}" VerticalAlignment="Center"/>
                 <Path Classes="exportChevron" Data="M0,0 L5,5 L10,0" Width="9" Height="5" Stretch="Uniform" StrokeThickness="1.6"
                       Stroke="{Binding $parent[Button].Foreground}" VerticalAlignment="Center"/>
               </StackPanel>
@@ -792,8 +800,10 @@
                           <TextBlock TextWrapping="Wrap" Text="{loc:Text Planner_Target_LocalHorizon_Label}"/><TextBlock TextWrapping="Wrap" Grid.Column="1" Text="{Binding TargetLocalHorizonText}"/>
                           <TextBlock TextWrapping="Wrap" Grid.Row="1" Text="{Binding TargetTerrainMarginLabel}"/><TextBlock TextWrapping="Wrap" Grid.Row="1" Grid.Column="1" Text="{Binding TargetTerrainMarginText}"/>
                         </Grid>
-                        <Grid x:Name="FocusedTargetEvents" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
-                          <TextBlock TextWrapping="Wrap" Text="{loc:Text Planner_Target_Rise_Label}"/><TextBlock x:Name="FocusedTargetRise" TextWrapping="Wrap" Grid.Column="1" Text="{Binding RiseText}"/><TextBlock TextWrapping="Wrap" Grid.Row="1" Text="{loc:Text Planner_Target_Transit_Label}"/><TextBlock x:Name="FocusedTargetTransit" TextWrapping="Wrap" Grid.Row="1" Grid.Column="1" Text="{Binding TransitText}"/><TextBlock TextWrapping="Wrap" Grid.Row="2" Text="{loc:Text Planner_Target_Set_Label}"/><TextBlock x:Name="FocusedTargetSet" TextWrapping="Wrap" Grid.Row="2" Grid.Column="1" Text="{Binding SetText}"/>
+                        <!-- The times take what the labels leave and wrap there, right-aligned: an Auto column would measure them
+                             at any width, so a long reason ("Not on this date") would run past the panel. -->
+                        <Grid x:Name="FocusedTargetEvents" ColumnDefinitions="Auto,*" ColumnSpacing="12" RowDefinitions="Auto,Auto,Auto" RowSpacing="5">
+                          <TextBlock TextWrapping="Wrap" Text="{loc:Text Planner_Target_Rise_Label}"/><TextBlock x:Name="FocusedTargetRise" TextWrapping="Wrap" TextAlignment="Right" Grid.Column="1" Text="{Binding RiseText}"/><TextBlock TextWrapping="Wrap" Grid.Row="1" Text="{loc:Text Planner_Target_Transit_Label}"/><TextBlock x:Name="FocusedTargetTransit" TextWrapping="Wrap" TextAlignment="Right" Grid.Row="1" Grid.Column="1" Text="{Binding TransitText}"/><TextBlock TextWrapping="Wrap" Grid.Row="2" Text="{loc:Text Planner_Target_Set_Label}"/><TextBlock x:Name="FocusedTargetSet" TextWrapping="Wrap" TextAlignment="Right" Grid.Row="2" Grid.Column="1" Text="{Binding SetText}"/>
                         </Grid>
                         <TextBlock Text="{Binding MoonDetails}" IsVisible="{Binding HasMoonDetails}" Foreground="{DynamicResource PrimaryText}" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding SunDetails}" IsVisible="{Binding HasSunDetails}" Foreground="{DynamicResource PrimaryText}" TextWrapping="Wrap" />

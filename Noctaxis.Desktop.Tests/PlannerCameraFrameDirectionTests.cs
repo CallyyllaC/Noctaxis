@@ -93,15 +93,7 @@ public sealed partial class MainViewModelTests
             {
                 using var bitmap = new Avalonia.Media.Imaging.RenderTargetBitmap(size);
                 bitmap.Render(stage);
-                var pixels = new byte[size.Width * size.Height * 4];
-                var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(pixels.Length);
-                try
-                {
-                    bitmap.CopyPixels(new PixelRect(size), buffer, pixels.Length, size.Width * 4);
-                    System.Runtime.InteropServices.Marshal.Copy(buffer, pixels, 0, pixels.Length);
-                }
-                finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
-                return pixels;
+                return RenderedPixels.Bgra(bitmap);
             }
             double Luminance(byte[] pixels, Rect area)
             {
@@ -323,7 +315,9 @@ public sealed partial class MainViewModelTests
             vm.SetPlannerOverlaySizes(cameraFrameWidthFraction: PlannerOverlaySizes.MinimumFraction);
             window.Width = width;
             Settle(window);
-            Assert.Equal(MapInstrumentLayout.MinimumCameraFrameWidth, card.Bounds.Width, 0);
+            // The smallest card: the measured minimum, or wider where this system's font sets the readings wider.
+            Assert.True(window.CameraFrameMinimumWidthForTesting >= MapInstrumentLayout.MinimumCameraFrameWidth);
+            Assert.Equal(window.CameraFrameMinimumWidthForTesting, card.Bounds.Width, 0);
             var lines = pairs.Select(pair => pair.Bounds.Y).Distinct().Count();
             Assert.InRange(lines, 1, 2);
             Assert.Equal(pairs.Length - lines, row.ShownSeparators.Count());
@@ -355,7 +349,7 @@ public sealed partial class MainViewModelTests
             window.FindControl<TerrainFrameView>("PlannerCameraFrameView")!.Depth = PictureDepth();
             Settle(window);
             var card = window.FindControl<Border>("PlannerTerrainFrame")!;
-            Assert.Equal(MapInstrumentLayout.MinimumCameraFrameWidth, card.Bounds.Width, 0);
+            Assert.Equal(window.CameraFrameMinimumWidthForTesting, card.Bounds.Width, 0);
             var pad = window.FindControl<CameraDirectionPad>("CameraDirection")!;
             Assert.True(pad.TapeBounds.Width >= 60, $"the tape is {pad.TapeBounds.Width} wide");
             Assert.True(pad.LadderBounds.Height >= 40, $"the ladder is {pad.LadderBounds.Height} tall");

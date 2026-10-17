@@ -255,17 +255,11 @@ public sealed partial class MainViewModelTests
             // The picture's terrain meets its sky at the skyline: sky just above it, terrain just below.
             using var bitmap = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(frame.Right), (int)Math.Ceiling(frame.Bottom)));
             bitmap.Render(view);
-            var pixels = new byte[4];
+            var pixels = RenderedPixels.Bgra(bitmap);
             Avalonia.Media.Color At(double y)
             {
-                var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(4);
-                try
-                {
-                    bitmap.CopyPixels(new PixelRect((int)frame.Center.X + 3, (int)Math.Round(y), 1, 1), buffer, 4, 4);
-                    System.Runtime.InteropServices.Marshal.Copy(buffer, pixels, 0, 4);
-                }
-                finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
-                return Avalonia.Media.Color.FromRgb(pixels[2], pixels[1], pixels[0]);
+                var c = RenderedPixels.At(pixels, bitmap.PixelSize.Width, (int)frame.Center.X + 3, (int)Math.Round(y));
+                return Avalonia.Media.Color.FromRgb(c.R, c.G, c.B);
             }
             if (skyline.Y > frame.Top + 4 && skyline.Y < frame.Bottom - 4)
             {

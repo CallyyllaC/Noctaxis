@@ -285,8 +285,13 @@ public static class EnvironmentalHttpDownloader
     /// memory. Retries, absent-tile reporting, the size limit and cancellation behave exactly as they
     /// do for the buffered overload; the returned result never carries bytes.
     /// </summary>
-    public static async Task<EnvironmentalAcquisitionResult> DownloadToStreamAsync(HttpClient client, Uri uri,
-        int maximumBytes, Stream destination, CancellationToken cancellationToken, int maximumAttempts = 3)
+    public static Task<EnvironmentalAcquisitionResult> DownloadToStreamAsync(HttpClient client, Uri uri,
+        int maximumBytes, Stream destination, CancellationToken cancellationToken, int maximumAttempts = 3) =>
+        DownloadToStreamAsync(client, uri, maximumBytes, destination, cancellationToken, maximumAttempts, TimeProvider.System);
+
+    /// <param name="time">Measures the source's silence between reads.</param>
+    internal static async Task<EnvironmentalAcquisitionResult> DownloadToStreamAsync(HttpClient client, Uri uri,
+        int maximumBytes, Stream destination, CancellationToken cancellationToken, int maximumAttempts, TimeProvider time)
     {
         for (var attempt = 1; attempt <= maximumAttempts; attempt++)
         {
@@ -317,7 +322,8 @@ public static class EnvironmentalHttpDownloader
             // sending would hold the shared tile load, its lock and its disk lease indefinitely. Each read
             // must make progress within the client's own timeout (a slow but steady body is never cut off),
             // and a stall ends as that timeout would have: a TaskCanceledException the caller did not ask for.
-            using var stall = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            using var stall = new CancellationTokenSource(Timeout.InfiniteTimeSpan, time);
+            using var caller = cancellationToken.Register(static source => ((CancellationTokenSource)source!).Cancel(), stall);
             var window = BodyStallWindow(client);
             await using var input = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
             var buffer = new byte[64 * 1024];

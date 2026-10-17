@@ -63,19 +63,12 @@ public sealed partial class MainViewModelTests
             var size = new PixelSize((int)Math.Ceiling(card.Bounds.Width * scale), (int)Math.Ceiling(card.Bounds.Height * scale));
             using var bitmap = new RenderTargetBitmap(size, new Vector(96 * scale, 96 * scale));
             bitmap.Render(card);
-            var pixels = new byte[size.Width * size.Height * 4];
-            var buffer = System.Runtime.InteropServices.Marshal.AllocHGlobal(pixels.Length);
-            try
-            {
-                bitmap.CopyPixels(new PixelRect(size), buffer, pixels.Length, size.Width * 4);
-                System.Runtime.InteropServices.Marshal.Copy(buffer, pixels, 0, pixels.Length);
-            }
-            finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buffer); }
+            var pixels = RenderedPixels.Bgra(bitmap);
             Color At(Point point)
             {
                 var at = view.TranslatePoint(point, card)!.Value;
-                var index = ((int)(at.Y * scale) * size.Width + (int)(at.X * scale)) * 4;
-                return Color.FromRgb(pixels[index + 2], pixels[index + 1], pixels[index]);
+                var c = RenderedPixels.At(pixels, size.Width, (int)(at.X * scale), (int)(at.Y * scale));
+                return Color.FromRgb(c.R, c.G, c.B);
             }
             static bool IsTerrain(Color c) => c.R > 80 && Math.Abs(c.R - c.B) < 12 && Math.Abs(c.G - c.B) < 12;
             static bool IsSky(Color c) => c.B > c.R + 12 && c.R < 60;

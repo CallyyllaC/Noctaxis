@@ -21,7 +21,7 @@ public sealed partial class MainViewModelTests
 {
     private static MarqueeText LocationText(MainWindow window) => window.FindControl<MarqueeText>("PlannerLocationText")!;
 
-    private static readonly string[] BarFixtures = ["PlannerTimeBar", "PlannerSaveLocation", "PlannerOpenInMaps", "PlannerExportMenu"];
+    private static readonly string[] BarFixtures = ["PlannerTimeBar", "PlannerSaveLocation", "PlannerOpenInMaps", "PlannerExportMenu", "PlannerImportMenu"];
 
     private static Dictionary<string, Rect> BarPositions(MainWindow window) => BarFixtures.ToDictionary(name => name, name =>
     {
@@ -158,7 +158,7 @@ public sealed partial class MainViewModelTests
 
     /// <summary>
     /// On a narrow window the location gives up its room first, and nothing wraps: the time controls, Save
-    /// location, Open in Maps and Export all stay whole and on screen down to the smallest window.
+    /// location, Open in Maps, Export and Import all stay whole and on screen down to the smallest window.
     /// </summary>
     [AvaloniaFact]
     public async Task ANarrowWindowShrinksTheLocationFirstAndKeepsEverythingElse()

@@ -155,7 +155,8 @@ public partial class MainWindow : Window
                 PipWidthFraction = _pipResizeFraction ?? saved.PipWidthFraction,
                 CameraFrameWidthFraction = _frameResizeFraction ?? saved.CameraFrameWidthFraction
             };
-            var layout = MapInstrumentLayout.Resolve(map, preferred, _viewModel.IsPlannerPipEnabled, BottomLeftRowHeight);
+            var layout = MapInstrumentLayout.Resolve(map, preferred, _viewModel.IsPlannerPipEnabled, BottomLeftRowHeight,
+                CameraFrameMinimumWidth());
             OverlayLayoutForTesting = layout;
             var content = Math.Round(layout.CameraFrameWidth - CameraFrameChrome());
             if (Math.Abs(PlannerCameraFrameContent.Width - content) > .5) PlannerCameraFrameContent.Width = content;
@@ -167,6 +168,22 @@ public partial class MainWindow : Window
         // The main map's credits leave the bottom-left row clear: its 12 margin and an 8 gap.
         PlannerMap.AttributionReservedLeft = PlannerMapBottomLeft.Bounds.Width + 12;
     }
+
+    /// <summary>
+    /// The Camera frame card's least width: <see cref="MapInstrumentLayout.MinimumCameraFrameWidth"/>, or what its
+    /// readings need for two lines in this system's font at the normal text size, whichever is more. A system font
+    /// wider than the one the minimum was measured with so keeps them on two lines; a larger text size still wraps
+    /// them as it always has, since the need is taken at the normal size.
+    /// </summary>
+    private double CameraFrameMinimumWidth()
+    {
+        var scale = this.TryFindResource("TextSmall", out var size) && size is double small
+            ? small / Themes.ThemeService.Typography["TextSmall"] : 1;
+        return Math.Max(MapInstrumentLayout.MinimumCameraFrameWidth,
+            Math.Ceiling(CameraFrameChrome() + CameraFrameReadings.TwoLineWidth / scale));
+    }
+
+    internal double CameraFrameMinimumWidthForTesting => CameraFrameMinimumWidth();
 
     // The Camera frame card's padding and border across its content.
     private double CameraFrameChrome() => PlannerTerrainFrame.Padding.Left + PlannerTerrainFrame.Padding.Right +
@@ -185,22 +202,33 @@ public partial class MainWindow : Window
         return card - view + frame;
     }
 
-    // The bar's fixed parts at their ease: measured while the bar is not compact, the width below which it is.
-    private double _topBarAtEase;
+    // The bar's fixed parts at their ease and compact: each measured while the bar is in that state, the width
+    // below which the next state applies.
+    private double _topBarAtEase, _topBarCompact;
 
     /// <summary>
     /// Keeps the bar on one line. The location takes what is left and gives it up first; when even that is
     /// not enough for the rest at their ease, the bar becomes compact (closer spacing, no minimum widths on the
-    /// date and time) rather than hiding, shortening or wrapping anything.
+    /// date and time) rather than hiding, shortening or wrapping anything. When compact is still too wide (a
+    /// wider system font, a larger text size), it becomes tight: Export gives up its word as Import has.
     /// </summary>
     private void FitTopBar()
     {
         var compact = PlannerTopBarHost.Classes.Contains("compact");
+        var tight = PlannerTopBarHost.Classes.Contains("tight");
         var fixedWidth = PlannerTopBar.Children.Where(child => child.IsVisible && !ReferenceEquals(child, PlannerLocationCopy))
             .Sum(child => child.DesiredSize.Width) + PlannerTopBar.ColumnSpacing * (PlannerTopBar.ColumnDefinitions.Count - 1);
         if (!compact) _topBarAtEase = fixedWidth;
-        var shouldBeCompact = PlannerTopBar.Bounds.Width > 0 && PlannerTopBar.Bounds.Width < _topBarAtEase;
-        if (shouldBeCompact != compact) PlannerTopBarHost.Classes.Set("compact", shouldBeCompact);
+        else if (!tight) _topBarCompact = fixedWidth;
+        var width = PlannerTopBar.Bounds.Width;
+        var shouldBeCompact = width > 0 && width < _topBarAtEase;
+        var shouldBeTight = shouldBeCompact && compact && width < _topBarCompact;
+        if (shouldBeCompact == compact && shouldBeTight == tight) return;
+        PlannerTopBarHost.Classes.Set("compact", shouldBeCompact);
+        PlannerTopBarHost.Classes.Set("tight", shouldBeTight);
+        // The new state changes what the parts need but not the bar's own size, so measure again once its layout
+        // is done: becoming compact is how the compact width is learned.
+        Dispatcher.Post(FitTopBar, Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
     private void ResizeOverlay(bool pip, double width)
@@ -208,7 +236,7 @@ public partial class MainWindow : Window
         var map = PlannerMap.Bounds.Width;
         if (map <= 0) return;
         var fraction = MapInstrumentLayout.FractionOf(width,
-            pip ? MapInstrumentLayout.MinimumPipSide : MapInstrumentLayout.MinimumCameraFrameWidth, map);
+            pip ? MapInstrumentLayout.MinimumPipSide : CameraFrameMinimumWidth(), map);
         if (pip) _pipResizeFraction = fraction;
         else _frameResizeFraction = fraction;
         FitMapOverlays();
@@ -226,7 +254,8 @@ public partial class MainWindow : Window
 
     private double PreferredWidth(bool pip)
     {
-        var (side, frame) = MapInstrumentLayout.Preferred(PlannerMap.Bounds.Width, _viewModel.PlannerOverlaySizes);
+        var (side, frame) = MapInstrumentLayout.Preferred(PlannerMap.Bounds.Width, _viewModel.PlannerOverlaySizes,
+            CameraFrameMinimumWidth());
         return pip ? side : frame;
     }
 
