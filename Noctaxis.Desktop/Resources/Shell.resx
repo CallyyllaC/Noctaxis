@@ -71,7 +71,7 @@
     <comment>Placeholder and accessible name of the header search field while the Locations page is open.</comment>
   </data>
   <data name="Shell_Search_Places_Placeholder" xml:space="preserve">
-    <value>Search for a place or coordinates</value>
+    <value>Place name or coordinates</value>
     <comment>Placeholder and accessible name of the header search field while the Planner is open.</comment>
   </data>
   <data name="Shell_Search_Settings_Placeholder" xml:space="preserve">

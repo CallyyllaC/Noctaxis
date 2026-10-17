@@ -233,15 +233,11 @@ The window style names the `Inter` family. `WithInterFont()` registers the bundl
 collection, but a plain `Inter` is looked up among the system's fonts only, so it resolves to each system's
 default: Segoe UI on Windows, which the layouts were measured with, and wider fonts on Linux (DejaVu Sans on
 the hosted runner) and macOS. The layouts now allow for a wider font: at the narrowest window the Planner's
-bar gives Export's word up as it does Import's, and the Camera frame card is never narrower than its readings
-need for two lines. Rendering the Desktop suite with DejaVu Sans on Windows reproduces the Linux runner's
-results, which is how these were checked.
-
-One test still fails on Linux x64, and it points to a real text-fitting limit:
-- `LongerTranslatedTextStillFitsOnEveryScreenAtEveryTextSize`, for the Planner at 200 % text size with every
-  text about a third longer: the shell search field's placeholder is about 50 px longer than the field
-  beside the page names. English at 200 % fits. Fitting it needs a design decision (a shorter placeholder,
-  smaller page names at large sizes, or a search field that can wrap), not a test change.
+bar gives Export's word up as it does Import's, the Camera frame card is never narrower than its readings
+need for two lines, and the Planner's search placeholder is "Place name or coordinates", which leaves about
+57 px spare in DejaVu Sans at 200 % text with every text a third longer. Rendering the Desktop suite with
+DejaVu Sans on Windows reproduces the Linux runner's results, which is how these were checked. No test is
+known to fail on Linux x64 or macOS Apple silicon.
 
 ## Signing and distribution trust
 

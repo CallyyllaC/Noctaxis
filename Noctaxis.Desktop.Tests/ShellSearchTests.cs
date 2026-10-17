@@ -123,7 +123,7 @@ public sealed partial class MainViewModelTests
             foreach (var (page, placeholder, available) in new[]
                      {
                          (0, "Search saved locations", true),
-                         (1, "Search for a place or coordinates", true),
+                         (1, "Place name or coordinates", true),
                          (2, "Search settings", false)
                      })
             {
