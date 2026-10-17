@@ -216,12 +216,16 @@ Locally: [Building and testing](#building-and-testing) and [Packages](#packages)
 4. Re-run only the failed jobs if the cause was outside the code (a runner or network fault). Otherwise fix
    it and push: a release that did not publish can simply be run again.
 
-One Desktop failure is a known, intermittent test-isolation defect rather than a product fault: a
-`Test Case Cleanup Failure` with "The calling thread cannot access this object because a different thread
-owns it" from `EnsureIsolatedApplication`, on a different UI test each time. Avalonia creates its UI
-dispatcher on whichever thread first asks after the headless session resets it between tests, and plain
-tests that build a `MainViewModel` on other threads can ask first. The named test passes on its own; re-run
-the job. Moving those tests onto the headless dispatcher fixes it.
+A `Test Case Cleanup Failure` with "The calling thread cannot access this object because a different thread
+owns it" from `EnsureIsolatedApplication` is a test-isolation defect, not a product fault, and is fixed; it
+used to hit a different UI test on most full Desktop runs. Avalonia creates its UI dispatcher on whichever
+thread first asks after the headless session resets it between tests. Pool work left by other tests asks
+too: Mapsui's map invalidation, `MainViewModel`'s terrain-cache updates, and plain tests that build pens or
+brushes. `TestAppBuilder` now claims the dispatcher for the headless thread before each test's platform
+setup, under the dispatcher's own lock, so that race can no longer be lost. The claim reaches two
+non-public members of Avalonia's `Dispatcher`. If an Avalonia upgrade renames them, every UI test fails at
+once with `MissingFieldException` or `MissingMethodException` from `HeadlessUiThread`; update the names
+there. Do not re-run a job that shows the old failure: something has reopened the race, so fix it.
 
 ### Known platform test differences
 
