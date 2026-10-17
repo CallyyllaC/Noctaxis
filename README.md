@@ -2,17 +2,21 @@
 
 [![CI: Windows x64 build and tests](https://github.com/CallyyllaC/Noctaxis/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/CallyyllaC/Noctaxis/actions/workflows/ci.yml?query=branch%3Amain) [![Best-effort platform tests: Linux x64 and macOS Apple silicon](https://github.com/CallyyllaC/Noctaxis/actions/workflows/platform-tests-best-effort.yml/badge.svg?branch=main)](https://github.com/CallyyllaC/Noctaxis/actions/workflows/platform-tests-best-effort.yml?query=branch%3Amain) [![Release: all six packages built, checked and started](https://github.com/CallyyllaC/Noctaxis/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/CallyyllaC/Noctaxis/actions/workflows/release.yml?query=branch%3Amain)
 
-*CI builds and tests Windows x64, the supported platform. The best-effort badge covers the test suites on Linux x64 and macOS Apple silicon. The release badge covers all six packages, each built, checked and started on a runner of its own system, and publication to [Releases](https://github.com/CallyyllaC/Noctaxis/releases) when the version changes. See [CI details](docs/releasing.md#continuous-integration-and-releases).*
+*CI builds and tests Windows x64, the supported platform.*
+*The best-effort badge covers the test suites on Linux x64 and macOS Apple silicon.*
+*The release badge covers all six packages, each built, checked and started on a runner of its own system, and publication to [Releases](https://github.com/CallyyllaC/Noctaxis/releases) when the version changes. See [CI details](docs/releasing.md#continuous-integration-and-releases).*
 
-**[Wiki](https://github.com/CallyyllaC/Noctaxis/wiki)** · **[Getting Started](docs/user-guide/getting-started.md)** · [Locations](docs/user-guide/locations.md) · [Planner](docs/user-guide/planner.md) · [Settings](docs/user-guide/settings.md)
+**[Wiki](https://github.com/CallyyllaC/Noctaxis/wiki)** · **[Getting Started](https://github.com/CallyyllaC/Noctaxis/wiki/Getting-Started)** · [Locations](docs/user-guide/locations.md) · [Planner](docs/user-guide/planner.md) · [Settings](docs/user-guide/settings.md)
 
 Noctaxis is my desktop planning application for photography and astrophotography. It brings locations, celestial targets, camera framing, terrain, light pollution, weather and time into one workspace. It gives you the information to plan a shot without deciding the composition for you.
+
+*Most documentation was AI-Generated and human reviewed, sorry, not sorry.*
 
 ![Noctaxis Planner showing the map, camera framing, Inspector and Timeline](images/awoo-card.webp)
 
 ## Getting Noctaxis
 
-Noctaxis is in active development and doesn't have a stable release yet. Start with [Installing Noctaxis](docs/user-guide/installing.md), then follow [Getting Started](docs/user-guide/getting-started.md). The [wiki](https://github.com/CallyyllaC/Noctaxis/wiki) covers the Planner and the rest of the application. If you're working on the project itself, see [building and releasing](docs/releasing.md).
+Noctaxis is in active development and doesn't have a stable release yet. Start with [Installing Noctaxis](docs/user-guide/installing.md), then follow [Getting Started](https://github.com/CallyyllaC/Noctaxis/wiki/Getting-Started). The [wiki](https://github.com/CallyyllaC/Noctaxis/wiki) covers the Planner and the rest of the application. If you're working on the project itself, see [building and releasing](docs/releasing.md).
 
 ## Platform support
 
