@@ -26,6 +26,8 @@ on:
   push:
     branches:
       - main
+      # TEMPORARY: validates packaging on the pull request branch; release_plan.py publishes nothing off main.
+      - ci/pipeline-overhaul
     paths:
       - Directory.Build.props
       - Directory.Packages.props
