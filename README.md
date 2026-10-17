@@ -6,7 +6,7 @@
 *The best-effort badge covers the test suites on Linux x64 and macOS Apple silicon.*
 *The release badge covers all six packages, each built, checked and started on a runner of its own system, and publication to [Releases](https://github.com/CallyyllaC/Noctaxis/releases) when the version changes. See [CI details](docs/releasing.md#continuous-integration-and-releases).*
 
-**[Wiki](https://github.com/CallyyllaC/Noctaxis/wiki)** · **[Getting Started](https://github.com/CallyyllaC/Noctaxis/wiki/Getting-Started)** · [Locations](docs/user-guide/locations.md) · [Planner](docs/user-guide/planner.md) · [Settings](docs/user-guide/settings.md)
+**[Wiki](https://github.com/CallyyllaC/Noctaxis/wiki)** · **[Getting Started](https://github.com/CallyyllaC/Noctaxis/wiki/Getting-Started)** · [Locations](https://github.com/CallyyllaC/Noctaxis/wiki/locations.md) · [Planner](https://github.com/CallyyllaC/Noctaxis/wiki/planner.md) · [Settings](https://github.com/CallyyllaC/Noctaxis/wiki/settings.md)
 
 Noctaxis is my desktop planning application for photography and astrophotography. It brings locations, celestial targets, camera framing, terrain, light pollution, weather and time into one workspace. It gives you the information to plan a shot without deciding the composition for you.
 
