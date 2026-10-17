@@ -21,7 +21,7 @@
     Directory.Build.targets rejects malformed values.
   -->
   <PropertyGroup>
-    <NoctaxisVersion>0.1</NoctaxisVersion>
+    <NoctaxisVersion>0.2</NoctaxisVersion>
     <NoctaxisBuildNumber Condition="'$(NoctaxisBuildNumber)' == ''">0</NoctaxisBuildNumber>
     <VersionPrefix>$(NoctaxisVersion).$(NoctaxisBuildNumber)</VersionPrefix>
   </PropertyGroup>
