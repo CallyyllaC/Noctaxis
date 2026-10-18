@@ -42,16 +42,40 @@ public sealed partial class MainViewModelTests
         var calls = (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes);
         var session = vm.Session;
         static RadioButton[] Radios(WrapPanel p) => p.Children.Cast<RadioButton>().ToArray();
-        void AssertUnclipped(WrapPanel group, double scale)
+        // The Settings column is 90% of the width beside the category rail, not a fixed 720 px, and the app draws
+        // the system font (Segoe UI on Windows, DejaVu Sans on Linux, SF on macOS), so whether a group fits on one
+        // row differs by window and platform. What must hold everywhere is a sound layout, wrapped or not.
+        void AssertLaidOut(WrapPanel group, double scale)
         {
-            foreach (var radio in Radios(group))
+            var radios = Radios(group);
+            foreach (var radio in radios)
             {
-                Assert.True(radio.Bounds.Right <= group.Bounds.Width + 1);
-                Assert.True(radio.Bounds.Bottom <= group.Bounds.Height + 1);
+                Assert.True(radio.Bounds.X >= -1 && radio.Bounds.Y >= -1, $"{radio.Content} starts outside its group at {scale}%");
+                Assert.True(radio.Bounds.Right <= group.Bounds.Width + 1, $"{radio.Content} overruns its group at {scale}%");
+                Assert.True(radio.Bounds.Bottom <= group.Bounds.Height + 1, $"{radio.Content} overruns its group at {scale}%");
                 var text = radio.GetVisualDescendants().OfType<TextBlock>().First(t => t.Text == radio.Content!.ToString());
-                Assert.True(text.TextLayout.Width <= text.Bounds.Width + 1, $"Clipped {text.Text}");
+                Assert.True(text.TextLayout.Width <= text.Bounds.Width + 1, $"Clipped {text.Text} at {scale}%");
             }
-            if (scale == 100) Assert.Single(Radios(group).Select(r => r.Bounds.Y).Distinct());
+            // No two choices overlap, on one row or several.
+            for (var i = 0; i < radios.Length; i++)
+            for (var j = i + 1; j < radios.Length; j++)
+                Assert.False(radios[i].Bounds.Deflate(.5).Intersects(radios[j].Bounds.Deflate(.5)),
+                    $"{radios[i].Content} overlaps {radios[j].Content} at {scale}%");
+            // Wrapping is only for want of room: choices that fit on one row share it.
+            if (radios.Sum(r => r.DesiredSize.Width) <= group.Bounds.Width + 1)
+                Assert.Single(radios.Select(r => r.Bounds.Y).Distinct());
+        }
+        // Responsive layout: the page's column may use up to 90% of the space beside the rail (it is left-aligned
+        // and as wide as its content up to that limit), so a wide window allows more than the 720 px it was once
+        // capped at, and the column never exceeds its limit.
+        void AssertColumn(WrapPanel group)
+        {
+            var column = group.GetVisualAncestors().OfType<StackPanel>().First(p => p.Classes.Contains("settingsCategory"));
+            var viewport = column.GetVisualAncestors().OfType<ScrollViewer>().First();
+            Assert.Equal(viewport.Bounds.Width * .9, column.MaxWidth, 1);
+            Assert.True(column.Bounds.Width <= column.MaxWidth + 1, $"the column is {column.Bounds.Width} wide, past its {column.MaxWidth} limit");
+            Assert.True(group.Bounds.Width <= column.Bounds.Width + 1, $"the group is {group.Bounds.Width} wide in a {column.Bounds.Width} column");
+            if (width >= 1440) Assert.True(column.MaxWidth > 720, $"the column is still limited to {column.MaxWidth}");
         }
         try
         {
@@ -81,8 +105,10 @@ public sealed partial class MainViewModelTests
                 Dispatcher.UIThread.RunJobs();
                 slider.Value = scale; Dispatcher.UIThread.RunJobs();
                 Assert.Equal($"{scale:0}%", window.FindControl<TextBlock>("AppearanceTextSizeValue")!.Text);
-                AssertUnclipped(mode, scale);
-                AssertUnclipped(vision, scale);
+                AssertLaidOut(mode, scale);
+                AssertLaidOut(vision, scale);
+                AssertColumn(vision);
+                // At 720 px and double text size the colour-vision choices must wrap rather than overrun.
                 if (scale == 200 && width == 720) Assert.True(Radios(vision).Select(r => r.Bounds.Y).Distinct().Count() > 1);
                 AppearancePolishTests.Capture(window, $"settings-radio-{family}-{appearance}-{width}-{scale:0}");
             }
@@ -123,7 +149,8 @@ public sealed partial class MainViewModelTests
             {
                 await vm.ApplyAppearanceAsync(new(family, TextScale: scale / 100, AppearanceMode: appearance));
                 Dispatcher.UIThread.RunJobs();
-                AssertUnclipped(units, scale);
+                AssertLaidOut(units, scale);
+                AssertColumn(units);
             }
             Assert.Same(session, vm.Session);
             Assert.Equal(calls, (planning.SnapshotCalculations, planning.EnvironmentRequests, planning.ForcedRefreshes));
