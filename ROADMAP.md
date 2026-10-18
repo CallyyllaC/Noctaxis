@@ -127,6 +127,9 @@ Session logs remain uncompressed for the current local day. Previous days are co
 ### 🟡 End-to-end dogfooding
 Use Noctaxis for several real photography plans and fix workflow annoyances rather than inventing more infrastructure.
 
+### ⬜ Investigate offshore environment stalls and diagnostic warnings
+After alpha, reproduce pin moves into open water and check whether terrain/environment processing can still stall independently of the bounded place-description lookup. Review recurring WSF `SourceUnavailable`/invalid-sample warnings and determine whether `TaskCanceledException` from superseded environment requests is expected cancellation rather than a reportable failure. Verify the geographic lookup timeout/fallback in the running app. Keep this evidence-led and scoped; do not reopen the general performance pass.
+
 ### ⬜ Automatic update check on startup
 - non-forced
 - small unobtrusive notification
