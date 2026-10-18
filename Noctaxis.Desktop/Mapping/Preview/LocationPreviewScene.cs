@@ -90,8 +90,9 @@ public static class LocationPreviewSceneBuilder
     public const int DefaultHeight = 504;
     public const int MaximumLights = 420;
 
-    // OpenStreetMap Standard land-use fills: the source raster is always this style, so its areas can be
-    // read back as semantic coverage and repainted with the theme's own map roles.
+    // OpenStreetMap Standard land-use fills, for locations whose map data predates the vector landscape: their source
+    // raster is always this style, so its areas can be read back as semantic coverage and repainted with the theme's
+    // own map roles.
     private static readonly (byte R, byte G, byte B)[] WaterFills = [(170, 211, 223), (181, 208, 208)];
     private static readonly (byte R, byte G, byte B)[] VegetationFills =
         [(173, 209, 158), (205, 235, 176), (200, 250, 204), (214, 217, 159), (223, 240, 206), (174, 223, 163), (199, 229, 179)];
@@ -99,7 +100,14 @@ public static class LocationPreviewSceneBuilder
         [(224, 223, 223), (217, 208, 201), (235, 219, 232), (242, 218, 217), (255, 214, 209), (197, 195, 195), (222, 208, 213)];
 
     public static LocationPreviewScene Build(Guid locationId, GeoCoordinate location, WebMercatorViewport viewport,
-        byte[]? sourcePng, MapFeatureDataDocument? features, SettlementRaster? settlement)
+        byte[]? sourcePng, MapFeatureDataDocument? features, SettlementRaster? settlement) =>
+        Build(locationId, location, viewport, sourcePng, null, features, settlement);
+
+    /// <param name="landscape">Area coverage from vector polygons; when present the raster is not read.</param>
+    /// <param name="legacySourcePng">An earlier OpenStreetMap Standard capture, classified by colour.</param>
+    public static LocationPreviewScene Build(Guid locationId, GeoCoordinate location, WebMercatorViewport viewport,
+        byte[]? legacySourcePng, SavedLocationLandscape? landscape, MapFeatureDataDocument? features,
+        SettlementRaster? settlement)
     {
         var width = viewport.Width;
         var height = viewport.Height;
@@ -109,7 +117,9 @@ public static class LocationPreviewSceneBuilder
         var water = new byte[count];
         var vegetation = new byte[count];
         var builtUp = new byte[count];
-        if (sourcePng is not null) ClassifyAreas(sourcePng, maskWidth, maskHeight, water, vegetation, builtUp);
+        if (landscape is not null && landscape.Width == maskWidth && landscape.Height == maskHeight)
+            UseLandscape(landscape, maskWidth, maskHeight, water, vegetation, builtUp);
+        else if (legacySourcePng is not null) ClassifyAreas(legacySourcePng, maskWidth, maskHeight, water, vegetation, builtUp);
 
         var lines = new List<PreviewLine>();
         if (features is not null)
@@ -149,6 +159,16 @@ public static class LocationPreviewSceneBuilder
             points[i] = new SKPoint((float)p.X, (float)p.Y);
         }
         return points;
+    }
+
+    private static void UseLandscape(SavedLocationLandscape landscape, int maskWidth, int maskHeight, byte[] water,
+        byte[] vegetation, byte[] builtUp)
+    {
+        landscape.Water.CopyTo(water, 0);
+        landscape.Vegetation.CopyTo(vegetation, 0);
+        landscape.BuiltUp.CopyTo(builtUp, 0);
+        // The same softening the raster classification gets, so both sources read alike on the card.
+        foreach (var mask in new[] { water, vegetation, builtUp }) Smooth(mask, maskWidth, maskHeight);
     }
 
     private static void ClassifyAreas(byte[] sourcePng, int maskWidth, int maskHeight, byte[] water, byte[] vegetation, byte[] builtUp)

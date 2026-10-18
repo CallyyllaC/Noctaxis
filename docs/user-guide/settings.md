@@ -99,4 +99,12 @@ You can enter or replace your **Awoo supporter licence**, check its status or op
 
 The [Noctaxis Supporter System](../../AWOO-SUPPORTER-SYSTEM.md) defines which features are included and the terms of supporter access. Being a supporter doesn't grant commercial-use permission.
 
+## Diagnostics
+
+If Noctaxis crashes, shows an error or behaves unexpectedly, **Export Logs** saves its application logs and some basic diagnostic information (the Noctaxis version, your operating system and the .NET runtime) to a ZIP file you choose. Nothing is uploaded. You decide whether to send the file and who to send it to, for example by attaching it to a bug report.
+
+The archive may contain file paths or location information, such as the coordinates or place names of locations you planned. Open it and review it before sharing. It doesn't contain your settings, saved locations, equipment or supporter licence.
+
+Noctaxis keeps a log for each time it runs. It compresses earlier days into one archive per day and keeps the ten most recent days on which it was used. You'll find them in the `logs` folder inside the Noctaxis data folder (`%APPDATA%\Noctaxis\logs` on Windows).
+
 For more detail about using these settings, see [Planner](planner.md). For information on the software and data providers, see [Licensing & credits](about.md#licensing--credits).

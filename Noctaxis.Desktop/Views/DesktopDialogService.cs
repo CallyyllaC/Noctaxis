@@ -7,7 +7,7 @@ using Noctaxis.Desktop.ViewModels;
 
 namespace Noctaxis.Desktop.Views;
 
-public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlannerDialogService
+public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlannerDialogService, IDiagnosticsExportDialog
 {
     private readonly SemaphoreSlim _modalGate = new(1, 1);
     private NoctaxisDialogWindow? _activeDialog;
@@ -59,6 +59,31 @@ public sealed class DesktopDialogService(LocationSearchViewModel search) : IPlan
     public Task<bool> ConfirmDestructiveAsync(DestructiveConfirmation request, CancellationToken cancellationToken = default) =>
         ShowOwnedDialogAsync(() => new ConfirmationDialog(request.Title, request.Message, request.ConfirmLabel), false,
             cancellationToken);
+
+    /// <summary>The platform's own Save File dialog, as Save PNG uses, for Settings → Diagnostics → Export Logs.</summary>
+    public async Task<IDiagnosticsExportDestination?> PickDiagnosticsExportDestinationAsync(string suggestedFileName,
+        CancellationToken cancellationToken = default)
+    {
+        if (Owner is not { } owner) return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var file = await owner.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = Strings.Get("Settings_Diagnostics_ExportLogs_SaveDialog_Title"),
+            SuggestedFileName = suggestedFileName,
+            DefaultExtension = "zip",
+            FileTypeChoices = [new FilePickerFileType(Strings.Get("Settings_Diagnostics_ExportLogs_ZipFileType"))
+                { Patterns = ["*.zip"], MimeTypes = ["application/zip"] }]
+        });
+        return file is null ? null : new StorageFileDestination(file);
+    }
+
+    private sealed class StorageFileDestination(IStorageFile file) : IDiagnosticsExportDestination
+    {
+        public string Name => file.Name;
+        public Task<Stream> OpenWriteAsync() => file.OpenWriteAsync();
+        public Task DeleteAsync() => file.DeleteAsync();
+        public void Dispose() => file.Dispose();
+    }
 
     private async Task<TResult> ShowOwnedDialogAsync<TResult>(Func<NoctaxisDialogWindow> create,
         TResult cancelledResult, CancellationToken cancellationToken)

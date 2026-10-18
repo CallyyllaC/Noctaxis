@@ -15,6 +15,7 @@ using NodaTime;
 using Microsoft.Extensions.Logging;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Locations;
+using Noctaxis.Core.Locations.Descriptions;
 using Noctaxis.Core.Environment;
 using System.Diagnostics;
 using System.Collections.Specialized;
@@ -42,7 +43,7 @@ public partial class MainViewModel : ObservableObject
     private readonly IAwooSupporterLicenceVerifier _supporterLicenceVerifier;
     private readonly IExternalUriLauncher _externalUriLauncher;
     private readonly IPlannerDialogService _dialogs;
-    private readonly IReverseGeocodingProvider _reverseGeocoding;
+    private readonly ILocationDescriptionService _locationDescriptions;
     private readonly ILocationMapThumbnailService _locationMapThumbnails;
     private CancellationTokenSource? _refreshCancellation;
     private CancellationTokenSource? _temporalCommitCancellation;
@@ -71,7 +72,7 @@ public partial class MainViewModel : ObservableObject
         IFramingVisibilityCalculator framingVisibilityCalculator, ILocalHorizonCalculator localHorizonCalculator,
         IClock clock,
         LocationSearchViewModel locationSearch, ITargetSearchService targetSearch,
-        IPlannerDialogService dialogs, IReverseGeocodingProvider reverseGeocoding,
+        IPlannerDialogService dialogs, ILocationDescriptionService locationDescriptions,
         ILocationMapThumbnailService? locationMapThumbnails = null,
         TerrainDiskCache? terrainDiskCache = null,
         IHorizonService? terrainDiagnostics = null,
@@ -101,7 +102,7 @@ public partial class MainViewModel : ObservableObject
         _externalMaps = externalMaps ?? new ExternalMapService(_externalUriLauncher);
         LightPollutionInstallation = lightPollutionInstallation;
         _dialogs = dialogs;
-        _reverseGeocoding = reverseGeocoding;
+        _locationDescriptions = locationDescriptions;
         _locationMapThumbnails = locationMapThumbnails ?? new NullLocationMapThumbnailService();
         _terrainDiagnostics = terrainDiagnostics as HorizonService;
         _terrainDiskCache = terrainDiskCache;
@@ -715,26 +716,27 @@ public partial class MainViewModel : ObservableObject
         try
         {
             await Task.Delay(700, cancellationToken);
-            var result = await _reverseGeocoding.ResolveAsync(coordinate, cancellationToken);
+            // Described locally from map data already held or fetched for the Planner; coordinates stay authoritative.
+            var result = await _locationDescriptions.DescribeAsync(coordinate, cancellationToken);
             if (result is null) return;
             var isCurrent = generation == Volatile.Read(ref _reverseLookupGeneration) &&
                             Angles.GreatCircleDistanceMetres(coordinate, _session.Observer) <= 25;
             if (!isCurrent)
             {
-                _logger.LogDebug("Discarded stale reverse-geocoding result for superseded planning coordinate");
+                _logger.LogDebug("Discarded stale location description for superseded planning coordinate");
                 return;
             }
-            _resolvedPlaceSuggestion = result.PlaceName;
-            LocationName = Strings.Format("Planner_Location_Near_Format", result.PlaceName);
+            _resolvedPlaceSuggestion = result.Text;
+            LocationName = result.Text;
             CurrentLocationAttribution = result.Attribution;
         }
         catch (OperationCanceledException)
         {
-            _logger.LogDebug("Reverse-geocoding request cancelled for superseded planning coordinate");
+            _logger.LogDebug("Location description cancelled for superseded planning coordinate");
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Reverse geocoding could not resolve the current planning location");
+            _logger.LogWarning(ex, "The current planning location could not be described");
         }
     }
 

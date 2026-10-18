@@ -150,24 +150,16 @@ public partial class App : Application
             client.Timeout = TimeSpan.FromSeconds(12);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (desktop photography planner)");
         });
-        services.AddHttpClient<IReverseGeocodingProvider, NominatimReverseGeocodingProvider>(client =>
-        {
-            var configuredEndpoint = System.Environment.GetEnvironmentVariable("NOCTAXIS_REVERSE_GEOCODING_URL");
-            client.BaseAddress = Uri.TryCreate(configuredEndpoint, UriKind.Absolute, out var endpoint) &&
-                                 endpoint.Scheme == Uri.UriSchemeHttps
-                ? endpoint
-                : new Uri("https://nominatim.openstreetmap.org/");
-            client.Timeout = TimeSpan.FromSeconds(12);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (desktop astral photography planner)");
-        });
-        services.AddSingleton<IMapTileSourceProvider, DefaultMapTileSourceProvider>();
-        services.AddSingleton(OverpassMapFeatureOptions.CreateDefault());
-        services.AddHttpClient<IMapFeatureDataService, OverpassMapFeatureDataService>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(35);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd(
-                "Noctaxis/1.0 (desktop astral photography planner; saved-location semantic maps)");
-        });
+        // OpenFreeMap vector tiles are the one source of map geography: the Planner basemap, saved-location map data
+        // (landscape, roads and waterways) and location descriptions all read the same decoded tiles, downloaded once
+        // through one client into one disk cache. No public Nominatim, Overpass or OpenStreetMap raster request is made.
+        services.AddSingleton(_ => Mapping.Vector.VectorTileRepository.OpenFreeMap);
+        services.AddSingleton<Noctaxis.Core.Locations.Descriptions.IGeographicFeatureSource,
+            Mapping.Vector.OpenFreeMapGeographicFeatureSource>();
+        services.AddSingleton<Noctaxis.Core.Locations.Descriptions.ILocationDescriptionService,
+            Noctaxis.Core.Locations.Descriptions.LocationDescriptionService>();
+        services.AddSingleton<IMapFeatureDataService, OpenFreeMapMapFeatureDataService>();
+        services.AddSingleton<ISavedLocationLandscapeSource, OpenFreeMapLandscapeSource>();
         services.AddSingleton<IMapImageAcceleration>(_ => OpenCvMapImageAcceleration.Shared);
         services.AddSingleton<SettlementDensityBuilder>();
         services.AddSingleton<SettlementGlowGeometryCalculator>();
@@ -175,11 +167,7 @@ public partial class App : Application
         services.AddSingleton<SettlementStarGenerator>();
         services.AddSingleton(SettlementGalaxyStyle.DefaultV1);
         services.AddSingleton<SavedLocationMapImageProcessor>();
-        services.AddHttpClient<ILocationMapThumbnailService, LocationMapThumbnailService>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(12);
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("Noctaxis/1.0 (desktop photography planner; saved-location thumbnails)");
-        });
+        services.AddSingleton<ILocationMapThumbnailService, LocationMapThumbnailService>();
         services.AddSingleton<IUserDataPathProvider, PlatformUserDataPathProvider>();
         services.AddHttpClient("LorenzAtlas", client =>
         {

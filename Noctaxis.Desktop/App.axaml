@@ -183,14 +183,11 @@
     <Style Selector="StackPanel.settingsCategory > TextBlock.section, StackPanel.settingsCategory > Grid.sectionHeader">
       <Setter Property="Margin" Value="0,14,0,0" />
     </Style>
-    <!-- One content column for every page, its title and sections on one left edge, wide enough for any form;
-         Equipment's two-column cards take a little more. -->
+    <!-- One content column for every page, its title and sections on one left edge, using 90% of the width
+         beside the category rail. -->
     <Style Selector="StackPanel.settingsCategory">
-      <Setter Property="MaxWidth" Value="720" />
+      <Setter Property="MaxWidth" Value="{Binding Bounds.Width, RelativeSource={RelativeSource FindAncestor, AncestorType=ScrollViewer}, Converter={x:Static controls:FractionConverter.Instance}, ConverterParameter=0.9}" />
       <Setter Property="HorizontalAlignment" Value="Left" />
-    </Style>
-    <Style Selector="StackPanel.settingsCategory.wide">
-      <Setter Property="MaxWidth" Value="920" />
     </Style>
     <!-- Choices from a list share one width, neither stretched across the column nor squeezed. -->
     <Style Selector="StackPanel.setting > ComboBox">

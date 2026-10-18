@@ -296,7 +296,8 @@ report of how far you got is very useful. With a fresh user account or an empty 
 6. Open in Maps and the Ko-fi button: the browser opens.
 7. Supporter licence: activate a licence, restart (Settings restart), and confirm it persists.
 8. Quit and restart: settings, locations and the session persist in the data folder above.
-9. Check the log in `<data folder>/logs` for errors.
+9. Check the log in `<data folder>/logs` for errors, then Settings → Diagnostics → Export Logs: the ZIP holds
+   `diagnostics.json`, today's sessions and any daily archives ([logging](logging.md)).
 
 ## Known limitations
 

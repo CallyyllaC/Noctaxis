@@ -348,6 +348,9 @@
                                      TerrainReliefPreferences="{Binding TerrainReliefMapPreferences}"
                                      OpenLinkCommand="{Binding OpenMapDataLinkCommand}"
                                      ShowTerrainDebug="False" />
+          <!-- Drawn above the map's other chrome (the Picture-in-Picture map, the instruments), which are
+               declared after it: progress must never be hidden. It takes no input, so nothing beneath loses
+               its clicks. -->
           <Border x:Name="PlannerRefreshStrip"
                   Classes="mapChrome"
                   CornerRadius="6"
@@ -355,6 +358,7 @@
                   Margin="12,52,12,0"
                   HorizontalAlignment="Stretch"
                   VerticalAlignment="Top"
+                  ZIndex="10"
                   IsHitTestVisible="False"
                   IsVisible="{Binding IsPlannerRefreshing}">
             <Grid RowDefinitions="Auto,3" RowSpacing="5">
@@ -1174,7 +1178,7 @@
           </TabItem>
 
           <TabItem Header="{loc:Text Settings_Equipment_Tab}">
-            <ScrollViewer><StackPanel Classes="settingsCategory wide">
+            <ScrollViewer><StackPanel Classes="settingsCategory">
               <TextBlock Classes="settingsTitle" Text="{loc:Text Settings_Equipment_Title}"/>
               <StackPanel Classes="setting">
                 <StackPanel Classes="settingLabel">
@@ -1338,7 +1342,7 @@
           </TabItem>
 
           <TabItem Header="{loc:Text Settings_Weather_Tab}">
-            <ScrollViewer><StackPanel Classes="settingsCategory wide">
+            <ScrollViewer><StackPanel Classes="settingsCategory">
               <TextBlock Classes="settingsTitle" Text="{loc:Text Settings_Weather_Title}"/>
               <StackPanel Classes="setting">
                 <StackPanel Classes="settingLabel">
@@ -1520,10 +1524,23 @@
             </StackPanel></ScrollViewer>
           </TabItem>
 
-          <!-- Developer tools, not settings: shown only when Noctaxis starts with NOCTAXIS_DIAGNOSTICS=1. -->
-          <TabItem x:Name="SettingsDiagnosticsTab" Header="{loc:Text Settings_Diagnostics_Tab}" IsVisible="{Binding IsDeveloperDiagnosticsEnabled}">
+          <!-- Export Logs, for everyone; beneath it the developer tools, shown only when Noctaxis starts with
+               NOCTAXIS_DIAGNOSTICS=1. -->
+          <TabItem x:Name="SettingsDiagnosticsTab" Header="{loc:Text Settings_Diagnostics_Tab}">
             <ScrollViewer><StackPanel Classes="settingsCategory">
               <TextBlock Classes="settingsTitle" Text="{loc:Text Settings_Diagnostics_Title}"/>
+              <TextBlock Classes="settingDescription" Text="{loc:Text Settings_Diagnostics_ExportLogs_Description}"/>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="ExportLogsButton" Content="{loc:Text Settings_Diagnostics_ExportLogs_Button}" Command="{Binding ExportLogsCommand}" HorizontalAlignment="Left"
+                        AutomationProperties.HelpText="{loc:Text Settings_Diagnostics_ExportLogs_Note}"/>
+                <ProgressBar Width="90" IsIndeterminate="True" IsVisible="{Binding IsExportingLogs}" VerticalAlignment="Center"/>
+              </StackPanel>
+              <TextBlock x:Name="ExportLogsNote" Classes="settingDescription" Text="{loc:Text Settings_Diagnostics_ExportLogs_Note}"/>
+              <TextBlock x:Name="ExportLogsStatus" Text="{Binding DiagnosticsExportStatus}" FontSize="{DynamicResource TextSmall}" TextWrapping="Wrap"
+                         IsVisible="{Binding DiagnosticsExportStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                         AutomationProperties.LiveSetting="Polite"/>
+
+              <StackPanel x:Name="DeveloperDiagnostics" Spacing="12" Margin="0,14,0,0" IsVisible="{Binding IsDeveloperDiagnosticsEnabled}">
               <TextBlock Classes="settingDescription" Text="{loc:Text Settings_Diagnostics_DeveloperToolsInspecting_Description}"/>
               <TextBlock Classes="section" Text="{loc:Text Settings_Diagnostics_TerrainDiagnostics_Heading}"/>
               <CheckBox Content="{loc:Text Settings_Diagnostics_EnableTerrainDiagnostics_Option}" IsChecked="{Binding SettingsTerrainDebugOverlay}" IsEnabled="{Binding SettingsEnableTerrainCalculations}"/>
@@ -1553,6 +1570,7 @@
                   <TextBlock Text="{Binding TerrainDiagnosticsAdvanced}" FontFamily="Consolas" FontSize="{DynamicResource TextSmall}" TextWrapping="Wrap" Margin="0,8"/>
                 </Expander>
                 <Button Content="{loc:Text Settings_Diagnostics_CopyTerrainDebugSnapshot_Button}" Click="CopyTerrainDebugClick" HorizontalAlignment="Left"/>
+              </StackPanel>
               </StackPanel>
             </StackPanel></ScrollViewer>
           </TabItem>

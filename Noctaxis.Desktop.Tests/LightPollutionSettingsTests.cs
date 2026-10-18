@@ -31,7 +31,7 @@ public sealed partial class MainViewModelTests
             new FixedClock(store.State.Session.Instant),
             new LocationSearchViewModel(new FakeLocationSearchProvider(), NullLogger<LocationSearchViewModel>.Instance),
             new LocalTargetSearchService(catalogue), new FakeDialogs(),
-            new FakeReverseGeocodingProvider(), lightPollutionInstallation: dataset);
+            new FakeDescriptionService(), lightPollutionInstallation: dataset);
         await vm.InitializeAsync();
         Assert.Equal("Installed", vm.LightPollutionStatus);
         var installing = vm.InstallLightPollutionCommand.ExecuteAsync(null);

@@ -44,8 +44,13 @@ public sealed class OpenFreeMapBasemap : IMapsuiBasemap, IThemeableBasemap, ILab
     private BasemapStyle _appliedStyle;
     private string _appliedLanguage;
 
+    /// <param name="fetcher">A fetcher of its own (tests); by default the application's shared
+    /// <see cref="VectorTileRepository.OpenFreeMap"/>, which saved-location map data and location
+    /// descriptions read too.</param>
     public OpenFreeMapBasemap(IVectorTileFetcher? fetcher = null, BasemapStyle? style = null)
-        : this(new ThemedVectorTileSource(fetcher ?? OpenFreeMapTileFetcher.CreateDefault(), style)) { }
+        : this(fetcher is null
+            ? new ThemedVectorTileSource(VectorTileRepository.OpenFreeMap, style)
+            : new ThemedVectorTileSource(fetcher, style)) { }
 
     /// <summary>
     /// Another view of an existing basemap, such as the Picture-in-Picture map's: its own layers over

@@ -25,7 +25,7 @@ public sealed partial class MainViewModelTests
     [
         ("General", "General"), ("Appearance", "Appearance and accessibility"), ("Equipment", "Equipment"),
         ("Planner map", "Planner map"), ("Weather", "Weather"), ("Celestial objects", "Celestial objects"),
-        ("Data", "Data and storage"), ("Supporter", "Supporter"),
+        ("Data", "Data and storage"), ("Supporter", "Supporter"), ("Diagnostics", "Diagnostics"),
     ];
 
     private async Task<(MainViewModel Vm, MainWindow Window, TabControl Categories)> OpenSettingsAsync(string theme, double textScale, double width)
@@ -52,7 +52,7 @@ public sealed partial class MainViewModelTests
     [InlineData("builtin.noctaxis", 1.5, 1100)]
     [InlineData("builtin.highcontrast", 2.0, 1440)]
     [InlineData("builtin.highcontrast", 2.0, 720)]
-    public async Task SettingsNavigation_IsARailOfEightCategoriesThatShowTheirContent(string theme, double textScale, double width)
+    public async Task SettingsNavigation_IsARailOfNineCategoriesThatShowTheirContent(string theme, double textScale, double width)
     {
         var (_, window, categories) = await OpenSettingsAsync(theme, textScale, width);
         try

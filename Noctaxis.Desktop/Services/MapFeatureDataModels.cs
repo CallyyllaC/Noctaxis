@@ -105,3 +105,27 @@ public sealed class NullMapFeatureDataService : IMapFeatureDataService
         new MapFeatureFetchResult(null, MapFeatureFetchOutcome.Failure(
             "not_configured", "Semantic map features are not configured.")));
 }
+
+/// <summary>A map-data acquisition failure with a code and a reason safe to record in metadata.</summary>
+public sealed class MapFeatureRequestException : IOException
+{
+    public MapFeatureRequestException(string code, string safeReason, Exception? inner = null,
+        int? httpStatusCode = null, bool timedOut = false, bool responseTooLarge = false,
+        bool parseFailed = false)
+        : base(safeReason, inner)
+    {
+        Code = code;
+        SafeReason = safeReason;
+        HttpStatusCode = httpStatusCode;
+        TimedOut = timedOut;
+        ResponseTooLarge = responseTooLarge;
+        ParseFailed = parseFailed;
+    }
+
+    public string Code { get; }
+    public string SafeReason { get; }
+    public int? HttpStatusCode { get; }
+    public bool TimedOut { get; }
+    public bool ResponseTooLarge { get; }
+    public bool ParseFailed { get; }
+}

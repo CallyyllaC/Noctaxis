@@ -5,81 +5,118 @@ using Microsoft.Extensions.Logging;
 namespace Noctaxis.Desktop.Diagnostics;
 
 /// <summary>
-/// Durable diagnostics for the windowed application, which has no console. Each session writes one
-/// file (<c>noctaxis-yyyyMMdd-HHmmss-pid.log</c>) in the logs directory; a file stops growing at
-/// <see cref="MaximumFileBytes"/> and only the newest <see cref="RetainedFiles"/> files are kept, so
-/// disk use is bounded. Writes are synchronous and serialised, so the lines written immediately
-/// before a crash are on disk. Logging failures never propagate to the application.
+/// Durable diagnostics for the windowed application, which has no console. Each session writes its own uncompressed
+/// file, <c>Noctaxis-yyyy-MM-dd_HH-mm-ss[-n].log</c>, created new so no earlier session is ever overwritten. Entries
+/// belong to the local date they are written on: the first entry written on a new date, whether after midnight or
+/// after a clock change, closes the file and starts another for that date. Earlier days' files are then archived by
+/// <see cref="LogArchiver"/> into one ZIP per day, of which the newest ten are kept; it runs in the background at
+/// start-up and after each change of date, so logging never waits for it. A file stops growing at
+/// <see cref="MaximumFileBytes"/>. Writes are synchronous and serialised, so the lines written immediately before a
+/// crash are on disk. Logging failures never propagate to the application.
 /// </summary>
 public sealed class RollingFileLoggerProvider : ILoggerProvider
 {
     public const long MaximumFileBytes = 5L * 1024 * 1024;
-    public const int RetainedFiles = 10;
-    private const string FilePrefix = "noctaxis-";
+    public const int RetainedArchives = LogArchiver.DefaultRetainedArchives;
+    private const string ArchiveCategory = "Noctaxis.Desktop.Diagnostics.LogArchiver";
+    private static readonly TimeSpan MaintenanceWaitOnDispose = TimeSpan.FromSeconds(3);
     private readonly object _gate = new();
+    private readonly object _maintenanceGate = new();
     private readonly long _maximumFileBytes;
+    private readonly TimeProvider _time;
+    private readonly Action<Action> _runMaintenance;
     private StreamWriter? _writer;
+    private string? _filePath;
+    private DateOnly _fileDate;
     private long _bytes;
     private bool _truncated;
+    private volatile bool _disposed;
+    private bool _maintenanceRunning;
+    private bool _maintenanceAgain;
+    private TaskCompletionSource? _maintenanceDone;
 
-    public RollingFileLoggerProvider(string directory, DateTimeOffset? now = null,
-        long maximumFileBytes = MaximumFileBytes, int retainedFiles = RetainedFiles)
+    /// <param name="time">The clock and time zone; the system's by default.</param>
+    /// <param name="runMaintenance">Runs archiving and retention; on the thread pool by default.</param>
+    public RollingFileLoggerProvider(string directory, TimeProvider? time = null, long maximumFileBytes = MaximumFileBytes,
+        int retainedArchives = RetainedArchives, Action<Action>? runMaintenance = null)
     {
         Directory = directory;
+        _time = time ?? TimeProvider.System;
         _maximumFileBytes = maximumFileBytes;
+        _runMaintenance = runMaintenance ?? (work => Task.Run(work));
+        Archiver = new LogArchiver(directory, _time, () => FilePath, ReportArchiveFailure, retainedArchives);
         try
         {
             System.IO.Directory.CreateDirectory(directory);
-            var started = (now ?? DateTimeOffset.UtcNow).UtcDateTime;
-            FilePath = Path.Combine(directory, string.Create(CultureInfo.InvariantCulture,
-                $"{FilePrefix}{started:yyyyMMdd-HHmmss}-{System.Environment.ProcessId}.log"));
-            // Retention is best effort and swallows its own failures: being unable to delete an old
-            // file must not cost this session its log.
-            PruneOldFiles(directory, retainedFiles - 1);
-            var stream = new FileStream(FilePath, FileMode.Append, FileAccess.Write, FileShare.Read);
-            _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+            lock (_gate) OpenFile(_time.GetLocalNow());
         }
         catch (Exception ex) when (IsSinkFailure(ex))
         {
             // Diagnostics must never stop the application from starting.
-            FilePath = null;
             System.Diagnostics.Trace.TraceWarning($"Noctaxis file logging is unavailable: {ex.Message}");
         }
+        // Recovers an interrupted archive and archives the days before this one.
+        if (FilePath is not null) RequestMaintenance();
     }
 
     public string Directory { get; }
-    /// <summary>The current session's log file, or null when file logging could not be started.</summary>
-    public string? FilePath { get; }
+
+    /// <summary>The file this session is writing now, or null when file logging could not be started or has stopped.</summary>
+    public string? FilePath { get { lock (_gate) return _writer is null ? null : _filePath; } }
+
+    internal LogArchiver Archiver { get; }
 
     public ILogger CreateLogger(string categoryName) => new FileLogger(this, categoryName);
 
+    /// <summary>Waits until archiving that has been requested is finished (tests, and shutdown within a bound).</summary>
+    internal Task MaintenanceCompletion { get { lock (_maintenanceGate) return _maintenanceDone?.Task ?? Task.CompletedTask; } }
+
     public void Dispose()
     {
-        lock (_gate) CloseWriter();
+        lock (_gate)
+        {
+            _disposed = true;
+            CloseWriter();
+        }
+        // An archive left half written is recovered at the next start, but finishing it now is tidier.
+        try { MaintenanceCompletion.Wait(MaintenanceWaitOnDispose); }
+        catch (AggregateException) { }
     }
 
     internal void Write(LogLevel level, string category, string message, Exception? exception)
     {
+        var utcNow = _time.GetUtcNow();
         var builder = new StringBuilder(128);
-        builder.Append(DateTimeOffset.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture))
+        builder.Append(utcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture))
             .Append(" [").Append(Abbreviation(level)).Append("] ").Append(category).Append(": ").Append(message);
         if (exception is not null) builder.AppendLine().Append(exception);
         var line = builder.AppendLine().ToString();
+        var rolledOver = false;
         lock (_gate)
         {
-            if (_writer is null || _truncated) return;
+            if (_writer is null) return;
             try
             {
+                // The entry belongs to the local date it is written on, whichever way the date changed.
+                var localNow = TimeZoneInfo.ConvertTime(utcNow, _time.LocalTimeZone);
+                if (DateOnly.FromDateTime(localNow.DateTime) != _fileDate)
+                {
+                    CloseWriter();
+                    OpenFile(localNow);
+                    rolledOver = true;
+                }
                 var bytes = Encoding.UTF8.GetByteCount(line);
-                if (_bytes + bytes > _maximumFileBytes)
+                if (!_truncated && _bytes + bytes <= _maximumFileBytes)
+                {
+                    _writer!.Write(line);
+                    _bytes += bytes;
+                }
+                else if (!_truncated)
                 {
                     _truncated = true;
-                    _writer.Write("... log size limit reached; further entries for this session are discarded." +
-                                  System.Environment.NewLine);
-                    return;
+                    _writer!.Write("... log size limit reached; further entries for this file are discarded." +
+                                   System.Environment.NewLine);
                 }
-                _writer.Write(line);
-                _bytes += bytes;
             }
             // The sink itself failed (the disk filled, the file was removed under us). Give up on
             // file logging for this session rather than letting it reach the calling code.
@@ -88,6 +125,33 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
                 System.Diagnostics.Trace.TraceWarning($"Noctaxis file logging stopped: {ex.Message}");
                 CloseWriter();
             }
+        }
+        // Outside the gate: archiving reports its own failures through this method.
+        if (rolledOver) RequestMaintenance();
+    }
+
+    /// <summary>
+    /// Creates this date's file, never opening an existing one: several launches within one second, or a wall-clock
+    /// time repeated by a clock change, each get a file of their own. Called with _gate held.
+    /// </summary>
+    private void OpenFile(DateTimeOffset localNow)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var path = Path.Combine(Directory, LogFileNames.Session(localNow, attempt));
+            try
+            {
+                // Shared for reading only: an export can copy it while it grows, and the archiver, which needs it
+                // exclusively, leaves it alone while it is written.
+                var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.Read);
+                _writer = new StreamWriter(stream, new UTF8Encoding(false)) { AutoFlush = true };
+                _filePath = path;
+                _fileDate = DateOnly.FromDateTime(localNow.DateTime);
+                _bytes = 0;
+                _truncated = false;
+                return;
+            }
+            catch (IOException) when (attempt < 1000 && File.Exists(path)) { }
         }
     }
 
@@ -101,23 +165,57 @@ public sealed class RollingFileLoggerProvider : ILoggerProvider
         catch (Exception ex) when (IsSinkFailure(ex)) { }
     }
 
-    private static void PruneOldFiles(string directory, int keep)
+    /// <summary>Starts archiving, or, while it runs, asks it to run once more when it finishes.</summary>
+    private void RequestMaintenance()
     {
-        try
+        lock (_maintenanceGate)
         {
-            var old = new DirectoryInfo(directory).GetFiles(FilePrefix + "*.log")
-                .OrderByDescending(file => file.Name, StringComparer.Ordinal)
-                .Skip(Math.Max(0, keep));
-            foreach (var file in old)
-            {
-                try { file.Delete(); }
-                catch (Exception ex) when (IsSinkFailure(ex)) { }
-            }
+            if (_disposed) return;
+            if (_maintenanceRunning) { _maintenanceAgain = true; return; }
+            _maintenanceRunning = true;
+            _maintenanceDone = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         }
-        catch (Exception ex) when (IsSinkFailure(ex))
+        try { _runMaintenance(RunMaintenance); }
+        catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning($"Noctaxis log retention failed: {ex.Message}");
+            lock (_maintenanceGate) _maintenanceAgain = false;
+            FinishMaintenance();
+            ReportArchiveFailure("Log archiving could not be started", ex);
         }
+    }
+
+    private void RunMaintenance()
+    {
+        while (true)
+        {
+            // Archiving is housekeeping: whatever fails, the logs it was working on stay where they are and the
+            // application carries on, so every failure is reported and none escapes.
+            try { Archiver.Run(); }
+            catch (Exception ex) { ReportArchiveFailure("Log archiving failed", ex); }
+            // Deciding to stop and stopping are one step, so a request made meanwhile is never lost.
+            if (FinishMaintenance()) return;
+        }
+    }
+
+    /// <summary>Marks archiving finished, unless another run was asked for since it last checked.</summary>
+    private bool FinishMaintenance()
+    {
+        TaskCompletionSource? done;
+        lock (_maintenanceGate)
+        {
+            if (_maintenanceAgain && !_disposed) { _maintenanceAgain = false; return false; }
+            _maintenanceRunning = false;
+            _maintenanceAgain = false;
+            done = _maintenanceDone;
+        }
+        done?.TrySetResult();
+        return true;
+    }
+
+    private void ReportArchiveFailure(string message, Exception? exception)
+    {
+        System.Diagnostics.Trace.TraceWarning($"Noctaxis {message}: {exception?.Message}");
+        Write(LogLevel.Error, ArchiveCategory, message, exception);
     }
 
     /// <summary>

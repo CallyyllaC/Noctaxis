@@ -38,24 +38,6 @@ public sealed class MapFeatureDataTests
     }
 
     [Fact]
-    public void Overpass_BuildQuery_DoesNotRequestBuildings()
-    {
-        var bounds = new MapGeographicBounds(51.1, -2.2, 51.4, -1.8);
-
-        var query = OverpassMapFeatureDataService.BuildQuery(bounds);
-
-        Assert.Contains("(51.1,-2.2,51.4,-1.8)", query);
-        Assert.Contains("[out:json][timeout:25]", query);
-        Assert.Contains("[\"highway\"]", query);
-        Assert.Contains("[\"waterway\"", query);
-        Assert.DoesNotContain("building", query, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("out tags geom", query);
-        Assert.DoesNotContain("residential", query, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("key=", query, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("token", query, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
     public void SemanticFeatureContracts_ContainRoadsAndWaterwaysOnly()
     {
         var documentProperties = typeof(MapFeatureDataDocument).GetProperties().Select(value => value.Name).ToArray();
@@ -65,40 +47,6 @@ public sealed class MapFeatureDataTests
         Assert.Contains(nameof(MapFeatureDataDocument.Waterways), documentProperties);
         Assert.DoesNotContain(documentProperties, name => name.Contains("Building", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(outcomeProperties, name => name.Contains("Building", StringComparison.OrdinalIgnoreCase));
-    }
-
-    [Fact]
-    public void OverpassParser_ClassifiesAndDeduplicatesSupportedFeatures()
-    {
-        var viewport = Viewport();
-        var json = """
-        {"elements":[
-          {"type":"way","id":1,"tags":{"highway":"primary","ref":"A15","name":"A road"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":1,"tags":{"highway":"primary","ref":"A15"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":2,"tags":{"highway":"secondary","ref":"B1206"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":3,"tags":{"highway":"motorway","ref":"M1"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":4,"tags":{"highway":"primary"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":5,"tags":{"highway":"residential"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":10,"tags":{"waterway":"river"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":11,"tags":{"waterway":"canal"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":12,"tags":{"waterway":"stream"},"geometry":[{"lat":53.60,"lon":-0.45},{"lat":53.62,"lon":-0.41}]},
-          {"type":"way","id":20,"tags":{"building":"yes"},"geometry":[{"lat":53.605,"lon":-0.435},{"lat":53.605,"lon":-0.434},{"lat":53.606,"lon":-0.434},{"lat":53.606,"lon":-0.435},{"lat":53.605,"lon":-0.435}]},
-          {"type":"way","id":21,"tags":{"building":"yes"},"geometry":[{"lat":53.605,"lon":-0.435},{"lat":53.606,"lon":-0.434},{"lat":53.607,"lon":-0.433}]}
-        ]}
-        """;
-
-        var data = OverpassMapFeatureDataService.Parse(Guid.NewGuid(), viewport, "test-endpoint",
-            Encoding.UTF8.GetBytes(json), DateTimeOffset.UnixEpoch);
-
-        Assert.Equal(4, data.Roads.Length);
-        Assert.Contains(data.Roads, road => road.Reference == "A15" && road.Classification == MapRoadClassification.ARoad);
-        Assert.Contains(data.Roads, road => road.Reference == "B1206" && road.Classification == MapRoadClassification.BRoad);
-        Assert.Contains(data.Roads, road => road.Classification == MapRoadClassification.Motorway);
-        Assert.Contains(data.Roads, road => road.Reference is null && road.Classification == MapRoadClassification.ARoad);
-        Assert.DoesNotContain(data.Roads, road => road.Highway == "residential");
-        Assert.Equal([MapWaterwayClassification.River, MapWaterwayClassification.Canal, MapWaterwayClassification.Stream],
-            data.Waterways.Select(waterway => waterway.Classification));
-        Assert.Equal(data.Roads.Length + data.Waterways.Length, data.FeatureCount);
     }
 
     [Fact]
@@ -124,146 +72,7 @@ public sealed class MapFeatureDataTests
         Assert.NotNull(restored);
         Assert.Single(restored.Roads);
         Assert.Equal("A7", restored.Roads[0].Reference);
-        Assert.Equal(OverpassMapFeatureDataService.FeatureSchemaVersion, restored.SchemaVersion);
-    }
-
-    [Fact]
-    public async Task OverpassClient_StopsQueryingForAWhileAfterARateLimit()
-    {
-        // The public instances are shared: after HTTP 429, a bulk run must not keep asking.
-        var time = new ManualTime();
-        var handler = new SequenceHandler(
-            _ => new HttpResponseMessage(HttpStatusCode.TooManyRequests),
-            _ => JsonResponse(UsableFeatureJson));
-        using var client = new HttpClient(handler);
-        var service = new OverpassMapFeatureDataService(client,
-            new OverpassMapFeatureOptions(new Uri("https://overpass.test/api/interpreter"), "test-overpass"),
-            NullLogger<OverpassMapFeatureDataService>.Instance, time);
-
-        var limited = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-        var waiting = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal("rate_limited", limited.Outcome.FailureCode);
-        Assert.Equal("rate_limited", waiting.Outcome.FailureCode);
-        Assert.Equal(1, handler.RequestCount);
-
-        time.Advance(OverpassMapFeatureDataService.RateLimitBackoff);
-        var resumed = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-        Assert.Equal(MapFeatureFetchStatus.Complete, resumed.Status);
-        Assert.Equal(2, handler.RequestCount);
-    }
-
-    private sealed class ManualTime : TimeProvider
-    {
-        private DateTimeOffset _now = new(2026, 10, 16, 12, 0, 0, TimeSpan.Zero);
-        public void Advance(TimeSpan by) => _now += by;
-        public override DateTimeOffset GetUtcNow() => _now;
-    }
-
-    [Fact]
-    public async Task OverpassClient_PostsBoundedQueryAndMapsResponse()
-    {
-        var handler = new SequenceHandler(_ => JsonResponse(UsableFeatureJson));
-        using var client = new HttpClient(handler);
-        var service = new OverpassMapFeatureDataService(client,
-            new OverpassMapFeatureOptions(new Uri("https://overpass.test/api/interpreter"), "test-overpass"),
-            NullLogger<OverpassMapFeatureDataService>.Instance);
-
-        var result = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Complete, result.Status);
-        Assert.NotNull(result.Data);
-        Assert.Equal(1, result.Outcome.RoadCount);
-        Assert.Equal(1, result.Outcome.AttemptCount);
-        Assert.Equal(1, handler.RequestCount);
-        Assert.Contains("data=", handler.Bodies[0]);
-        Assert.DoesNotContain("token", handler.Bodies[0], StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(HttpMethod.Post, handler.Methods[0]);
-    }
-
-    [Fact]
-    public async Task CoreOverpassClient_DoesNotRetryAnOversizedRoadAndWaterResponse()
-    {
-        var handler = new SequenceHandler(
-            _ => OversizedResponse(),
-            _ => JsonResponse(UsableFeatureJson));
-        using var client = new HttpClient(handler);
-        var service = new OverpassMapFeatureDataService(client,
-            new OverpassMapFeatureOptions(new Uri("https://overpass.test/api/interpreter"), "test-overpass"),
-            NullLogger<OverpassMapFeatureDataService>.Instance);
-
-        var result = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Unavailable, result.Status);
-        Assert.True(result.Outcome.ResponseTooLarge);
-        Assert.False(result.Outcome.FallbackAttempted);
-        Assert.Equal(1, result.Outcome.AttemptCount);
-        Assert.Equal(1, handler.RequestCount);
-        Assert.DoesNotContain("building", Uri.UnescapeDataString(handler.Bodies[0]));
-    }
-
-    [Fact]
-    public async Task OverpassClient_HttpFailureRecordsStatusAndDoesNotFallback()
-    {
-        var handler = new SequenceHandler(_ => new HttpResponseMessage(HttpStatusCode.BadGateway));
-        using var client = new HttpClient(handler);
-        var service = Service(client);
-
-        var result = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Unavailable, result.Status);
-        Assert.Equal(502, result.Outcome.HttpStatusCode);
-        Assert.Equal("http_error", result.Outcome.FailureCode);
-        Assert.Equal(1, handler.RequestCount);
-    }
-
-    [Fact]
-    public async Task OverpassClient_MalformedResponseRecordsParseFailureWithoutFallback()
-    {
-        var handler = new SequenceHandler(_ => JsonResponse("not-json"));
-        using var client = new HttpClient(handler);
-        var service = Service(client);
-
-        var result = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Unavailable, result.Status);
-        Assert.True(result.Outcome.ParseFailed);
-        Assert.Equal("malformed_response", result.Outcome.FailureCode);
-        Assert.Equal(1, handler.RequestCount);
-    }
-
-    [Fact]
-    public async Task CoreOverpassClient_TimeoutDoesNotRetryOrInvokeAnotherFeaturePipeline()
-    {
-        var handler = new SequenceHandler(
-            _ => throw new TaskCanceledException("timeout"),
-            _ => JsonResponse(UsableFeatureJson),
-            _ => throw new InvalidOperationException("A third attempt is forbidden."));
-        using var client = new HttpClient(handler);
-        var service = Service(client);
-
-        var result = await service.FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Unavailable, result.Status);
-        Assert.True(result.Outcome.TimedOut);
-        Assert.Equal(1, handler.RequestCount);
-    }
-
-    [Fact]
-    public async Task CoreOverpassClient_GatewayTimeoutRetainsHttpDiagnosticWithoutFallbackQuery()
-    {
-        var handler = new SequenceHandler(
-            _ => new HttpResponseMessage(HttpStatusCode.GatewayTimeout),
-            _ => JsonResponse(UsableFeatureJson));
-        using var client = new HttpClient(handler);
-
-        var result = await Service(client).FetchAsync(Guid.NewGuid(), Viewport(), CancellationToken.None);
-
-        Assert.Equal(MapFeatureFetchStatus.Unavailable, result.Status);
-        Assert.Equal(504, result.Outcome.HttpStatusCode);
-        Assert.Equal("timeout", result.Outcome.FailureCode);
-        Assert.True(result.Outcome.TimedOut);
-        Assert.False(result.Outcome.FallbackAttempted);
+        Assert.Equal(LocationMapThumbnailService.LegacyOverpassFeatureSchemaVersion, restored.SchemaVersion);
     }
 
     [Fact]
@@ -478,44 +287,5 @@ public sealed class MapFeatureDataTests
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
-    }
-
-    private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
-    {
-        Content = new StringContent(json, Encoding.UTF8, "application/json")
-    };
-
-    private static HttpResponseMessage OversizedResponse()
-    {
-        var response = JsonResponse("{\"elements\":[]}");
-        response.Content.Headers.ContentLength = OverpassMapFeatureDataService.MaximumResponseBytes + 1;
-        return response;
-    }
-
-    private static OverpassMapFeatureDataService Service(HttpClient client) => new(client,
-        new OverpassMapFeatureOptions(new Uri("https://overpass.test/api/interpreter"), "test-overpass"),
-        NullLogger<OverpassMapFeatureDataService>.Instance);
-
-    private const string UsableFeatureJson =
-        "{\"elements\":[{\"type\":\"way\",\"id\":1,\"tags\":{\"highway\":\"primary\",\"ref\":\"A15\"}," +
-        "\"geometry\":[{\"lat\":53.60,\"lon\":-0.45},{\"lat\":53.62,\"lon\":-0.41}]}]}";
-
-    private sealed class SequenceHandler(params Func<HttpRequestMessage, HttpResponseMessage>[] responses)
-        : HttpMessageHandler
-    {
-        public int RequestCount { get; private set; }
-        public List<string> Bodies { get; } = [];
-        public List<HttpMethod> Methods { get; } = [];
-
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
-            CancellationToken cancellationToken)
-        {
-            Methods.Add(request.Method);
-            Bodies.Add(request.Content is null
-                ? string.Empty
-                : await request.Content.ReadAsStringAsync(cancellationToken));
-            var index = RequestCount++;
-            return responses[Math.Min(index, responses.Length - 1)](request);
-        }
     }
 }

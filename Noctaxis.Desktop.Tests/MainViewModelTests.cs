@@ -10,6 +10,7 @@ using Noctaxis.Core.Time;
 using Noctaxis.Core.Weather;
 using Noctaxis.Core.Calculations;
 using Noctaxis.Core.Locations;
+using Noctaxis.Core.Locations.Descriptions;
 using Noctaxis.Core.Environment;
 using Noctaxis.Desktop.Controls;
 using Noctaxis.Desktop.Services;
@@ -604,6 +605,48 @@ public sealed partial class MainViewModelTests
 
         await WaitUntilAsync(() => viewModel.LocationName == "Near Final place", TimeSpan.FromSeconds(2));
         Assert.Equal(1, reverse.RequestCount);
+    }
+
+    [Fact]
+    public async Task ALateDescriptionNeverRenamesASavedLocationSelectedMeanwhile()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var saved = new SavedLocation(Guid.NewGuid(), "My dark site", new GeoCoordinate(54.1, -2.2), "UTC");
+        var reverse = new ControllableReverseGeocodingProvider();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue,
+            new FakeStore(new PersistedState(3, new AppSettings(), [saved],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
+            new FakeExporter(), reverseGeocoding: reverse);
+        await viewModel.InitializeAsync();
+
+        viewModel.CommitObserverLocation(new GeoCoordinate(51, -1));
+        await WaitUntilAsync(() => reverse.RequestCount == 1, TimeSpan.FromSeconds(2));
+        viewModel.SelectedLocation = viewModel.SavedLocations.Single();
+        reverse.Complete(0, "Elsewhere");
+        await Task.Delay(60);
+
+        // The user's own name stays exactly as it was, on the pin and on the saved location.
+        Assert.Equal("My dark site", viewModel.LocationName);
+        Assert.Equal("My dark site", viewModel.SavedLocations.Single().Name);
+    }
+
+    [Fact]
+    public async Task AResolvedDescriptionIsTheDefaultNameOfANewSave()
+    {
+        var catalogue = new OpenNgcTargetCatalogue();
+        var viewModel = CreateViewModel(new FakePlanning(catalogue), catalogue,
+            new FakeStore(new PersistedState(3, new AppSettings(), [],
+                PlanningSession.Default(Instant.FromUtc(2024, 1, 1, 0, 0), "UTC"), null)),
+            new FakeExporter(), reverseGeocoding: new ImmediateReverseGeocodingProvider("Saxby"));
+        await viewModel.InitializeAsync();
+
+        viewModel.CommitObserverLocation(new GeoCoordinate(53.55, -0.49));
+        await WaitUntilAsync(() => viewModel.LocationName == "Near Saxby", TimeSpan.FromSeconds(2));
+        await viewModel.SaveLocationCommand.ExecuteAsync(null);
+
+        Assert.Equal("Near Saxby", viewModel.SavedLocations.Single().Name);
+        // The exact coordinate, not the description, is what the location holds.
+        Assert.Equal(53.55, viewModel.SavedLocations.Single().Coordinate.Latitude, 9);
     }
 
     [Fact]
@@ -1699,7 +1742,7 @@ public sealed partial class MainViewModelTests
 
     private static MainViewModel CreateViewModel(IPlanningService planning, ITargetCatalogue catalogue, IUserDataStore store, FakeExporter exporter,
         IPlannerDialogService? dialogs = null,
-        ILocationMapThumbnailService? thumbnails = null, IReverseGeocodingProvider? reverseGeocoding = null,
+        ILocationMapThumbnailService? thumbnails = null, ILocationDescriptionService? reverseGeocoding = null,
         TerrainDiskCache? terrainDiskCache = null,
         IClock? clock = null, IFramingVisibilityCalculator? framingVisibility = null,
         IAwooSupporterLicenceVerifier? supporterLicenceVerifier = null,
@@ -1716,7 +1759,7 @@ public sealed partial class MainViewModelTests
             clock ?? new FixedClock(store is FakeStore fake ? fake.State.Session.Instant : Instant.FromUtc(2024, 1, 1, 0, 0)),
             locationSearch,
             new LocalTargetSearchService(catalogue), dialogs ?? new FakeDialogs(),
-            reverseGeocoding ?? new FakeReverseGeocodingProvider(), thumbnails, terrainDiskCache,
+            reverseGeocoding ?? new FakeDescriptionService(), thumbnails, terrainDiskCache,
             supporterLicenceVerifier: supporterLicenceVerifier, externalUriLauncher: externalUriLauncher,
             lightPollutionInstallation: lightPollutionInstallation,
             // No debounce by default, so tests observe saves as soon as the triggering change completes.
@@ -1731,38 +1774,47 @@ public sealed partial class MainViewModelTests
             Task.FromResult<IReadOnlyList<LocationSearchResult>>([]);
     }
 
-    private sealed class FakeReverseGeocodingProvider : IReverseGeocodingProvider
+    private sealed class FakeDescriptionService : ILocationDescriptionService
     {
-        public Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate, CancellationToken cancellationToken) =>
-            Task.FromResult<ReverseGeocodingResult?>(null);
+        public Task<LocationDescription?> DescribeAsync(GeoCoordinate coordinate, CancellationToken cancellationToken) =>
+            Task.FromResult<LocationDescription?>(null);
     }
 
-    private sealed class ImmediateReverseGeocodingProvider(string placeName) : IReverseGeocodingProvider
+    /// <summary>A description as the engine composes it: "Near {place}", a settlement 900 m away.</summary>
+    private static LocationDescription Describe(GeoCoordinate coordinate, string placeName)
+    {
+        var near = new FeatureRelationship("test:" + placeName, placeName, GeographicFeatureKind.Village,
+            GeographicRelation.Near, null, 900, 0, .6, DescriptionConfidence.Medium, "test");
+        return new LocationDescription(coordinate, LocationDescriptionComposer.Compose(near, null), near, null,
+            GeographicCoverage.Complete, "Test");
+    }
+
+    private sealed class ImmediateReverseGeocodingProvider(string placeName) : ILocationDescriptionService
     {
         public int RequestCount { get; private set; }
-        public Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate, CancellationToken cancellationToken)
+        public Task<LocationDescription?> DescribeAsync(GeoCoordinate coordinate, CancellationToken cancellationToken)
         {
             RequestCount++;
-            return Task.FromResult<ReverseGeocodingResult?>(new(placeName, null, "Test"));
+            return Task.FromResult<LocationDescription?>(Describe(coordinate, placeName));
         }
     }
 
-    private sealed class ControllableReverseGeocodingProvider : IReverseGeocodingProvider
+    private sealed class ControllableReverseGeocodingProvider : ILocationDescriptionService
     {
-        private readonly List<TaskCompletionSource<ReverseGeocodingResult?>> _requests = [];
+        private readonly List<(GeoCoordinate Coordinate, TaskCompletionSource<LocationDescription?> Completion)> _requests = [];
         private readonly object _gate = new();
         public int RequestCount { get { lock (_gate) return _requests.Count; } }
-        public Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate, CancellationToken cancellationToken)
+        public Task<LocationDescription?> DescribeAsync(GeoCoordinate coordinate, CancellationToken cancellationToken)
         {
-            var completion = new TaskCompletionSource<ReverseGeocodingResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            lock (_gate) _requests.Add(completion);
+            var completion = new TaskCompletionSource<LocationDescription?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (_gate) _requests.Add((coordinate, completion));
             return completion.Task; // Deliberately ignores cancellation to exercise generation protection.
         }
         public void Complete(int index, string placeName)
         {
-            TaskCompletionSource<ReverseGeocodingResult?> completion;
-            lock (_gate) completion = _requests[index];
-            completion.SetResult(new ReverseGeocodingResult(placeName, null, "Test"));
+            (GeoCoordinate Coordinate, TaskCompletionSource<LocationDescription?> Completion) request;
+            lock (_gate) request = _requests[index];
+            request.Completion.SetResult(Describe(request.Coordinate, placeName));
         }
     }
 

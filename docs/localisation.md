@@ -42,7 +42,7 @@ that name.
 | Core | `Data.resx` | Light-pollution data installation status |
 | Core | `Equipment.resx` | Camera and lens validation, default equipment names |
 | Core | `Export.resx` | Plan image sheet text |
-| Core | `Places.resx` | Place search and reverse geocoding messages |
+| Core | `Places.resx` | Place search messages and location-description phrases |
 | Core | `Planning.resx` | Planning status and framing visibility text |
 | Core | `Terrain.resx` | Terrain status and cache messages |
 | Core | `Units.resx` | Unit symbols and the value-with-unit pattern |
@@ -294,9 +294,10 @@ drawn again rather than shown in the old language. The Planner map takes its lan
 its own and ignores the language. Nothing else redraws the labels: not the measurement profile and
 not the regional format.
 
-Saved-location map images are a separate pipeline and are not affected. Their source is
-OpenStreetMap's own raster tiles, whose labels are part of the image and are in the local language;
-Noctaxis draws no text of its own on them.
+Saved-location previews draw no place names. Location descriptions (*Near the River Ancholme*) take
+feature names through the same `BasemapLabelNames` rule as the map, in the UI language, and compose
+them from `Places_Description_*` phrases, so a language controls its own word order, articles and
+compass words.
 
 ## Invariant persistence and machine formatting
 
