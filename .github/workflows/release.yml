@@ -231,3 +231,13 @@ jobs:
           fi
           gh release edit "$TAG" --draft=false
           echo "Published [$TITLE](https://github.com/$GH_REPO/releases/tag/$TAG)." >> "$GITHUB_STEP_SUMMARY"
+
+  # Releases published using GITHUB_TOKEN do not emit another Actions release
+  # event. Invoke the existing deployment hook only after the release is live,
+  # so Awoo's prerendered latest-release card sees the new published version.
+  rebuild-awoo:
+    name: Rebuild awoo.ltd after publication
+    needs: publish
+    if: needs.publish.result == 'success'
+    uses: ./.github/workflows/trigger-awoo-rebuild.yml
+    secrets: inherit

@@ -7,6 +7,9 @@ on:
   release:
     types: [published, edited, deleted]
   workflow_dispatch:
+  # Release jobs using GITHUB_TOKEN cannot trigger a separate release event workflow.
+  # Reuse this hook directly once the publishing job has completed.
+  workflow_call:
 
 permissions:
   contents: read
