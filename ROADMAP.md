@@ -1,335 +1,161 @@
 # Noctaxis Roadmap
 
-Legend:
-- ✅ roadmap-complete
-- 🟡 substantially present / needs finishing
-- ⬜ not implemented
-- 🚫 deliberately not planned
+Noctaxis is in public alpha. This is a short overview of what is available, what is planned for v1.0, what needs attention, and what may come later. It is not a development task log.
 
-“Done” here means done enough for that roadmap item, not “never touch this code again because computers famously respect such declarations.”
+Releases and downloads: [v0.1.3](https://github.com/CallyyllaC/Noctaxis/releases/tag/v0.1.3) · [v0.2.4](https://github.com/CallyyllaC/Noctaxis/releases/tag/v0.2.4). See also the [v0.2 release notes](docs/release-notes/0.2.md).
 
+Status: ✅ released · 🟡 partly complete or being validated · ⬜ planned or awaiting investigation · 🚫 intentionally out of scope.
 
-## Alpha, current development release
+## Released: v0.1 and v0.2
 
-### ✅ Core manual Planner
-Map/pin, planning date/time, current-time startup behaviour, targets, camera bearing/pitch, framing and FoV.
+### ✅ v0.1 — First public alpha
+The first public alpha brings photography and astrophotography planning together in one desktop workspace.
 
-### ✅ Saved locations
-Location cards, favourites, current location, imagery/metadata and normal saved-location workflow. Device geolocation was removed: places are chosen by search, on the map or from saved locations.
+- Interactive map, planning pin, saved locations and place search.
+- Sun, Moon and target positions, visibility, timing and twilight information.
+- Camera and lens profiles, field-of-view framing, terrain horizon and camera-direction preview.
+- Weather, light pollution, satellite and topographic map layers, plus a secondary map.
+- Photographer-facing shot-viability guidance and portable planning-sheet images.
+- Customisable themes, colour-vision options, touch-friendly controls and optional supporter themes.
 
-### ✅ Target selection/details
-Target list, Focus, focused-target details, visibility controls and Follow with camera.
+### ✅ v0.2 — Diagnostics and reliability
+A follow-up alpha focused on useful bug reports, geographical context and a more dependable planning experience.
 
-### ✅ Sun/Moon astronomy context
-Sunrise/sunset, moonrise/moonset, paths, darkness/twilight context and time-dependent planning.
+- Export application logs and basic diagnostics to a ZIP without uploading private information.
+- Keep the latest ten previously used days of logs as daily archives, plus today's session logs.
+- Generate local place descriptions from map geography rather than relying on public reverse-geocoding requests.
+- Improve measured performance, cancellation and caching; continue automated package checks for all six offered builds.
 
-### ✅ Camera/lens equipment model
-Saved equipment, camera/sensor data, lens selection, focal length/orientation and Planner framing integration.
+## Road to v1.0
 
-### ✅ Terrain elevation and horizon calculations
-Terrarium DEM, observer elevation, horizon/profile generation and obstruction semantics.
+### ⬜ More informative camera framing
+Make the Planner's camera view and timeline better at showing what a photograph will actually contain.
 
-### ✅ Terrain plan-view visualisation
-Terrain fan/cone behaviour and the semantics we spent roughly one geological era debugging.
+- Limit the map's view cone using camera pitch, field of view, observer height, Earth's curvature and terrain instead of an arbitrary distance.
+- Show relevant celestial objects at their projected positions inside the camera-direction preview.
+- Shade the altitude timeline by the Sun's elevation, from daylight through twilight to astronomical night.
 
-### ✅ Camera frame
-Physical camera-direction view with real FoV projection, terrain skyline, bearing/pitch scales and obstruction context.
+### ⬜ Capture settings and equipment detail
+Record more of the information photographers need when preparing a shot.
 
-### ✅ Planner PiP map
-Permanent secondary map view, independent zoom, Follow pin behaviour, layer-aware rendering and responsive sizing.
+- Add camera ISO and lens aperture (f-number) to the relevant equipment and capture settings.
+- Include useful capture details in planning views and exported sheets.
 
-### ✅ Production/debug separation
-PiP/Camera frame are normal product features; diagnostic terrain tooling lives behind Diagnostics/developer access.
+### ⬜ Better saved-location context
+Make saved places easier to recognise and revisit without opening each one.
 
-### ✅ Weather integration
-Selected location/time weather, grouped Planner presentation and configurable forecast fields.
+- Show the stored timezone on saved-location cards using a readable label.
 
-### ✅ Planner UI reorganisation
-Docking workspace, Inspector tabs, Timeline, PiP/Camera-frame overlays, duplicate controls removed and responsibilities cleaned up.
+### 🟡 Portable plans and richer exports
+The existing PNG planning sheet and image import work. Extend them without breaking plans people have already saved.
 
-### ✅ Settings/defaults review
-Stored preferences versus session/startup state separated sensibly; Settings reorganised and cleaned up.
+- Verify version-aware import of older plans and safe rejection of unsupported newer formats.
+- Allow deliberately selected multiple targets in one field plan while preserving focused-target exports.
+- Offer a more detailed, printer-friendly planning sheet suitable for paper or PDF.
 
-### ✅ Appearance system
-Noctaxis, High Contrast, Neon, Foxfire, Deep Space, Moonlit and Pigeon families with light/dark behaviour and semantic resources.
+### ⬜ Quiet update notifications
+Let people know when a newer Noctaxis release is available without forcing an update or interrupting planning.
 
-### ✅ Accessibility appearance controls
-Colour-vision variants, 100–200% text scaling, non-colour target line patterns and documented accessibility behaviour.
+- Check for releases unobtrusively at startup.
+- Open GitHub Releases directly from the notice.
+- Allow skipping a version and remember the choice.
 
-### ✅ Theme precedence hardening
-Themed values act as defaults while explicit local/style values survive live theme, appearance and colour-vision changes.
+### 🟡 Settings and presentation polish
+Make the interface comfortable at small window sizes and higher text scaling without sacrificing the simple layout.
 
-### ✅ Supporter themes
-Neon, Foxfire, Deep Space, Moonlit and Pigeon (dedicated to the first supporter).
+- Use available Settings space sensibly and avoid clipping, awkward stretching or unnecessary scrolling.
+- Simplify theme availability labels while keeping supporter/locked-state explanations available.
+- Refine rough edges found through real photography sessions.
 
-### ✅ Offline Awoo supporter licensing
-Frozen protocol, Ed25519 verification, activation/replacement, persistence and supporter-theme gating.
+### 🟡 Ready for everyday use
+Finish the practical checks needed before describing v1.0 as stable.
 
-### ✅ Production supporter licence smoke test
-Verified against the production Awoo signing setup and real Noctaxis activation flow.
+- Try the Windows x64 portable package on a clean machine.
+- Exercise real maps, weather, terrain and hardware-accelerated rendering in the assembled application.
+- Review first-run guidance, release wording and binary provenance. Windows x64 remains the officially supported platform.
 
-### ✅ Ko-fi support integration
-Support section and external Ko-fi button.
+## Engineering backlog
 
-### ✅ Large regression/test foundation
-Extensive Core/Desktop regression coverage across Planner, rendering, accessibility, themes, terrain and import/export.
+### ⬜ Equipment profiles can interfere with saving
+An incomplete or invalid camera or lens profile can prevent unrelated valid edits from saving. The persistence behaviour needs a focused review.
 
-### ✅ Major terrain/performance hardening
-Bounded caches, cancellation/lifecycle fixes, GPU-path investigation and removal of the major allocation/performance disasters found so far.
+- Isolate profile drafts or validation so one unfinished profile does not block another.
+- Investigate Manufacturer/Model-only edits that may not trigger autosave.
+- Cover pending edits, removal of the last profile and closing with invalid drafts.
 
-### ✅ Theme/UI state hardening
-Fluent/theme-resource ownership and explicit-value precedence are deliberately controlled by Noctaxis rather than left to framework luck.
+### ⬜ Linux Settings layout test regression
+A narrow-window colour-vision radio group wraps onto two rows in Linux CI, while an existing test assumes one row at 100% text scaling.
 
-### 🟡 Responsive populated-data UI pass
-Automated high-scale/responsive coverage is extensive, and the Planner has been tuned around a 1080p reference layout, but native dogfooding at awkward sizes still deserves abuse.
+- Validate readable, unclipped controls whether or not they wrap.
+- Check platform-dependent text measurement and font setup in headless tests.
+- Treat this as a test/layout investigation, not evidence of broken settings bindings.
 
-### 🟡 Native accessibility validation
-Contrast, colour vision, scaling, accessible names and keyboard behaviours are heavily tested, but Windows accessibility-tree/screen-reader validation still needs a proper manual pass.
+### ⬜ Investigate slow or noisy environment requests
+Check reports of slow environment processing when the planning pin moves offshore, along with recurring terrain/settlement data warnings.
 
-### 🟡 Long-session/lifecycle validation
-Cancellation/lifecycle architecture is strong, but hours-long native use, repeated navigation and shutdown still deserve deliberate testing.
+- Distinguish genuine stalls from superseded requests being cancelled normally.
+- Verify bounded lookup timeouts and graceful fallback when data is unavailable.
+- Revisit performance only if measurements establish a significant problem.
 
-### ✅ Light-pollution map layer
-David Lorenz data integrated into the Planner.
+### ⬜ Decide on consistent fonts
+Noctaxis names Inter, but current font lookup can use system fonts instead. Decide whether to use the bundled font everywhere.
 
-### ✅ Overall “is this shot viable?” presentation
-Combined photographer-facing viability presentation drawing on terrain, Moon, darkness, weather, target visibility and timing.
+- Compare the real rendering and text measurements across operating systems.
+- If a font change is chosen, recheck layout, localisation and accessibility before shipping it.
 
-### ✅ Maps/location external links
-Open in Maps is implemented. Street View integration was intentionally removed from scope.
+### 🟡 Native accessibility and responsive checks
+Automated coverage is extensive; real desktop interaction still needs validation.
 
-### ✅ Investigate whether the planning pin itself should become a map-rendered layer rather than a separate interaction/rendering element
+- Check screen-reader/accessibility-tree behaviour and keyboard navigation on Windows.
+- Try populated screens at narrow widths, large text sizes and with touch input.
+- Keep colour-vision and High Contrast readability in scope.
 
-### ✅ OpenFreeMap themed vector basemap
-Noctaxis-owned styling integrated with application themes.
+### 🟡 Long-session and lifecycle checks
+Exercise normal use for longer than a quick automated test, including repeated planning, navigation and shutdown.
 
-### ✅ EOX Sentinel-2 Cloudless satellite imagery support
+- Watch for resource growth, abandoned requests and stale views during extended sessions.
+- Investigate measured regressions rather than reopening a speculative performance sweep.
 
-### ✅ Terrain/topographic map presentation
-Terrarium-backed terrain/topographic presentation is implemented and integrated with the Planner.
+## Future: v2 and beyond
 
+### ⬜ Find suitable photography locations
+Go beyond manually choosing a site by scouting sensible candidates for a particular shot.
 
-### ✅ Add macOS support
-macOS Intel and Apple Silicon courtesy builds added, with automated verification where available. Windows remains the officially developed and manually tested platform.
+- Discover potential public-access sites such as parks, parking areas and lay-bys where data supports them.
+- Respect firm constraints for visibility, terrain clearance, framing, light pollution, Moon, weather, distance and site type.
+- Expand the search radius only when needed, then explain the ranking of suitable candidates.
 
-### ✅ Investigate Windows/macOS code signing and notarisation
-Investigated signing, notarisation and practical distribution requirements. macOS uses ad-hoc signing; paid certificates and developer subscriptions are not part of the current release plan.
+### ⬜ Find the best time to shoot
+Search dates and times as well as places to reveal genuinely useful opportunities.
 
-### ✅ Create a Wiki
-Public wiki documentation, navigation and screenshots are complete and reviewed, covering Home, About, Getting Started, Locations, Planner and Settings. Ready for publication.
+- Compare darkness, target position, terrain obstruction, weather and Moon conditions.
+- Show why a suggested window or location is preferable to the alternatives.
 
-### ✅ Daily log archives and diagnostics export
-Session logs remain uncompressed for the current local day. Previous days are consolidated into one ZIP per used day, retaining the 10 most recent historical daily archives in addition to today's session logs. Settings → Diagnostics provides a local ZIP export of available logs and basic runtime information for alpha bug reports.
+### ⬜ Suggest capture settings
+Use the target, selected equipment and planning conditions to offer practical starting points rather than pretending there is one perfect exposure.
 
+- Start with suggested shutter/exposure duration.
+- Later consider aperture, ISO, star trailing and tracker-related warnings.
 
-## v1.0, first proper public release
+### ⬜ Refine terrain maps
+Improve the existing terrain and topographic map views where clearer geography would help field planning.
 
-### 🟡 End-to-end dogfooding
-Use Noctaxis for several real photography plans and fix workflow annoyances rather than inventing more infrastructure.
+- Explore richer hillshade, contours and elevation hierarchy.
+- Prefer improvements that make the map easier to read over decoration for its own sake.
 
-### ⬜ Investigate offshore environment stalls and diagnostic warnings
-After alpha, reproduce pin moves into open water and check whether terrain/environment processing can still stall independently of the bounded place-description lookup. Review recurring WSF `SourceUnavailable`/invalid-sample warnings and determine whether `TaskCanceledException` from superseded environment requests is expected cancellation rather than a reportable failure. Verify the geographic lookup timeout/fallback in the running app. Keep this evidence-led and scoped; do not reopen the general performance pass.
+### ⬜ Useful astronomy alerts
+Surface events worth planning for, without turning the application into a stream of notifications.
 
-### ⬜ Automatic update check on startup
-- non-forced
-- small unobtrusive notification
-- Skip this version
-- Go to GitHub Releases
-- remember skipped versions so it does not nag forever like a printer driver from 2007
+- Explore an aurora-watch or chance indicator.
+- Consider optional desktop alerts for genuinely useful opportunities.
 
-### 🟡 Windows release packaging
-A self-contained, extract-and-run zip for x64 and Arm64 (`scripts/package.ps1`), checked for its runtime, native libraries and notices. x64 is the officially supported package; Arm64 is a courtesy build. The Package workflow builds and starts both on hosted runners; it has not run yet. Still to do: a clean-machine run of the x64 zip, and the binary provenance audit of the self-contained packages before release.
+### ⬜ Optional 3D and further discovery
+Consider lightweight 3D visualisation and additional discovery tools only where they add something the existing 2D Planner cannot communicate well.
 
-### ⬜ Theme dropdown presentation polish
-Separate the visible theme availability label from tooltip details: standard themes show no redundant status beside their names, while tooltips identify them as Standard. Supporter and locked-theme labels remain informative. Keep this independent of the tooltip crash/full-row selection fixes.
+### 🚫 Deliberately out of scope
+A few tempting directions would make Noctaxis more complicated without clearly improving photography planning.
 
-### ⬜ Decide whether to render the bundled Inter font
-`App.axaml` names `Inter` and `Program.cs` calls `WithInterFont()`, but a plain family name is looked up among the system's fonts only, so the bundled Inter is never used: Windows renders Segoe UI, and Linux and macOS their own default fonts. Decide whether Noctaxis should render Inter everywhere, for one look on every platform. It changes every text measurement, so re-run the layout, localisation and accessibility tests on all three platforms before changing it. Keep the font asset until this is decided.
-
-### ⬜ Settings page layout and space utilisation
-Review every Settings page for sensible use of available horizontal and vertical space across typical and constrained window sizes and text scales. Eliminate excessive empty space, awkward stretching and unnecessary scrolling without sacrificing readability, accessibility or responsive behaviour.
-
-### ⬜ Investigate equipment profile validation and save isolation
-Review collection-wide validation: one incomplete or invalid camera/lens profile currently blocks unrelated valid equipment edits from saving, and can cancel pending debounced saves. Confirm safe persistence of existing profiles and determine whether drafts can be isolated per profile. Investigate the apparent autosave gap where Manufacturer or Model edits alone do not trigger saving. Cover partial/invalid drafts, pending edits on close, last-profile removal, and manufacturer/model-only changes with targeted regression tests.
-
-### ⬜ Curvature-aware Planner view cone from camera pitch
-Use the camera's visual pitch, vertical field of view and observer height to project the Planner view cone against Earth's curvature and the local terrain. Dynamically limit the map footprint at the physical ground intersection or visible horizon, instead of extending indefinitely or ending at an arbitrary fixed distance. Handle skyward rays with no ground intersection explicitly, and keep the result consistent with the Camera frame's terrain-horizon calculations.
-
-### ⬜ Show celestial objects in the Planner camera frame
-Render relevant celestial objects in the camera-direction frame at their projected positions for the selected location, time and camera framing, so their placement can be checked against the field of view and terrain horizon.
-
-### ⬜ Time-of-day gradient shading in the Timeline altitude chart
-Shade the altitude chart background using the Sun's actual elevation for the selected location and planning window: daylight, civil twilight, nautical twilight, astronomical twilight and astronomical night. Blend transitions smoothly, with subtle theme-aware colours that preserve the legibility of target/Sun/Moon curves, grid lines and labels across light/dark and colour-vision themes.
-
-### ⬜ Camera ISO and lens aperture data
-Add camera ISO and lens aperture (f-number) data to the appropriate equipment and capture settings, and expose them wherever useful for planning and exported capture information.
-
-### ⬜ Show saved timezone on Saved Location Cards
-Display each saved location's stored timezone on its card, using a clear, readable timezone label so users can see the timezone context of their bookmarked places.
-
-### 🟡 Version-aware portable plan import/export
-Audit `Noctaxis.Plan` schema compatibility before public release. Import supported older exports with explicit migrations, validate versions before applying any state, and reject unknown newer schemas unless their compatibility is explicitly guaranteed. Ignore safe unknown additive metadata where appropriate; never silently reinterpret changed fields or import stale calculated data. Cover older/current/newer versions with regression fixtures.
-### 🟡 Linux courtesy builds
-A self-contained tarball for x64 and Arm64, with an optional per-user menu entry (`scripts/package.sh`). The full test suites run on Ubuntu in CI. The Package workflow starts both tarballs under Xvfb on hosted x64 and Arm64 runners; it has not run yet. Courtesy builds, best-effort.
-
-### 🟡 Courtesy-build release automation
-The first successful Package workflow run on all six packages. Then the release notes can say the courtesy builds were built and started on their own systems. macOS also runs the test suites informationally in CI; review those results once.
-
-### 🚫 Publicly trusted code signing and notarisation for v1.0
-Deferred: not worth the effort for v1.0. It needs paid developer or signing accounts, identity verification and ongoing certificate management. Packages ship unsigned (Windows) or ad-hoc signed (macOS), with the first-launch steps documented.
-
-### 🚫 Manual native validation of courtesy platforms
-Windows x64 is the only officially supported platform. Linux, macOS and Windows on Arm rely on automated checks on hosted runners and on user reports, not on developer-owned hardware ([support policy](docs/releasing.md#support-policy)). Community reports using the [native checklist](docs/releasing.md#native-verification-checklist) are welcome.
-
-### ⬜ Final first-run/release polish
-Version metadata, release-facing wording, documentation, clean-machine testing and release presentation.
-
-### 🟡 Native GPU/live-provider smoke pass
-Automated/headless validation is strong; verify the assembled app with real maps, weather, terrain and hardware acceleration on release machines.
-
-### ⬜ Focused performance pass
-Profile and fix measured PiP overhead, panel-drag latency, Layers opening latency and unnecessary map invalidation/recomposition.
-
-### ⬜ Final general performance pass
-Startup, long-session allocations, binding churn, fetch churn and trace-based remaining hotspots only.
-
-### 🚫 Freeze v1 feature scope once the above is satisfactory
-
-
-## v1.0 export / portable plans
-
-### ✅ Canonical planning-sheet export
-One detached renderer shared by Save PNG and Copy image rather than capturing the desktop UI.
-
-### ✅ Single-target field export
-Export is centred on the focused target rather than dumping every visible target into one chart.
-
-### ⬜ Multiple-target field export
-Extend the field export to include several deliberately selected targets in a single plan, while keeping the completed focused-target export available.
-
-### ✅ Direction-over-time export Timeline
-Focused target bearing/azimuth and pitch/altitude across the planning window, with darkness, terrain/horizon and useful event context.
-
-### ✅ Clean export map
-Themed geographical context, planning point, exact coordinates and attribution, without Planner overlays.
-
-### ✅ Weather summary panel
-Compact sampled weather across the exported planning window.
-
-### ✅ Equipment/capture header
-Camera, lens, focal length and FoV shown as human-readable planning context.
-
-### ✅ Importable Noctaxis plan images
-Exported PNG embeds a minimal versioned `Noctaxis.Plan` payload.
-
-Stored state:
-- UTC date/time
-- latitude/longitude
-- camera bearing
-- camera pitch
-- focused target, if any
-- Follow state, when applicable
-
-Derived/stale information is deliberately not embedded.
-
-### ✅ Image-plan import
-- Open image…
-- Load from clipboard
-- drag-and-drop exported PNG
-- transactional validation before changing Planner state
-- terrain, weather and astronomy recalculated fresh after import
-
-### ✅ Final export visual polish
-Proportions, Timeline height, weather spacing, friendly timezone labels and final native visual review.
-
-### ⬜ Detailed print/PDF planning-sheet export
-Create a printer-friendly, substantially more detailed field plan with a clean layout suitable for physical printing or saving as PDF. Include the relevant location, time, target, terrain, weather, equipment and capture context without relying on the compact image-export layout.
-
-
-## v2, automatic scouting / intelligent planning
-
-### ⬜ Automatic location finder/scouting
-Rather than manually choosing every observing site.
-
-### ⬜ Candidate location discovery
-Including parking areas, parks, lay-bys and other sensible accessible sites.
-
-### ⬜ Hard user constraints
-Including:
-- minimum target coverage/visibility during a requested window
-- required angular/terrain clearance
-- framing margin
-- strict maximum Bortle/light-pollution level
-- Moon constraints
-- maximum search radius
-- acceptable location/site types
-- relevant weather constraints
-
-### ⬜ Adaptive search radius
-Search nearby first, then expand toward the configured maximum if nothing satisfies the constraints.
-
-### ⬜ Soft ranking after hard filtering
-Once unacceptable candidates are removed, rank the survivors by quality rather than allowing a mystery score to override explicit requirements.
-
-### ⬜ Combined site visibility model
-Terrain, settlement/building context, weather/cloud and light pollution combined for scouting decisions.
-
-### ⬜ Automatic date/time opportunity search
-Not merely “where?”, but “where and when is this target actually worth shooting?”
-
-### ⬜ Location comparison/scouting results UI
-Show why one candidate is better than another.
-
-### ⬜ Broader astronomy opportunity discovery
-Build on the planning engine without turning Noctaxis into a generic planetarium.
-
-### ⬜ Suggested capture settings
-Use the selected target, current equipment and planning conditions to provide practical capture guidance.
-
-Initial scope:
-- suggested exposure/shutter duration
-
-Potential later extension:
-- aperture
-- ISO
-- warnings about trailing/tracking limitations
-- target/equipment-aware capture recommendations
-
-This should integrate naturally with the export header so a field plan can eventually include the suggested capture settings.
-
-### ✅ Expand map layers into PiP
-PiP shares the Planner map composition and supports its relevant map layers.
-
-### ⬜ Improve topographic map rendering
-Refine the existing terrain/topographic presentation further, potentially including:
-- richer hillshade
-- contour treatment
-- improved relief readability
-- stronger elevation hierarchy
-- other map-specific refinements that prove useful for field planning
-
-
-## v3 and beyond
-
-### ⬜ Aurora watch/chance indicator
-
-### ⬜ Optional desktop alerts for genuinely useful astronomy opportunities
-Aurora is the obvious initial case.
-
-### ⬜ Simple 3D visualisation
-Solid 2D first, lightweight 3D later only if it genuinely improves planning.
-
-### ⬜ Further opportunity/discovery features
-Once v2 scouting proves what photographers actually find useful, rather than designing a prophetic AI horoscope generator in advance.
-
-
-## Explicit non-goals / things we have intentionally killed
-
-### 🚫 Full offline terrain/weather/data mode
-Export-first won because stale weather and enormous geographic caches solve the wrong problem.
-
-### 🚫 Importing stale calculated data from exported plan images
-Plan images restore the minimum state needed to reproduce the plan; current terrain, weather and astronomy are recalculated when reopened.
-
-### 🚫 Treating exported plan images as full project/save files
-They are compact, durable reconstruction seeds plus a human-readable snapshot, not MS Word documents carrying seventeen generations of archaeological state.
+- A full offline mirror of terrain, weather and map services.
+- Reusing stale calculated terrain, weather or astronomy results from imported plan images.
+- Treating exported images as full editable project files.
+- Paid code-signing and notarisation as a requirement for v1.0, or promising manual support for courtesy platforms.
