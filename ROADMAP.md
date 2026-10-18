@@ -118,6 +118,9 @@ Investigated signing, notarisation and practical distribution requirements. macO
 ### ✅ Create a Wiki
 Public wiki documentation, navigation and screenshots are complete and reviewed, covering Home, About, Getting Started, Locations, Planner and Settings. Ready for publication.
 
+### ✅ Daily log archives and diagnostics export
+Session logs remain uncompressed for the current local day. Previous days are consolidated into one ZIP per used day, retaining the 10 most recent historical daily archives in addition to today's session logs. Settings → Diagnostics provides a local ZIP export of available logs and basic runtime information for alpha bug reports.
+
 
 ## v1.0, first proper public release
 
@@ -151,6 +154,9 @@ Use the camera's visual pitch, vertical field of view and observer height to pro
 
 ### ⬜ Show celestial objects in the Planner camera frame
 Render relevant celestial objects in the camera-direction frame at their projected positions for the selected location, time and camera framing, so their placement can be checked against the field of view and terrain horizon.
+
+### ⬜ Time-of-day gradient shading in the Timeline altitude chart
+Shade the altitude chart background using the Sun's actual elevation for the selected location and planning window: daylight, civil twilight, nautical twilight, astronomical twilight and astronomical night. Blend transitions smoothly, with subtle theme-aware colours that preserve the legibility of target/Sun/Moon curves, grid lines and labels across light/dark and colour-vision themes.
 
 ### ⬜ Camera ISO and lens aperture data
 Add camera ISO and lens aperture (f-number) data to the appropriate equipment and capture settings, and expose them wherever useful for planning and exported capture information.
