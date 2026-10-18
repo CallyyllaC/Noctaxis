@@ -369,8 +369,8 @@ public sealed partial class MainViewModelTests
             AssertNothingClipped(notice, $"{family}/{appearance}/{textScale} restart notice");
 
             var categories = window.FindControl<TabControl>("SettingsCategories")!;
-            // Diagnostics is a developer tool, so it is not among them in a normal run.
-            Assert.Equal(["General", "Appearance", "Equipment", "Planner map", "Weather", "Celestial objects", "Data", "Supporter"],
+            // Diagnostics is there for everyone (Export Logs); only its developer tools need a diagnostics run.
+            Assert.Equal(["General", "Appearance", "Equipment", "Planner map", "Weather", "Celestial objects", "Data", "Supporter", "Diagnostics"],
                 categories.Items.OfType<TabItem>().Where(tab => tab.IsVisible).Select(tab => (string?)tab.Header));
             foreach (var tab in categories.Items.OfType<TabItem>().Where(tab => tab.IsVisible))
             {

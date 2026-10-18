@@ -14,9 +14,6 @@ public sealed class HttpConnectionLifetimeTests
     [Theory]
     [InlineData(nameof(ITerrainElevationProvider))]
     [InlineData(nameof(IWeatherProvider))]
-    [InlineData(nameof(IReverseGeocodingProvider))]
-    [InlineData(nameof(Noctaxis.Desktop.Services.IMapFeatureDataService))]
-    [InlineData(nameof(Noctaxis.Desktop.Services.ILocationMapThumbnailService))]
     [InlineData("LorenzAtlas")]
     public async Task FactoryClientsRecycleTheirConnections(string name)
     {

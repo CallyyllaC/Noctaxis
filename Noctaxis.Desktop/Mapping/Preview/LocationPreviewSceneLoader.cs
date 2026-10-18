@@ -7,7 +7,8 @@ using Noctaxis.Desktop.Services;
 namespace Noctaxis.Desktop.Mapping.Preview;
 
 /// <summary>
-/// Reads a saved location's cached map assets (source raster, semantic features, settlement field)
+/// Reads a saved location's cached map assets (landscape or earlier source raster, road and water features,
+/// settlement field)
 /// and builds its preview scene. Files that are missing or fail their recorded content hash are
 /// skipped, so the preview degrades to fewer layers rather than failing. Built scenes are cached in
 /// <see cref="LocationPreviewSceneCodec.FileName"/> beside those assets.
@@ -36,6 +37,9 @@ public static class LocationPreviewSceneLoader
         {
             MapFeatureDataDocument? features = null;
             SettlementRaster? settlement = null;
+            // A vector landscape, or for map data saved before it an OpenStreetMap raster capture.
+            var landscape = metadata.HasVectorLandscape && source is not null ? SavedLocationLandscapeCodec.TryDecode(source) : null;
+            var legacyRaster = metadata.HasVectorLandscape ? null : source;
             try
             {
                 features = featureBytes is null ? null : JsonSerializer.Deserialize<MapFeatureDataDocument>(featureBytes, FeatureJson);
@@ -51,7 +55,8 @@ public static class LocationPreviewSceneLoader
                     settlement = null;
             }
             catch (Exception ex) when (ex is InvalidDataException or EndOfStreamException or IOException) { settlement = null; }
-            var built = LocationPreviewSceneBuilder.Build(metadata.LocationId, location, viewport, source, features, settlement);
+            var built = LocationPreviewSceneBuilder.Build(metadata.LocationId, location, viewport, legacyRaster, landscape,
+                features, settlement);
             TryWrite(cachePath, LocationPreviewSceneCodec.Encode(built, key));
             return built;
         }, cancellationToken).ConfigureAwait(false);

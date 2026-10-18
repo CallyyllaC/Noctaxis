@@ -10,4 +10,124 @@
   <data name="Places_Search_RateLimited" xml:space="preserve">
     <value>Location search rate limit reached.</value>
   </data>
+  <data name="Places_Description_Primary_In_Format" xml:space="preserve">
+    <value>In {0}</value>
+    <comment>The position is inside a place or area. {0} is its name.</comment>
+  </data>
+  <data name="Places_Description_Primary_By_Format" xml:space="preserve">
+    <value>By {0}</value>
+    <comment>Beside a river, canal or lake. {0} is its name (with any article).</comment>
+  </data>
+  <data name="Places_Description_Primary_OnBank_Format" xml:space="preserve">
+    <value>On the {0} bank of {1}</value>
+    <comment>{0} is a lower-case compass word (west), {1} the watercourse.</comment>
+  </data>
+  <data name="Places_Description_Primary_Outside_Format" xml:space="preserve">
+    <value>Outside {0}</value>
+    <comment>Just beyond the edge of a settlement. {0} is its name.</comment>
+  </data>
+  <data name="Places_Description_Primary_Near_Format" xml:space="preserve">
+    <value>Near {0}</value>
+    <comment>{0} is the feature's name.</comment>
+  </data>
+  <data name="Places_Description_Primary_DirectionOf_Format" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>{0} is a capitalised compass word (West), {1} the feature.</comment>
+  </data>
+  <data name="Places_Description_Secondary_In_Format" xml:space="preserve">
+    <value>in {0}</value>
+    <comment>Second part of a combined description. {0} is the place's name.</comment>
+  </data>
+  <data name="Places_Description_Secondary_By_Format" xml:space="preserve">
+    <value>by {0}</value>
+    <comment>Second part of a combined description.</comment>
+  </data>
+  <data name="Places_Description_Secondary_OnBank_Format" xml:space="preserve">
+    <value>on the {0} bank of {1}</value>
+    <comment>Second part of a combined description.</comment>
+  </data>
+  <data name="Places_Description_Secondary_Outside_Format" xml:space="preserve">
+    <value>outside {0}</value>
+    <comment>Second part of a combined description.</comment>
+  </data>
+  <data name="Places_Description_Secondary_Near_Format" xml:space="preserve">
+    <value>near {0}</value>
+    <comment>Second part of a combined description.</comment>
+  </data>
+  <data name="Places_Description_Secondary_DirectionOf_Format" xml:space="preserve">
+    <value>{0} of {1}</value>
+    <comment>Second part of a combined description; {0} is a lower-case compass word.</comment>
+  </data>
+  <data name="Places_Description_Combined_Format" xml:space="preserve">
+    <value>{0}, {1}</value>
+    <comment>{0} is the main phrase, {1} the second (settlement or landmark) phrase.</comment>
+  </data>
+  <data name="Places_Description_WatercourseName_Format" xml:space="preserve">
+    <value>the {0}</value>
+    <comment>A river or canal name as used inside a phrase. {0} is the mapped name, e.g. River Ancholme.</comment>
+  </data>
+  <data name="Places_Description_Compass_North" xml:space="preserve">
+    <value>North</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_North" xml:space="preserve">
+    <value>north</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_NorthEast" xml:space="preserve">
+    <value>North-east</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_NorthEast" xml:space="preserve">
+    <value>north-east</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_East" xml:space="preserve">
+    <value>East</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_East" xml:space="preserve">
+    <value>east</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_SouthEast" xml:space="preserve">
+    <value>South-east</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_SouthEast" xml:space="preserve">
+    <value>south-east</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_South" xml:space="preserve">
+    <value>South</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_South" xml:space="preserve">
+    <value>south</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_SouthWest" xml:space="preserve">
+    <value>South-west</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_SouthWest" xml:space="preserve">
+    <value>south-west</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_West" xml:space="preserve">
+    <value>West</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_West" xml:space="preserve">
+    <value>west</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
+  <data name="Places_Description_Compass_NorthWest" xml:space="preserve">
+    <value>North-west</value>
+    <comment>Compass word at the start of a description.</comment>
+  </data>
+  <data name="Places_Description_CompassLower_NorthWest" xml:space="preserve">
+    <value>north-west</value>
+    <comment>Compass word inside a description.</comment>
+  </data>
 </root>

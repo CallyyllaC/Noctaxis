@@ -404,7 +404,7 @@ adds what the altitude is made of and, when a lookup named the place, its attrib
 
 | Part | Source |
 | --- | --- |
-| Name, e.g. *Brigg* | `LocationName` — the one name the Planner has for the pin, the same value the old panel's *Location name* field showed, with its fallbacks (*Current location*, a saved location's name, *Near …* from reverse geocoding) |
+| Name, e.g. *Brigg* | `LocationName` — the one name the Planner has for the pin, the same value the old panel's *Location name* field showed, with its fallbacks (*Current location*, a saved location's name, an automatic location description such as *Near the River Ancholme, outside Saxby*) |
 | `53.55619°, -0.48535°` | `PreviewObserver`, so it follows the pin while it is dragged |
 | `8.0 m ASL` | `EffectiveCameraAltitudeMetres`: resolved ground elevation plus camera height, in the measurement profile's height unit |
 

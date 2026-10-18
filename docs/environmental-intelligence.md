@@ -11,7 +11,7 @@ Environmental Intelligence is a shared `Noctaxis.Core.Environment` subsystem. Co
 | WSF 3D v02 | Building fraction and average building height | `ISettlementDataProvider` |
 | VIIRS night lights | Artificial-light radiance | `ILightPollutionProvider` |
 | NOAA SWPC OVATION and planetary Kp | Global aurora intensity and geomagnetic activity | `IAuroraProvider` |
-| OSM / Overpass | Lightweight road and waterway vectors only | existing `IMapFeatureDataService` |
+| OpenFreeMap vector tiles (OpenStreetMap data) | Saved-location land cover, water, roads and waterways | `ISavedLocationLandscapeSource`, `IMapFeatureDataService` |
 
 Terrarium is sampled once on its Web-Mercator grid and remains the sole elevation source. `TerrainSurfaceResolver` combines raw Terrarium values with WorldCover classification before observer and horizon calculations. Negative non-water land remains negative. Positive permanent-water elevation is retained; negative permanent-water bathymetry is resolved to approximate mean sea level while its raw value remains diagnostic. Missing classification retains raw Terrarium rather than fabricating a water surface. WSF height is building-specific context and is not added to terrain elevation.
 
@@ -107,7 +107,7 @@ WSF Building Fraction + mildly bounded Building Height
 
 Synthetic stars are seeded with SHA-256 from WSF dataset/version/cell identity, location ID, viewport and the canonical style identity. They are stable for identical input but do not claim to be literal buildings. The glow compositor uses screen-additive light only; it has no subtractive darkening, road-colour masks, trenches, shadow masks, black cluster outlines or pin cut-out. The immutable default preset is embedded from `Styles/noctaxis_galaxy_style_v1.json`.
 
-Bulk OSM building requests are no longer registered in the production dependency graph. They were expensive, unnecessarily detailed for a density visualisation, and prone to Overpass rate limiting. Obsolete per-location building artefacts are not consumed by the application. OSM road and waterway acquisition, cache compatibility and drawing remain active.
+Bulk OSM building requests are no longer registered in the production dependency graph. They were expensive, unnecessarily detailed for a density visualisation, and prone to rate limiting. Obsolete per-location building artefacts are not consumed by the application. Road and waterway geometry now comes from the OpenFreeMap vector tiles (see `docs/location-preview-rendering.md`); earlier Overpass documents stay readable.
 
 Thumbnail metadata schema 9 records WSF provider/version/status, explicit settlement-rendered state,
 styled-input identity, renderer version, preset version and canonical settings hash. Settlement derivative

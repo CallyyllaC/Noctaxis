@@ -32,65 +32,6 @@ public sealed class LocationAndCatalogueTests
         Assert.Equal(1, handler.Count);
     }
 
-    [Fact]
-    public async Task NominatimReverseGeocoding_PrefersLocalityAndCachesNearbyCoordinates()
-    {
-        const string json = """{"display_name":"High Street, Testville, England","address":{"road":"High Street","village":"Testville","town":"Larger Town","county":"Test County","state":"England","country":"United Kingdom"}}""";
-        var handler = new CountingHandler(json);
-        var provider = new NominatimReverseGeocodingProvider(
-            new HttpClient(handler) { BaseAddress = new Uri("https://nominatim.openstreetmap.org/") },
-            new TestClock(Instant.FromUtc(2024, 1, 1, 0, 0)),
-            NullLogger<NominatimReverseGeocodingProvider>.Instance);
-
-        var first = await provider.ResolveAsync(new GeoCoordinate(51.50000, -0.10000), CancellationToken.None);
-        var nearby = await provider.ResolveAsync(new GeoCoordinate(51.50010, -0.10010), CancellationToken.None);
-
-        Assert.NotNull(first);
-        Assert.Equal("Testville", first.PlaceName);
-        Assert.Equal("England", first.RegionDescription);
-        Assert.Equal(first, nearby);
-        Assert.Equal(1, handler.Count);
-    }
-
-    [Theory]
-    [InlineData(HttpStatusCode.TooManyRequests)]
-    [InlineData(HttpStatusCode.Forbidden)]
-    public async Task NominatimReverseGeocoding_StopsAskingForAnHourAfterARefusal(HttpStatusCode refusal)
-    {
-        // The public Nominatim limits apply to the whole application: a refused client must not keep asking.
-        var clock = new MutableClock(Instant.FromUtc(2024, 1, 1, 0, 0));
-        var handler = new StatusHandler(refusal);
-        var provider = new NominatimReverseGeocodingProvider(
-            new HttpClient(handler) { BaseAddress = new Uri("https://nominatim.openstreetmap.org/") }, clock,
-            NullLogger<NominatimReverseGeocodingProvider>.Instance);
-
-        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(51.5, -0.1), CancellationToken.None));
-        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(52.5, -1.1), CancellationToken.None));
-        Assert.Equal(1, handler.Count);
-
-        clock.Now += NominatimReverseGeocodingProvider.RefusalBackoff;
-        handler.Status = HttpStatusCode.NotFound;
-        Assert.Null(await provider.ResolveAsync(new GeoCoordinate(53.5, -2.1), CancellationToken.None));
-        Assert.Equal(2, handler.Count);
-    }
-
-    private sealed class MutableClock(Instant now) : IClock
-    {
-        public Instant Now { get; set; } = now;
-        public Instant GetCurrentInstant() => Now;
-    }
-
-    private sealed class StatusHandler(HttpStatusCode status) : HttpMessageHandler
-    {
-        public HttpStatusCode Status { get; set; } = status;
-        public int Count { get; private set; }
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-        {
-            Count++;
-            return Task.FromResult(new HttpResponseMessage(Status));
-        }
-    }
-
     [Theory]
     [InlineData("Andromeda", "openngc:NGC0224")]
     [InlineData("M31", "openngc:NGC0224")]

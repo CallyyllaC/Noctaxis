@@ -36,7 +36,7 @@ Top-level navigation is Locations, Planner, and Settings. `LocationsViewModel`
 owns reusable cards and favourite/recent projections without duplicating a
 planning session. A shared location-search control and `LocationSearchViewModel`
 are used by Planner and the Custom-location dialog. `ILocationSearchProvider`
-and `IReverseGeocodingProvider` keep geocoding concerns out of views. Places are
+and `ILocationDescriptionService` keep geocoding concerns out of views. Places are
 chosen by search, on the map or from saved locations; Noctaxis does not use device
 geolocation.
 
@@ -73,6 +73,16 @@ Noctaxis never claims to infer a geographic timezone when it has not done so.
 - `ILocationSearchProvider` is an independent Open-Meteo geocoding client with
   isolated DTO mapping, cancellation, recent-query caching, and GeoNames
   attribution. `ITargetSearchService` searches the bundled OpenNGC data offline.
+- OpenFreeMap vector tiles are the one source of map geography. `VectorTileRepository.OpenFreeMap`
+  (one fetcher, one disk cache, one decoded-tile cache) serves the Planner basemap, saved-location map
+  data (`OpenFreeMapLandscapeSource`, `OpenFreeMapMapFeatureDataService`) and location descriptions
+  (`OpenFreeMapGeographicFeatureSource`). No public Nominatim, Overpass or OpenStreetMap raster
+  endpoint is used.
+- `ILocationDescriptionService` (Core, `Locations/Descriptions`) is the local description engine:
+  provider-neutral feature discovery (`IGeographicFeatureSource`), spatial reasoning
+  (`GeographicSpatialAnalysis`), ranking (`LocationDescriptionEngine`) and localised composition
+  (`LocationDescriptionComposer`). Results stay structured (`LocationDescription`, `FeatureRelationship`);
+  the text is a label and coordinates remain authoritative.
 - `IUserDataStore` performs versioned, atomic per-user JSON persistence and
   quarantines malformed files.
 - The plan image: `MainViewModel.CreateExportPngAsync` captures one immutable
@@ -136,6 +146,11 @@ cannot write `state.json`. There is no multi-writer merging.
 On close, `MainViewModel.ShutdownAsync` cancels planner work, writes the final state
 and closes the save pipeline (`StateSaveScheduler.CloseAsync`); anything that finishes
 later writes nothing.
+
+Logs live in `<data folder>/logs`: one file per session, started again at each change of
+local date. Earlier days are archived in the background as one validated ZIP per day, and
+the ten most recent days are kept. Settings → Diagnostics → Export Logs packages them with a
+`diagnostics.json` (see [logging.md](logging.md)).
 
 Re-downloadable caches live in a separate cache folder (`CacheStorage`):
 `%LOCALAPPDATA%/Noctaxis/Cache` on Windows, `$XDG_CACHE_HOME/Noctaxis` (or

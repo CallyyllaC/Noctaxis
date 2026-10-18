@@ -4,6 +4,7 @@ using System.Text.Json;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
 using Noctaxis.Desktop.Mapping.Preview;
+using Noctaxis.Desktop.Mapping.Vector;
 using Noctaxis.Desktop.Services;
 using Noctaxis.Desktop.Themes;
 using SkiaSharp;
@@ -11,8 +12,8 @@ using SkiaSharp;
 namespace Noctaxis.Desktop.Tests;
 
 /// <summary>
-/// Sea-dominated saved locations. The legacy card artwork rejects frames that are mostly open sea, and
-/// that rejection must never discard the source data the saved-location preview is built from.
+/// Sea-dominated saved locations. The coast comes from the vector water polygons (OpenMapTiles' ocean), so open sea
+/// is classified as water wherever the tiles say so, and the preview builds from the saved data.
 /// </summary>
 public sealed partial class LocationMapThumbnailServiceTests
 {
@@ -52,12 +53,10 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(EnvironmentalDataState.Available, operation.SettlementState);
         Assert.True(operation.IsComplete);
 
-        // 2. The legacy artwork processor (kept for the calibration tool) still rejects the sea-dominated frame, and
-        //    the service composes no artwork at all now that it is retired.
+        // 2. The service composes no artwork at all now that it is retired.
         var directory = Path.Combine(service.Value.StorageDirectory, location.Id.ToString("N"));
-        var source = await File.ReadAllBytesAsync(Path.Combine(directory, "source.png"));
-        Assert.Throws<LegacyArtworkRejectedException>(() => new SavedLocationMapImageProcessor().ProcessSettlement(
-            source, CoastalFeatures(location.Id, viewport).Data, null, viewport, location.Id, out _));
+        var source = await File.ReadAllBytesAsync(Path.Combine(directory, SourceFile));
+        Assert.NotNull(SavedLocationLandscapeCodec.TryDecode(source));
         Assert.False(operation.ThumbnailSucceeded);
         Assert.True(operation.LegacyArtworkSkipped);
         Assert.True(result.Metadata.LegacyArtworkSkipped);
@@ -121,7 +120,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             CancellationToken.None);
 
         Assert.Null(result);
-        Assert.True(tiles.RequestCount >= 3);
+        Assert.True(tiles.RequestCount >= 1);
         var directory = Path.Combine(service.Value.StorageDirectory, location.Id.ToString("N"));
         Assert.True(!Directory.Exists(directory) || Directory.GetFiles(directory).Length == 0);
     }
@@ -197,7 +196,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             Assert.NotNull(detailed);
             Assert.True(detailed.Metadata.LegacyArtworkSkipped);
             // Artwork left by an earlier version, which the next commit must not pair with new data.
-            File.Copy(Path.Combine(Path.GetDirectoryName(detailed.ImagePath)!, "source.png"), detailed.ImagePath);
+            File.Copy(Path.Combine(Path.GetDirectoryName(detailed.ImagePath)!, SourceFile), detailed.ImagePath);
         }
 
         using var coastal = CreateService(files, new CoastalTileHandler(viewport.WorldPixelCentreX - CoastOffsetPixels),
@@ -223,44 +222,33 @@ public sealed partial class LocationMapThumbnailServiceTests
         var coast = viewport.Width / 2 - CoastOffsetPixels;
         var start = viewport.Unproject(40, 60);
         var end = viewport.Unproject(coast - 30, viewport.Height - 60);
-        var data = new MapFeatureDataDocument(OverpassMapFeatureDataService.FeatureSchemaVersion, locationId,
-            new MapFeatureSourceMetadata("openstreetmap-overpass", "OpenStreetMap",
-                "© OpenStreetMap contributors", "https://www.openstreetmap.org/copyright",
-                "Open Database License (ODbL)", "https://opendatacommons.org/licenses/odbl/",
-                "test-overpass", OverpassMapFeatureDataService.FeatureQueryVersion, DateTimeOffset.UnixEpoch,
-                viewport.Bounds),
-            [new MapRoadFeature(1, "way", MapRoadClassification.BRoad,
+        var data = new MapFeatureDataDocument(OpenFreeMapMapFeatureDataService.FeatureSchemaVersion, locationId,
+            OpenFreeMapMapFeatureDataService.Source(viewport.Bounds, DateTimeOffset.UnixEpoch),
+            [new MapRoadFeature(1, "vector-tile", MapRoadClassification.BRoad,
                 [new(start.Latitude, start.Longitude), new(end.Latitude, end.Longitude)],
-                "secondary", "B1339", null, null, null, null)], []);
+                "secondary", null, null, null, null, null)], []);
         return new(data, new MapFeatureFetchOutcome(MapFeatureFetchStatus.Complete, 1, 0, null, null, 200,
             false, false, false, 1, DateTimeOffset.UtcNow, false));
     }
 
-    /// <summary>OSM-style tiles for a north–south coastline: detailed land to the west, open sea to the east.</summary>
-    private sealed class CoastalTileHandler(double coastWorldX) : HttpMessageHandler
+    /// <summary>
+    /// Vector tiles for a north–south coastline: the land tile's detail to the west, and OpenMapTiles' ocean polygon
+    /// over everything east of the coast (with the usual tile buffer).
+    /// </summary>
+    private sealed class CoastalTileHandler(double coastWorldX) : IVectorTileFetcher
     {
-        private static readonly SKColor Sea = SKColor.Parse("#AAD3DF");
-        private readonly byte[] _land = CreateTile();
+        public int RequestCount;
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public Task<byte[]?> FetchAsync(int zoom, int column, int row, CancellationToken cancellationToken)
         {
-            // .../{z}/{x}/{y}.png
-            var segments = request.RequestUri!.AbsolutePath.Trim('/').Split('/');
-            var tileX = int.Parse(segments[^2]);
-            using var land = SKBitmap.Decode(_land);
-            using var tile = new SKBitmap(256, 256);
-            using (var canvas = new SKCanvas(tile))
-            {
-                canvas.Clear(Sea);
-                var landWidth = (float)Math.Clamp(coastWorldX - tileX * 256d, 0, 256);
-                canvas.Save();
-                canvas.ClipRect(SKRect.Create(landWidth, 256));
-                canvas.DrawBitmap(land, 0, 0);
-                canvas.Restore();
-            }
-            using var image = SKImage.FromBitmap(tile);
-            using var png = image.Encode(SKEncodedImageFormat.Png, 100);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(png.ToArray()) });
+            Interlocked.Increment(ref RequestCount);
+            var coast = (int)Math.Round(Math.Clamp((coastWorldX - column * 256d) / 256 * 4096, -64, 4160));
+            var tile = new VectorTileTestBuilder();
+            tile.Layer("landcover").Rectangle(-64, -64, Math.Max(-64, coast), 4160, ("class", "grass"));
+            tile.Layer("landuse").Rectangle(Math.Max(-64, coast - 1400), 1500, Math.Max(-64, coast - 300), 2600,
+                ("class", "residential"));
+            if (coast < 4160) tile.Layer("water").Rectangle(coast, -64, 4160, 4160, ("class", "ocean"));
+            return Task.FromResult<byte[]?>(tile.Build());
         }
     }
 

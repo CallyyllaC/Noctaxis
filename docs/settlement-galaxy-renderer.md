@@ -12,7 +12,8 @@ bounded, mild influence on settlement mass and deterministic star selection. Pas
 brightness itself uses the selected fixed class gains. WSF cell coordinates plus
 dataset/version form stable object identities; stars are illustrative settlement
 samples and are not literal buildings. Bulk OSM building requests are not restored.
-OSM/Overpass remains the source for road and waterway geometry.
+Road and waterway geometry comes from OpenFreeMap vector tiles (OpenStreetMap data); the calibration
+harness still reads earlier `source.png`/Overpass inputs.
 
 The behavioral pass order follows the authoritative Python bundle: hierarchy,
 luminance-preserving colour zoning, luminosity, density-peak hero core, cloud

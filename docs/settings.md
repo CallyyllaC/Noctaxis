@@ -16,7 +16,11 @@ Revert. The Settings page has no copy of the settings of its own. Every control 
 | Celestial objects | Configured objects: visibility, order and primary | Search/add/remove, Restore default objects |
 | Data | Maximum terrain cache size | Clear terrain cache, Install/remove the light-pollution atlas, Repair saved map images |
 | Supporter | — | Licence status, add/replace licence, Ko-fi |
-| Diagnostics | Terrain diagnostics | Copy terrain debug snapshot |
+| Diagnostics | Terrain diagnostics (only with `NOCTAXIS_DIAGNOSTICS=1`) | Export Logs; Copy terrain debug snapshot (only with `NOCTAXIS_DIAGNOSTICS=1`) |
+
+Diagnostics is shown to everyone for **Export Logs**, which saves the application logs and basic diagnostic
+information to a ZIP the user chooses (see [logging.md](logging.md)). The terrain developer tools beneath it appear only
+when Noctaxis starts with `NOCTAXIS_DIAGNOSTICS=1`.
 
 Terrain relief and light-pollution visibility and opacity are Planner → Layers controls. They commit
 through that panel and are not duplicated in Settings. Terrain relief is shown by default at 60%; light
@@ -30,7 +34,8 @@ The categories are a vertical rail on the left, with the selected category on th
 
 - **Rail:** it scrolls on its own and takes at most about a third of the width. Long names wrap within
   it instead of clipping or pushing the content aside.
-- **Content:** each category's content scrolls independently of the rail.
+- **Content:** each category's content scrolls independently of the rail. Its column, left-aligned, uses up
+  to 90% of the width beside the rail, so text wraps only when the window is narrow.
 - **Selection:** the selected category shows a pipe marker, a semibold label and a selection fill, so it
   never relies on colour alone.
 - **Keyboard:** Up and Down change category; Tab moves into the content.

@@ -347,22 +347,25 @@ public sealed partial class MainViewModelTests
     // ---- Diagnostics --------------------------------------------------------------------------------------
 
     /// <summary>
-    /// The terrain diagnostics are a developer tool: absent from Settings and doing nothing in a normal run, even
-    /// with the old preference saved on, and back, with everything beneath them, in a run started for them.
+    /// The terrain diagnostics are a developer tool: absent from Settings → Diagnostics (which everyone sees, for
+    /// Export Logs) and doing nothing in a normal run, even with the old preference saved on, and back, with
+    /// everything beneath them, in a run started for them.
     /// </summary>
     [AvaloniaFact]
-    public async Task DiagnosticsAreForDevelopersOnly()
+    public async Task TerrainDiagnosticsAreForDevelopersOnly()
     {
         var (vm, window, categories) = await OpenSettingsAsync("builtin.noctaxis", 1, 1440);
         try
         {
             var tab = window.FindControl<TabItem>("SettingsDiagnosticsTab")!;
-            Assert.False(tab.IsVisible);
+            var developer = window.FindControl<StackPanel>("DeveloperDiagnostics")!;
+            Assert.True(tab.IsVisible);
+            Assert.False(developer.IsVisible);
             vm.SettingsTerrainDebugOverlay = true;
             Assert.False(vm.ShowTerrainDebugOverlay);
             vm.IsDeveloperDiagnosticsEnabled = true;
             Dispatcher.UIThread.RunJobs();
-            Assert.True(tab.IsVisible);
+            Assert.True(developer.IsVisible);
             Assert.True(vm.ShowTerrainDebugOverlay);
             Assert.DoesNotContain("minimap", Noctaxis.Core.Localisation.Strings.Get("Settings_Diagnostics_RequiresTerrainCalculations_Description"));
             Assert.DoesNotContain("minimap", Noctaxis.Core.Localisation.Strings.Get("Settings_Diagnostics_BearingDistanceSampled_Description"));

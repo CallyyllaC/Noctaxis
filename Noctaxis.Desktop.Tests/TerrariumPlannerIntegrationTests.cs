@@ -45,7 +45,7 @@ public sealed class TerrariumPlannerIntegrationTests
             collection.AddSingleton<ISettlementDataProvider>(settlement);
             collection.AddSingleton<IWeatherProvider>(weather);
             collection.AddSingleton<IClock>(clock);
-            collection.AddSingleton<IReverseGeocodingProvider, MissingReverseGeocoder>();
+            collection.AddSingleton<Noctaxis.Core.Locations.Descriptions.ILocationDescriptionService, MissingDescriptions>();
         });
         var vm = services.GetRequiredService<MainViewModel>();
         await vm.InitializeAsync();
@@ -182,7 +182,7 @@ public sealed class TerrariumPlannerIntegrationTests
             collection.AddSingleton<ILandCoverProvider, FixtureLandCover>();
             collection.AddSingleton<ISettlementDataProvider, MissingSettlement>();
             collection.AddSingleton<IWeatherProvider, OfflineWeatherProvider>();
-            collection.AddSingleton<IReverseGeocodingProvider, MissingReverseGeocoder>();
+            collection.AddSingleton<Noctaxis.Core.Locations.Descriptions.ILocationDescriptionService, MissingDescriptions>();
         });
         Assert.IsType<TerrariumTerrainProvider>(services.GetRequiredService<ITerrainElevationProvider>());
 
@@ -277,10 +277,10 @@ public sealed class TerrariumPlannerIntegrationTests
         }
     }
 
-    private sealed class MissingReverseGeocoder : IReverseGeocodingProvider
+    private sealed class MissingDescriptions : Noctaxis.Core.Locations.Descriptions.ILocationDescriptionService
     {
-        public Task<ReverseGeocodingResult?> ResolveAsync(GeoCoordinate coordinate,
-            CancellationToken token) => Task.FromResult<ReverseGeocodingResult?>(null);
+        public Task<Noctaxis.Core.Locations.Descriptions.LocationDescription?> DescribeAsync(GeoCoordinate coordinate,
+            CancellationToken token) => Task.FromResult<Noctaxis.Core.Locations.Descriptions.LocationDescription?>(null);
     }
 
     private sealed class TerrariumFixtureCache : IEnvironmentalTileCache, IUserDataPathProvider, IDisposable

@@ -89,10 +89,6 @@
     <value>Export failed: {0}</value>
     <comment>{0} is the error message.</comment>
   </data>
-  <data name="Planner_Location_Near_Format" xml:space="preserve">
-    <value>Near {0}</value>
-    <comment>The planning location's name from a place lookup. {0} is the nearby place.</comment>
-  </data>
   <data name="Planner_Status_PositionFailed" xml:space="preserve">
     <value>The position could not be calculated. The details are in the Noctaxis log.</value>
   </data>

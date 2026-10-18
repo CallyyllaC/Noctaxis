@@ -351,6 +351,32 @@
   <data name="Settings_Diagnostics_EnableTerrainDiagnostics_Option" xml:space="preserve">
     <value>Enable terrain diagnostics</value>
   </data>
+  <data name="Settings_Diagnostics_ExportLogs_Button" xml:space="preserve">
+    <value>Export Logs</value>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_Description" xml:space="preserve">
+    <value>Export application logs to help investigate crashes, errors and unexpected behaviour.</value>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_Failed_Format" xml:space="preserve">
+    <value>Logs could not be exported: {0}</value>
+    <comment>{0} is the error message.</comment>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_InProgress" xml:space="preserve">
+    <value>Exporting logs…</value>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_Note" xml:space="preserve">
+    <value>Exports available application logs and basic diagnostic information to a ZIP file. The archive may contain file paths or location information. Review it before sharing.</value>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_SaveDialog_Title" xml:space="preserve">
+    <value>Export Logs</value>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_Succeeded_Format" xml:space="preserve">
+    <value>Logs exported to {0}.</value>
+    <comment>{0} is the name of the ZIP file the user chose.</comment>
+  </data>
+  <data name="Settings_Diagnostics_ExportLogs_ZipFileType" xml:space="preserve">
+    <value>ZIP archive</value>
+  </data>
   <data name="Settings_Diagnostics_RequiresTerrainCalculations_Description" xml:space="preserve">
     <value>Requires terrain calculations (Planner map).</value>
   </data>

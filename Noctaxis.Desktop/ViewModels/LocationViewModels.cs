@@ -509,8 +509,8 @@ public partial class LocationsViewModel : ObservableObject
     {
         var values = Saved.SelectMany(card => AttributionEntries(card.ThumbnailMetadata))
             .Where(entry => !string.IsNullOrWhiteSpace(entry.Text))
-            // By the credit itself: the map raster and the road/water features are both OpenStreetMap and
-            // carry the same wording, and the same sentence twice credits nobody further.
+            // By the credit itself: the landscape and the road/water features come from the same OpenFreeMap
+            // tiles and carry the same wording, and the same sentence twice credits nobody further.
             .DistinctBy(entry => entry.Text.Trim(), StringComparer.OrdinalIgnoreCase)
             .Select(entry => entry.Text)
             .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase);
@@ -526,7 +526,7 @@ public partial class LocationsViewModel : ObservableObject
         if (!string.IsNullOrWhiteSpace(metadata.AttributionText))
             yield return (metadata.ProviderId, metadata.AttributionUrl, metadata.AttributionText);
         if (!string.IsNullOrWhiteSpace(metadata.FeatureAttributionText))
-            yield return (metadata.FeatureProviderId ?? "openstreetmap-overpass",
+            yield return (metadata.FeatureProviderId ?? "map-features",
                 metadata.FeatureAttributionUrl, metadata.FeatureAttributionText);
         if (string.Equals(metadata.SettlementProviderId, WsfSettlementDataProvider.SourceId,
                 StringComparison.OrdinalIgnoreCase))

@@ -35,8 +35,7 @@ These sources are accessed or downloaded while the application runs. Their data 
 
 | Source | Used for | Attribution / terms |
 | --- | --- | --- |
-| [OpenFreeMap](https://openfreemap.org/), OpenMapTiles and [OpenStreetMap](https://www.openstreetmap.org/copyright) | Basemap | © OpenMapTiles; © OpenStreetMap contributors; provider terms |
-| [OpenStreetMap raster tiles](https://operations.osmfoundation.org/policies/tiles/), [Overpass](https://dev.overpass-api.de/overpass-doc/en/preface/commons.html), [Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | Location previews, roads, waterways and geocoding | © OpenStreetMap contributors; ODbL and endpoint policies |
+| [OpenFreeMap](https://openfreemap.org/), OpenMapTiles and [OpenStreetMap](https://www.openstreetmap.org/copyright) | Basemap, saved-location previews (land cover, water, roads, waterways) and place descriptions | © OpenMapTiles; © OpenStreetMap contributors (ODbL); [OpenFreeMap terms](https://openfreemap.org/tos/) |
 | [Open-Meteo](https://open-meteo.com/en/licence) and [GeoNames](https://www.geonames.org/export/) | Forecasts and location search | Provider attribution and data terms; Open-Meteo's free API has separate usage restrictions |
 | [NOAA Space Weather Prediction Center](https://www.swpc.noaa.gov/) | Aurora and planetary K-index | NOAA/SWPC attribution and applicable terms |
 | [Mapzen/Tilezen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Elevation and terrain horizons | Regional source acknowledgements |

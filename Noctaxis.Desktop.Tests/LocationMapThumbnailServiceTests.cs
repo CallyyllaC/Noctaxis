@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Noctaxis.Core.Domain;
 using Noctaxis.Core.Environment;
 using Noctaxis.Core.Persistence;
+using Noctaxis.Desktop.Mapping.Vector;
 using Noctaxis.Desktop.Services;
 using Noctaxis.Desktop.ViewModels;
 using SkiaSharp;
@@ -43,7 +44,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         // The legacy card artwork is retired: nothing writes thumbnail.png any more.
         Assert.False(File.Exists(result.ImagePath));
         var assetDirectory = Path.GetDirectoryName(result.ImagePath)!;
-        var sourcePath = Path.Combine(assetDirectory, "source.png");
+        var sourcePath = Path.Combine(assetDirectory, SourceFile);
         var metadataPath = Path.Combine(assetDirectory, "metadata.json");
         Assert.Equal("thumbnail.png", Path.GetFileName(result.ImagePath));
         Assert.True(File.Exists(sourcePath));
@@ -55,10 +56,16 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(location.Coordinate.Longitude, metadata.SourceCentreLongitude);
         Assert.Equal(13, LocationMapThumbnailService.TileZoom);
         Assert.Equal(13, metadata.SourceZoom);
-        Assert.Equal("openstreetmap-standard", metadata.ProviderId);
-        Assert.Equal("OpenStreetMap", metadata.ProviderName);
-        Assert.Equal("standard", metadata.MapStyleId);
+        // The source is the OpenFreeMap landscape: no OpenStreetMap raster tile is requested any more.
+        Assert.Equal("openfreemap", metadata.ProviderId);
+        Assert.Equal("OpenFreeMap", metadata.ProviderName);
+        Assert.Equal("openmaptiles-landscape", metadata.MapStyleId);
         Assert.Contains("OpenStreetMap", metadata.AttributionText);
+        Assert.Contains("OpenMapTiles", metadata.AttributionText);
+        Assert.True(metadata.HasVectorLandscape);
+        Assert.Equal(10, metadata.SchemaVersion);
+        Assert.Equal(handler.RequestCount, metadata.SourceTileCount);
+        Assert.InRange(handler.RequestCount, 1, MapFrameVectorTiles.MaximumTiles);
         Assert.Equal(15, SavedLocationMapImageProcessor.StyleVersion);
         Assert.Equal(SavedLocationMapImageProcessor.StyleVersion,
             LocationMapThumbnailService.ThumbnailStyleVersion);
@@ -72,14 +79,18 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Null(metadata.ThumbnailContentHash);
         Assert.True(metadata.LegacyArtworkSkipped);
         Assert.Equal(LocationMapThumbnailService.LegacyArtworkRetiredReason, metadata.ThumbnailSkippedReason);
-        Assert.Equal("source.png", metadata.SourceFileName);
+        Assert.Equal(SourceFile, metadata.SourceFileName);
         Assert.Equal("thumbnail.png", metadata.ImageFileName);
         Assert.DoesNotContain("key=", await File.ReadAllTextAsync(metadataPath), StringComparison.OrdinalIgnoreCase);
 
-        using var source = SKBitmap.Decode(sourcePath);
-        Assert.Equal(LocationMapThumbnailService.SourceWidth, source.Width);
-        Assert.Equal(LocationMapThumbnailService.SourceHeight, source.Height);
-        Assert.Equal(255, source.GetPixel(source.Width / 2, source.Height / 2).Alpha);
+        var landscape = SavedLocationLandscapeCodec.TryDecode(await File.ReadAllBytesAsync(sourcePath));
+        Assert.NotNull(landscape);
+        Assert.Equal(LocationMapThumbnailService.SourceWidth / 2, landscape.Width);
+        Assert.Equal(LocationMapThumbnailService.SourceHeight / 2, landscape.Height);
+        Assert.Contains(landscape.Water, v => v > 200);
+        Assert.Contains(landscape.Vegetation, v => v > 200);
+        Assert.Contains(landscape.BuiltUp, v => v > 200);
+        Assert.False(File.Exists(Path.Combine(assetDirectory, LocationMapThumbnailService.LegacyRasterSourceFileName)));
         // What the card shows is built from the persisted source data alone.
         var scene = await Noctaxis.Desktop.Mapping.Preview.LocationPreviewSceneLoader.LoadAsync(assetDirectory, metadata,
             location.Coordinate, CancellationToken.None);
@@ -90,13 +101,13 @@ public sealed partial class LocationMapThumbnailServiceTests
     [Fact]
     public async Task AcquireMissing_ReusesHeldMapDataAndAcquiresOnlyWhatIsMissing()
     {
-        // OSM tile policy: bulk regeneration must not pre-emptively re-download raster tiles already held.
+        // OpenFreeMap terms: bulk regeneration must not re-download map data already held.
         using var files = new TestDirectory();
         var held = Location(Guid.NewGuid(), 53.6101, -0.4325, "Held");
         var missing = Location(Guid.NewGuid(), 53.6020, -0.4400, "Missing");
         using (var first = CreateService(files, new TileHandler(CreateTile())))
             Assert.NotNull(await first.Value.GetThumbnailAsync(held, SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None));
-        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), "source.png"));
+        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), SourceFile));
 
         var tiles = new TileHandler(CreateTile());
         using var bulk = CreateService(files, tiles);
@@ -104,7 +115,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.NotNull(reused);
         Assert.False(reused.WasGenerated);
         Assert.Equal(0, tiles.RequestCount);
-        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), "source.png")));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(files.Path, "SavedLocationMaps", held.Id.ToString("N"), SourceFile)));
 
         var acquired = await bulk.Value.GetThumbnailAsync(missing, SavedLocationMapRefreshMode.AcquireMissing, CancellationToken.None);
         Assert.NotNull(acquired);
@@ -191,7 +202,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         {
             originalPath = (await first.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None))!.ImagePath;
-            originalSource = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "source.png"));
+            originalSource = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, SourceFile));
             originalMetadata = await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "metadata.json"));
         }
 
@@ -202,7 +213,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.False(result.RefreshSucceeded);
         Assert.True(result.IsPreviousAsset);
         Assert.Equal(originalPath, result.ImagePath);
-        Assert.Equal(originalSource, await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "source.png")));
+        Assert.Equal(originalSource, await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, SourceFile)));
         Assert.Equal(originalMetadata, await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(originalPath)!, "metadata.json")));
     }
 
@@ -281,10 +292,11 @@ public sealed partial class LocationMapThumbnailServiceTests
     }
 
     [Fact]
-    public async Task InvalidSource_IsRetriedAndNeverCommitted()
+    public async Task TilesWithoutData_AreNeverCommittedAsALandscape()
     {
+        // Tiles that report no data say nothing about the ground: a blank landscape would draw land that may be sea.
         using var files = new TestDirectory();
-        var handler = new TileHandler(CreateUniformImage(256, 256, SKColors.Black));
+        var handler = new TileHandler([]);
         using var service = CreateService(files, handler);
         var location = Location(Guid.NewGuid(), 52.1, -1.4, "Blank tiles");
 
@@ -292,9 +304,9 @@ public sealed partial class LocationMapThumbnailServiceTests
             SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None);
 
         Assert.Null(result);
-        Assert.True(handler.RequestCount >= 3);
+        Assert.True(handler.RequestCount >= 1);
         var directory = Path.Combine(service.Value.StorageDirectory, location.Id.ToString("N"));
-        Assert.False(File.Exists(Path.Combine(directory, "source.png")));
+        Assert.False(File.Exists(Path.Combine(directory, SourceFile)));
         Assert.False(File.Exists(Path.Combine(directory, "thumbnail.png")));
         Assert.False(File.Exists(Path.Combine(directory, "metadata.json")));
     }
@@ -312,7 +324,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             var generated = await first.Value.GetThumbnailAsync(location,
                 SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None);
             Assert.NotNull(generated);
-            sourcePath = Path.Combine(Path.GetDirectoryName(generated.ImagePath)!, "source.png");
+            sourcePath = Path.Combine(Path.GetDirectoryName(generated.ImagePath)!, SourceFile);
             originalSource = await File.ReadAllBytesAsync(sourcePath);
             originalMetadata = generated.Metadata;
         }
@@ -354,7 +366,7 @@ public sealed partial class LocationMapThumbnailServiceTests
                 SavedLocationMapRefreshMode.RefreshSource, CancellationToken.None);
             Assert.NotNull(generated);
             directory = Path.GetDirectoryName(generated.ImagePath)!;
-            var sourcePath = Path.Combine(directory, "source.png");
+            var sourcePath = Path.Combine(directory, SourceFile);
             var metadataPath = Path.Combine(directory, "metadata.json");
             sourceBytes = await File.ReadAllBytesAsync(sourcePath);
             metadataBytes = await File.ReadAllBytesAsync(metadataPath);
@@ -367,7 +379,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         var result = await second.Value.GetThumbnailAsync(location,
             SavedLocationMapRefreshMode.UseCache, CancellationToken.None);
 
-        var persistedSource = Path.Combine(directory, "source.png");
+        var persistedSource = Path.Combine(directory, SourceFile);
         var persistedMetadata = Path.Combine(directory, "metadata.json");
         // Retired artwork is not missing: the validated source data is the complete cache, reused as it is.
         Assert.NotNull(result);
@@ -398,9 +410,9 @@ public sealed partial class LocationMapThumbnailServiceTests
         var featurePath = Path.Combine(directory, "features.json");
         Assert.True(File.Exists(featurePath));
         Assert.Equal("features.json", result.Metadata.FeatureFileName);
-        Assert.Equal(OverpassMapFeatureDataService.FeatureSchemaVersion, result.Metadata.FeatureSchemaVersion);
-        Assert.Equal(OverpassMapFeatureDataService.FeatureQueryVersion, result.Metadata.FeatureQueryVersion);
-        Assert.Equal("openstreetmap-overpass", result.Metadata.FeatureProviderId);
+        Assert.Equal(OpenFreeMapMapFeatureDataService.FeatureSchemaVersion, result.Metadata.FeatureSchemaVersion);
+        Assert.Equal(OpenFreeMapMapFeatureDataService.FeatureQueryVersion, result.Metadata.FeatureQueryVersion);
+        Assert.Equal(OpenFreeMapMapFeatureDataService.ProviderId, result.Metadata.FeatureProviderId);
         Assert.Contains("OpenStreetMap", result.Metadata.FeatureAttributionText);
         Assert.Equal(MapFeatureFetchStatus.Complete.ToString(), result.Metadata.FeatureFetchStatus);
         Assert.Equal(1, result.Metadata.FeatureRoadCount);
@@ -522,7 +534,7 @@ public sealed partial class LocationMapThumbnailServiceTests
                 CancellationToken.None);
 
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var sourcePath = Path.Combine(directory, "source.png");
+        var sourcePath = Path.Combine(directory, SourceFile);
         var sourceBefore = await File.ReadAllBytesAsync(sourcePath);
         var sourceTime = File.GetLastWriteTimeUtc(sourcePath);
         var tiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
@@ -557,7 +569,7 @@ public sealed partial class LocationMapThumbnailServiceTests
 
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
         var featurePath = Path.Combine(directory, "features.json");
-        var sourcePath = Path.Combine(directory, "source.png");
+        var sourcePath = Path.Combine(directory, SourceFile);
         var featuresBefore = await File.ReadAllBytesAsync(featurePath);
         var sourceBefore = await File.ReadAllBytesAsync(sourcePath);
         var failure = new MapFeatureFetchOutcome(MapFeatureFetchStatus.Unavailable, 0, 0,
@@ -594,7 +606,7 @@ public sealed partial class LocationMapThumbnailServiceTests
             await initial.Value.GetThumbnailAsync(location, SavedLocationMapRefreshMode.RefreshSource,
                 CancellationToken.None);
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var sourcePath = Path.Combine(directory, "source.png");
+        var sourcePath = Path.Combine(directory, SourceFile);
         var sourceBefore = await File.ReadAllBytesAsync(sourcePath);
         var retryFailure = MapFeatureFetchOutcome.Failure("parse_failed", "the feature response could not be parsed",
             parseFailed: true);
@@ -626,7 +638,7 @@ public sealed partial class LocationMapThumbnailServiceTests
                 SavedLocationMapRefreshMode.RefreshSource, default));
 
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
-        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(directory, "source.png"));
+        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(directory, SourceFile));
         var featuresBefore = await File.ReadAllBytesAsync(Path.Combine(directory, "features.json"));
         var offlineTiles = new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable);
         var core = new FakeFeatureService((_, _) => throw new InvalidOperationException("Core fetch is forbidden."));
@@ -641,7 +653,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(0, offlineTiles.RequestCount);
         Assert.Equal(0, core.RequestCount);
         Assert.Equal(1, settlement.RequestCount);
-        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "source.png")));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, SourceFile)));
         Assert.Equal(featuresBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "features.json")));
         Assert.Equal("test-wsf", result.Metadata.SettlementProviderId);
     }
@@ -659,7 +671,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         var directory = Path.Combine(files.Path, "SavedLocationMaps", location.Id.ToString("N"));
         var settlementPath = Path.Combine(directory, "settlement-field.bin.gz");
         var settlementBefore = await File.ReadAllBytesAsync(settlementPath);
-        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(directory, "source.png"));
+        var sourceBefore = await File.ReadAllBytesAsync(Path.Combine(directory, SourceFile));
         var failed = new FakeSettlementService(available: false);
         using var refresh = CreateService(files, new TileHandler(CreateTile(), HttpStatusCode.ServiceUnavailable),
             featureData: new FakeFeatureService((_, _) => throw new InvalidOperationException()),
@@ -673,7 +685,7 @@ public sealed partial class LocationMapThumbnailServiceTests
         Assert.Equal(EnvironmentalDataState.Cached.ToString(), result.Metadata.SettlementStatus);
         // The previous settlement field and source raster, which the preview is built from, are kept unchanged.
         Assert.Equal(settlementBefore, await File.ReadAllBytesAsync(settlementPath));
-        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, "source.png")));
+        Assert.Equal(sourceBefore, await File.ReadAllBytesAsync(Path.Combine(directory, SourceFile)));
     }
 
     [Fact]
@@ -887,31 +899,30 @@ public sealed partial class LocationMapThumbnailServiceTests
     private static SavedLocation Location(Guid id, double latitude, double longitude, string name) =>
         new(id, name, new GeoCoordinate(latitude, longitude), "UTC");
 
-    private static ServiceLease CreateService(TestDirectory files, HttpMessageHandler handler,
-        IMapTileSourceProvider? source = null, IMapFeatureDataService? featureData = null,
+    /// <summary>The saved source file: the vector landscape (an OpenStreetMap raster capture before schema 10).</summary>
+    private const string SourceFile = SavedLocationLandscapeCodec.FileName;
+
+    private static ServiceLease CreateService(TestDirectory files, IVectorTileFetcher handler,
+        TestSourceProvider? source = null, IMapFeatureDataService? featureData = null,
         ISettlementDataProvider? settlementData = null, SavedLocationMapImageProcessor? processor = null)
     {
-        var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
-        var service = new LocationMapThumbnailService(client, NullLogger<LocationMapThumbnailService>.Instance,
-            new TestPathProvider(files.Path), source ?? new DefaultMapTileSourceProvider(),
+        var repository = new VectorTileRepository(handler);
+        var service = new LocationMapThumbnailService(NullLogger<LocationMapThumbnailService>.Instance,
+            new TestPathProvider(files.Path), new TestLandscapeSource(new OpenFreeMapLandscapeSource(repository), source),
             processor ?? new SavedLocationMapImageProcessor(), featureData,
             settlementData ?? new FakeSettlementService(available: true));
-        return new ServiceLease(service, client);
+        return new ServiceLease(service, repository);
     }
 
     private static MapFeatureDataDocument CreateFeatures(Guid locationId, WebMercatorViewport viewport)
     {
         var start = viewport.Unproject(80, 100);
         var end = viewport.Unproject(viewport.Width - 80, 115);
-        return new MapFeatureDataDocument(OverpassMapFeatureDataService.FeatureSchemaVersion, locationId,
-            new MapFeatureSourceMetadata("openstreetmap-overpass", "OpenStreetMap",
-                "© OpenStreetMap contributors", "https://www.openstreetmap.org/copyright",
-                "Open Database License (ODbL)", "https://opendatacommons.org/licenses/odbl/",
-                "test-overpass", OverpassMapFeatureDataService.FeatureQueryVersion, DateTimeOffset.UnixEpoch,
-                viewport.Bounds),
-            [new MapRoadFeature(1, "way", MapRoadClassification.ARoad,
+        return new MapFeatureDataDocument(OpenFreeMapMapFeatureDataService.FeatureSchemaVersion, locationId,
+            OpenFreeMapMapFeatureDataService.Source(viewport.Bounds, DateTimeOffset.UnixEpoch),
+            [new MapRoadFeature(1, "vector-tile", MapRoadClassification.ARoad,
                 [new(start.Latitude, start.Longitude), new(end.Latitude, end.Longitude)],
-                "primary", "A15", null, null, null, null)], []);
+                "primary", null, null, null, null, null)], []);
     }
 
     private static MapFeatureFetchResult CompleteFeatures(Guid locationId, WebMercatorViewport viewport) =>
@@ -919,7 +930,26 @@ public sealed partial class LocationMapThumbnailServiceTests
             MapFeatureFetchStatus.Complete, 1, 0, null, null, 200, false, false,
             false, 1, DateTimeOffset.UtcNow, false));
 
+    /// <summary>
+    /// A synthetic OpenMapTiles-schema vector tile, served for every tile of a frame: a lake, woodland and grass,
+    /// a residential area with buildings, a primary road, a minor road and a named river.
+    /// </summary>
     private static byte[] CreateTile()
+    {
+        var tile = new VectorTileTestBuilder();
+        tile.Layer("water").Rectangle(-64, -64, 1100, 1300, ("class", "lake"));
+        tile.Layer("landcover").Rectangle(2600, 2500, 4160, 4160, ("class", "wood"))
+            .Rectangle(300, 2600, 1500, 3800, ("class", "grass"));
+        tile.Layer("landuse").Rectangle(1500, 200, 2700, 1500, ("class", "residential"));
+        tile.Layer("building").Rectangle(1800, 500, 2100, 800).Rectangle(2200, 900, 2500, 1200);
+        tile.Layer("transportation").Line([(-64, 3600), (4160, 700)], ("class", "primary"))
+            .Line([(0, 2000), (4096, 2100)], ("class", "minor"));
+        tile.Layer("waterway").Line([(1200, -64), (1600, 2000), (900, 4160)], ("class", "river"), ("name", "River Test"));
+        return tile.Build();
+    }
+
+    /// <summary>A detailed raster tile for the raster processor, which the galaxy calibration tool still uses.</summary>
+    private static byte[] CreateRasterTile()
     {
         using var bitmap = new SKBitmap(256, 256);
         using var canvas = new SKCanvas(bitmap);
@@ -930,22 +960,13 @@ public sealed partial class LocationMapThumbnailServiceTests
                 [0, .52f, 1], SKShaderTileMode.Clamp)
         })
             canvas.DrawRect(SKRect.Create(256, 256), terrain);
-        using var minorRoad = new SKPaint
-        {
-            Color = SKColor.Parse("#A99F91"), StrokeWidth = 2.5f, IsAntialias = true
-        };
+        using var minorRoad = new SKPaint { Color = SKColor.Parse("#A99F91"), StrokeWidth = 2.5f, IsAntialias = true };
         for (var offset = -160; offset < 320; offset += 34)
             canvas.DrawLine(offset, 256, offset + 180, 0, minorRoad);
         using var road = new SKPaint { Color = SKColor.Parse("#6E7E90"), StrokeWidth = 12, IsAntialias = true };
         canvas.DrawLine(0, 210, 256, 40, road);
         using var river = new SKPaint { Color = SKColor.Parse("#7195B0"), StrokeWidth = 18, IsAntialias = true };
         canvas.DrawArc(new SKRect(30, 20, 230, 250), 35, 205, false, river);
-        using var boundary = new SKPaint
-        {
-            Color = SKColor.Parse("#8B9B82"), StrokeWidth = 1.5f, IsAntialias = true,
-            PathEffect = SKPathEffect.CreateDash([5, 4], 0)
-        };
-        canvas.DrawCircle(62, 78, 45, boundary);
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Png, 100);
         return data.ToArray();
@@ -962,7 +983,7 @@ public sealed partial class LocationMapThumbnailServiceTests
 
     private static byte[] CreateDetailedSource()
     {
-        using var tile = SKBitmap.Decode(CreateTile());
+        using var tile = SKBitmap.Decode(CreateRasterTile());
         using var bitmap = new SKBitmap(LocationMapThumbnailService.SourceWidth,
             LocationMapThumbnailService.SourceHeight);
         using var canvas = new SKCanvas(bitmap);
@@ -1012,17 +1033,16 @@ public sealed partial class LocationMapThumbnailServiceTests
     private sealed record ArtworkMetrics(int OpaqueSamples, double MeanLuminance,
         double LuminanceDeviation, double MeanEdgeDifference);
 
-    private sealed class TileHandler(byte[] tile, HttpStatusCode status = HttpStatusCode.OK) : HttpMessageHandler
+    /// <summary>Serves one vector tile for every request, or (for any status but OK) nothing: offline, uncached.</summary>
+    private sealed class TileHandler(byte[] tile, HttpStatusCode status = HttpStatusCode.OK) : IVectorTileFetcher
     {
-        public int RequestCount { get; private set; }
+        private int _requests;
+        public int RequestCount => Volatile.Read(ref _requests);
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public Task<byte[]?> FetchAsync(int zoom, int column, int row, CancellationToken cancellationToken)
         {
-            RequestCount++;
-            return Task.FromResult(new HttpResponseMessage(status)
-            {
-                Content = new ByteArrayContent(tile)
-            });
+            Interlocked.Increment(ref _requests);
+            return Task.FromResult(status == HttpStatusCode.OK ? tile : null);
         }
     }
 
@@ -1031,11 +1051,20 @@ public sealed partial class LocationMapThumbnailServiceTests
         public string GetApplicationDataDirectory() => path;
     }
 
-    private sealed class TestSourceProvider(string id, string name) : IMapTileSourceProvider
+    private sealed class TestSourceProvider(string id, string name)
     {
         public MapTileSourceDefinition Current { get; } = new(id, name, "test-style",
-            "https://tiles.test/{z}/{x}/{y}.png", "test-style-source", $"Attribution for {name}",
+            "https://tiles.test/planet", "test-style-source", $"Attribution for {name}",
             "https://example.test/attribution", "Test licence", "https://example.test/licence");
+    }
+
+    /// <summary>The production landscape source, recorded under another provenance when a test names one.</summary>
+    private sealed class TestLandscapeSource(OpenFreeMapLandscapeSource inner, TestSourceProvider? source)
+        : ISavedLocationLandscapeSource
+    {
+        public MapTileSourceDefinition Definition => source?.Current ?? inner.Definition;
+        public Task<SavedLocationLandscape> AcquireAsync(WebMercatorViewport viewport, int maskScale,
+            CancellationToken cancellationToken) => inner.AcquireAsync(viewport, maskScale, cancellationToken);
     }
 
     private sealed class FakeFeatureService(
@@ -1120,9 +1149,10 @@ public sealed partial class LocationMapThumbnailServiceTests
         }
     }
 
-    private sealed class ServiceLease(LocationMapThumbnailService value, HttpClient client) : IDisposable
+    private sealed class ServiceLease(LocationMapThumbnailService value, VectorTileRepository tiles) : IDisposable
     {
         public LocationMapThumbnailService Value { get; } = value;
-        public void Dispose() => client.Dispose();
+        public VectorTileRepository Tiles { get; } = tiles;
+        public void Dispose() { }
     }
 }

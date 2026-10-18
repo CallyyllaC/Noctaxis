@@ -39,7 +39,7 @@ internal static class Program
         using var owned = ownership!;
         Ownership = owned;
         owned.ActivationRequested += () => Avalonia.Threading.Dispatcher.UIThread.Post(ActivateMainWindow);
-        FileLogging = new RollingFileLoggerProvider(Path.Combine(dataDirectory, "logs"));
+        FileLogging = new RollingFileLoggerProvider(LogDirectory(dataDirectory));
         var log = FileLogging.CreateLogger("Noctaxis.Desktop.Program");
         // Regenerable caches leave the (possibly roaming) data folder for the platform cache folder; earlier caches
         // move by rename only, before any cache is opened (NX-38).
@@ -81,6 +81,15 @@ internal static class Program
             FileLogging.Dispose();
         }
     }
+
+    /// <summary>
+    /// The logs directory: <c>logs</c> in the data folder. A profiling or test harness may name another, through
+    /// NOCTAXIS_LOG_DIRECTORY, so its runs neither add to nor read the user's own logs.
+    /// </summary>
+    internal static string LogDirectory(string dataDirectory) =>
+        System.Environment.GetEnvironmentVariable("NOCTAXIS_LOG_DIRECTORY") is { Length: > 0 } requested
+            ? Path.GetFullPath(requested)
+            : Path.Combine(dataDirectory, "logs");
 
     /// <summary>
     /// A launch that does not own Noctaxis starts nothing writable. A second launch brings the running window forward

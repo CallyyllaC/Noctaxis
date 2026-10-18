@@ -11,6 +11,7 @@ using SkiaSharp;
 
 namespace Noctaxis.Desktop.Services;
 
+/// <summary>Provenance of a saved location's map source, recorded in its metadata.</summary>
 public sealed record MapTileSourceDefinition(
     string ProviderId,
     string ProviderName,
@@ -22,25 +23,8 @@ public sealed record MapTileSourceDefinition(
     string? LicenceName,
     string? LicenceUrl)
 {
-    public Uri TileUri(int zoom, int x, int y) => new(RequestTemplate
-        .Replace("{z}", zoom.ToString(), StringComparison.Ordinal)
-        .Replace("{x}", x.ToString(), StringComparison.Ordinal)
-        .Replace("{y}", y.ToString(), StringComparison.Ordinal));
-
     public string ConfigurationHash => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
         $"{ProviderId}|{MapStyleId}|{SourceIdentifier}"))).ToLowerInvariant();
-}
-
-public interface IMapTileSourceProvider { MapTileSourceDefinition Current { get; } }
-
-public sealed class DefaultMapTileSourceProvider : IMapTileSourceProvider
-{
-    public MapTileSourceDefinition Current { get; } = new(
-        "openstreetmap-standard", "OpenStreetMap", "standard",
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "\u00A9 OpenStreetMap contributors", "https://www.openstreetmap.org/copyright",
-        "Open Database License (ODbL)", "https://opendatacommons.org/licenses/odbl/");
 }
 
 public sealed record SavedLocationThumbnailMetadata(
@@ -118,8 +102,19 @@ public sealed record SavedLocationThumbnailMetadata(
     string? StyledInputHash = null,
     string? ThumbnailRendererId = null,
     int? ThumbnailRendererVersion = null,
-    string? ThumbnailSkippedReason = null)
+    string? ThumbnailSkippedReason = null,
+    string? SourceFormat = null,
+    int? SourceTileCount = null,
+    int? SourceEmptyTileCount = null)
 {
+    /// <summary>
+    /// The source is a vector-derived landscape (<see cref="SavedLocationLandscapeCodec"/>). Without a format the
+    /// source is an OpenStreetMap Standard raster capture (<c>source.png</c>) from before schema 10 (a later
+    /// feature-, settlement- or style-only refresh keeps it), still read and classified by colour until the
+    /// location's map data is next acquired.
+    /// </summary>
+    public bool HasVectorLandscape => SourceFormat == SavedLocationLandscapeCodec.Format;
+
     /// <summary>
     /// The legacy card artwork was rejected when these assets were composed, so there is deliberately no
     /// <c>thumbnail.png</c>. The source data is still complete and feeds the saved-location preview.
@@ -169,9 +164,10 @@ public enum SavedLocationMapRefreshMode
     RefreshFeatures,
     RefreshSettlement,
     /// <summary>
-    /// For bulk work over many locations: a location whose saved map data is complete and valid is reused as it is;
-    /// only a location without it is acquired (as <see cref="RefreshSource"/>). Bulk regeneration never re-downloads
-    /// raster tiles that are already held, as the OpenStreetMap tile policy forbids pre-emptive bulk fetching.
+    /// For bulk work over many locations: a location whose saved map data is complete and valid is reused as it is,
+    /// earlier OpenStreetMap raster captures included; only a location without it is acquired (as
+    /// <see cref="RefreshSource"/>). Bulk regeneration never re-downloads map data that is already held: OpenFreeMap's
+    /// terms forbid automated collection beyond what the user asks for.
     /// </summary>
     AcquireMissing
 }
@@ -216,8 +212,10 @@ public sealed record SlippyMapTile(int Zoom, int X, int Y, double FractionX, dou
 }
 
 /// <summary>
-/// Owns clean source-map capture and persisted card artwork. Files are ID-scoped, individually
-/// atomically replaced, and content hashes let the loader reject interrupted or mixed generations.
+/// Owns each saved location's map data: the vector-derived landscape (water, vegetation, built-up land), roads and
+/// waterways, and the WSF settlement field, all from bounded requests for the location's own map frame. Files are
+/// ID-scoped, individually atomically replaced, and content hashes let the loader reject interrupted or mixed
+/// generations. A failed acquisition leaves the previous files as they were.
 /// </summary>
 public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
 {
@@ -225,38 +223,36 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     public const int OutputWidth = SavedLocationMapImageProcessor.ThumbnailWidth;
     public const int OutputHeight = SavedLocationMapImageProcessor.ThumbnailHeight;
     public const int ThumbnailStyleVersion = SavedLocationMapImageProcessor.StyleVersion;
-    public const string SourceRenderVersion = "direct-tile-mosaic-v3";
+    public const string SourceRenderVersion = "openfreemap-landscape-v1";
     public const int SourceWidth = 896;
     public const int SourceHeight = 504;
     public const int TileSize = 256;
-    private const int MetadataSchemaVersion = 9;
-    private const int MaximumCaptureAttempts = 3;
-    private readonly HttpClient _httpClient;
+    /// <summary>10: the source is an OpenFreeMap landscape, not an OpenStreetMap raster capture.</summary>
+    private const int MetadataSchemaVersion = 10;
+    /// <summary>The source file of metadata before schema 10, an OpenStreetMap raster capture.</summary>
+    public const string LegacyRasterSourceFileName = "source.png";
     private readonly ILogger<LocationMapThumbnailService> _logger;
-    private readonly IMapTileSourceProvider _sources;
+    private readonly ISavedLocationLandscapeSource _landscape;
     private readonly SavedLocationMapImageProcessor _processor;
     private readonly IMapFeatureDataService _featureData;
     private readonly ISettlementDataProvider _settlementData;
     private readonly IMapImageAcceleration _imageAcceleration;
     private readonly string _legacyStorageDirectory;
-    private readonly TileMemoryCache<(string Provider, string Style, int Zoom, int X, int Y)> _tileCache = new(16 * 1024 * 1024);
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locationGates = new();
     // Advanced by each deletion of a location's assets. A request that began before the deletion (queued
     // or running) sees a different value and writes nothing; a later request, e.g. after the location is
     // imported again, works normally.
     private readonly ConcurrentDictionary<Guid, long> _deletionEpochs = new();
-    private readonly SemaphoreSlim _tileRequestGate = new(1, 1);
     private readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private readonly JsonSerializerOptions _featureJson = new(JsonSerializerDefaults.Web);
 
-    public LocationMapThumbnailService(HttpClient httpClient, ILogger<LocationMapThumbnailService> logger,
-        IUserDataPathProvider paths, IMapTileSourceProvider sources, SavedLocationMapImageProcessor processor,
+    public LocationMapThumbnailService(ILogger<LocationMapThumbnailService> logger,
+        IUserDataPathProvider paths, ISavedLocationLandscapeSource landscape, SavedLocationMapImageProcessor processor,
         IMapFeatureDataService? featureData = null, ISettlementDataProvider? settlementData = null,
         IMapImageAcceleration? imageAcceleration = null)
     {
-        _httpClient = httpClient;
         _logger = logger;
-        _sources = sources;
+        _landscape = landscape;
         _processor = processor;
         _featureData = featureData ?? new NullMapFeatureDataService();
         _settlementData = settlementData ?? new UnavailableSettlementDataProvider();
@@ -326,7 +322,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                 {
                     var styleSource = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
                     if (styleSource is null)
-                        throw new InvalidDataException("No valid saved source.png is available for style reapplication.");
+                        throw new InvalidDataException("No valid saved map source is available for style reapplication.");
                     return await ProcessAndCommitStyleAsync(styleSource, cancellationToken).ConfigureAwait(false);
                 }
                 else if (mode == SavedLocationMapRefreshMode.RefreshFeatures)
@@ -334,7 +330,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     var styleSource = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
                     if (styleSource is null)
                         throw new InvalidDataException(
-                            "No valid saved source.png and viewport metadata are available for semantic refresh.");
+                            "No valid saved map source and viewport metadata are available for semantic refresh.");
                     return await RefreshFeaturesAndCommitAsync(location, styleSource, cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -343,7 +339,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                     var styleSource = await TryLoadStyleSourceAsync(location, cancellationToken).ConfigureAwait(false);
                     if (styleSource is null)
                         throw new InvalidDataException(
-                            "No valid saved source.png and viewport metadata are available for settlement refresh.");
+                            "No valid saved map source and viewport metadata are available for settlement refresh.");
                     return await RefreshSettlementAndCommitAsync(location, styleSource, cancellationToken)
                         .ConfigureAwait(false);
                 }
@@ -388,7 +384,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
     private async Task<SavedLocationThumbnailResult> GenerateSourceAndCommitAsync(
         SavedLocation location, CancellationToken cancellationToken)
     {
-        var mapSource = _sources.Current;
+        var mapSource = _landscape.Definition;
         var viewport = WebMercatorViewport.Create(location.Coordinate, TileZoom, TileSize, SourceWidth, SourceHeight);
         var previousMetadata = await ReadMetadataAsync(location.Id, cancellationToken).ConfigureAwait(false);
         var previousSettlement = previousMetadata is null ? null :
@@ -397,8 +393,8 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         _logger.LogInformation(
             "Saved-location source generation started for {LocationId} ({LocationName}); provider {ProviderId}, source version {SourceVersion}",
             location.Id, location.Name, mapSource.ProviderId, SourceRenderVersion);
-        var sourcePng = await CaptureValidatedSourceAsync(viewport, mapSource, cancellationToken)
-            .ConfigureAwait(false);
+        var landscape = await AcquireLandscapeAsync(viewport, cancellationToken).ConfigureAwait(false);
+        var sourcePng = SavedLocationLandscapeCodec.Encode(landscape);
         var previousFeatures = await TryLoadFeatureDataAsync(location.Id, location.Coordinate, viewport,
             cancellationToken).ConfigureAwait(false);
         MapFeatureFetchResult featureFetch;
@@ -409,7 +405,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
         catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or InvalidDataException)
         {
-            _logger.LogWarning(ex, "OSM semantic overlay fetch failed for {LocationId}; using compatible cache or base map",
+            _logger.LogWarning(ex, "Road and water feature fetch failed for {LocationId}; using compatible cache or base map",
                 location.Id);
             featureFetch = new MapFeatureFetchResult(null, MapFeatureFetchStatus.Unavailable, ex.Message);
         }
@@ -425,7 +421,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         else if (featureFetch.Data is not null)
         {
             _logger.LogWarning(
-                "Discarded OSM feature result with mismatched ownership or bounds for {LocationId}", location.Id);
+                "Discarded map feature result with mismatched ownership or bounds for {LocationId}", location.Id);
             semanticOutcome = MapFeatureFetchOutcome.Failure("geometry_validation_failed",
                 "feature ownership or geographic bounds did not match the raster viewport",
                 featureFetch.Outcome.AttemptCount, fallbackAttempted: featureFetch.Outcome.FallbackAttempted);
@@ -439,7 +435,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
                 RoadCount = previousFeatures.Data.Roads.Length,
                 WaterwayCount = previousFeatures.Data.Waterways.Length
             };
-            _logger.LogInformation("Compatible OSM feature cache retained for {LocationId}", location.Id);
+            _logger.LogInformation("Compatible map feature cache retained for {LocationId}", location.Id);
         }
         else if (features is null)
             _logger.LogInformation("Generating saved-location thumbnail without a semantic overlay for {LocationId}",
@@ -473,7 +469,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             mapSource.AttributionUrl, mapSource.LicenceName, mapSource.LicenceUrl, now, TileZoom,
             location.Coordinate.Latitude, location.Coordinate.Longitude, SourceWidth, SourceHeight,
             ThumbnailStyleVersion, mapSource.ConfigurationHash, SourceRenderVersion, "thumbnail.png",
-            "source.png", Hash(sourcePng), null, null,
+            SavedLocationLandscapeCodec.FileName, Hash(sourcePng), null, null,
             features is null ? null : "features.json",
             features?.Data.SchemaVersion, featureSource?.QueryVersion, featureSource?.ProviderId,
             featureSource?.AttributionText, featureSource?.AttributionUrl, featureSource?.LicenceName,
@@ -483,11 +479,17 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             semanticOutcome.FailureCode, semanticOutcome.FailureReason, semanticOutcome.HttpStatusCode,
             semanticOutcome.TimedOut, semanticOutcome.ResponseTooLarge, semanticOutcome.ParseFailed,
             semanticOutcome.AttemptCount, semanticOutcome.AttemptedAtUtc, semanticOutcome.RoadCount,
-            semanticOutcome.WaterwayCount, semanticOutcome.FallbackAttempted);
+            semanticOutcome.WaterwayCount, semanticOutcome.FallbackAttempted)
+        {
+            SourceFormat = SavedLocationLandscapeCodec.Format,
+            SourceTileCount = landscape.TileCount,
+            SourceEmptyTileCount = landscape.EmptyTileCount
+        };
         metadata = WithArtwork(ApplySettlementOutcome(metadata, settlement, artwork.Render, settlementBytes), artwork);
         var operation = new SavedLocationMapRefreshResult(true, false, semanticOutcome, artwork.Png is not null, false,
             null, settlement.State, artwork.Png is null);
-        var result = await CommitFullAssetSetAsync(location.Id, sourcePng, features?.Bytes, settlementBytes,
+        var result = await CommitFullAssetSetAsync(location.Id, metadata.SourceFileName, sourcePng, features?.Bytes,
+                settlementBytes,
                 artwork.Png, metadata,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -611,7 +613,6 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             Height = OutputHeight,
             ThumbnailStyleVersion = ThumbnailStyleVersion,
             ImageFileName = "thumbnail.png",
-            SourceFileName = "source.png",
             SourceContentHash = Hash(assets.SourceBytes),
             FeatureOverlayStyleVersion = SavedLocationMapImageProcessor.FeatureOverlayStyleVersion
         };
@@ -631,7 +632,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             assets.Metadata.SourceImageWidth, assets.Metadata.SourceImageHeight,
             assets.Metadata.SourceCentreLatitude, assets.Metadata.SourceCentreLongitude);
         _logger.LogInformation(
-            "WSF settlement refresh started for {LocationId} ({LocationName}); source and OSM vector features remain unchanged",
+            "WSF settlement refresh started for {LocationId} ({LocationName}); landscape and map features remain unchanged",
             location.Id, location.Name);
         var settlement = await FetchSettlementAsync(viewport, cancellationToken).ConfigureAwait(false);
         if (settlement.HasValue)
@@ -854,7 +855,8 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         if (artwork.Png is null) TryDelete(Path.Combine(directory, "thumbnail.png"));
     }
 
-    private async Task<SavedLocationThumbnailResult> CommitFullAssetSetAsync(Guid locationId, byte[] sourcePng,
+    private async Task<SavedLocationThumbnailResult> CommitFullAssetSetAsync(Guid locationId, string sourceFileName,
+        byte[] sourcePng,
         byte[]? featureBytes, byte[]? settlementBytes, byte[]? thumbnailPng,
         SavedLocationThumbnailMetadata metadata,
         CancellationToken cancellationToken)
@@ -862,7 +864,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         var directory = LocationDirectory(locationId);
         var files = new List<(string FileName, byte[] Bytes)>
         {
-            ("source.png", sourcePng),
+            (sourceFileName, sourcePng),
             ("metadata.json", Encoding.UTF8.GetBytes(JsonSerializer.Serialize(metadata, _json)))
         };
         if (thumbnailPng is not null) files.Insert(1, ("thumbnail.png", thumbnailPng));
@@ -872,112 +874,27 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         await CommitFilesAtomicallyAsync(directory, files, cancellationToken).ConfigureAwait(false);
         if (featureBytes is null) TryDelete(Path.Combine(directory, "features.json"));
         if (thumbnailPng is null) TryDelete(Path.Combine(directory, "thumbnail.png"));
+        // The OpenStreetMap raster capture is removed only now that its replacement is committed.
+        if (!string.Equals(sourceFileName, LegacyRasterSourceFileName, StringComparison.Ordinal))
+            TryDelete(Path.Combine(directory, LegacyRasterSourceFileName));
         // Legacy building caches are left untouched but no longer referenced by v6 metadata.
         // This makes migration non-destructive while ensuring they cannot feed WSF rendering.
         return new SavedLocationThumbnailResult(Path.Combine(directory, "thumbnail.png"), metadata, true, true);
     }
 
-    private async Task<byte[]> CaptureValidatedSourceAsync(WebMercatorViewport viewport,
-        MapTileSourceDefinition source, CancellationToken cancellationToken)
+    private async Task<SavedLocationLandscape> AcquireLandscapeAsync(WebMercatorViewport viewport,
+        CancellationToken cancellationToken)
     {
-        Exception? lastFailure = null;
-        for (var attempt = 1; attempt <= MaximumCaptureAttempts; attempt++)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var stopwatch = Stopwatch.StartNew();
-            try
-            {
-                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                timeout.CancelAfter(TimeSpan.FromSeconds(20));
-                var png = await CaptureCentredMapAsync(viewport, source, forceTileRefresh: attempt > 1,
-                    timeout.Token).ConfigureAwait(false);
-                stopwatch.Stop();
-                var validation = _processor.ValidateSource(png);
-                _logger.LogInformation(
-                    "Saved-location tile/render wait completed in {ElapsedMilliseconds} ms; attempt {Attempt}/{MaximumAttempts}; valid {IsValid}; {Reason}",
-                    stopwatch.ElapsedMilliseconds, attempt, MaximumCaptureAttempts, validation.IsValid, validation.Reason);
-                if (validation.IsValid) return png;
-                lastFailure = new InvalidDataException(validation.Reason);
-            }
-            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
-            catch (Exception ex) when (ex is HttpRequestException or IOException or InvalidDataException or TaskCanceledException)
-            {
-                stopwatch.Stop();
-                lastFailure = ex;
-                _logger.LogWarning(ex,
-                    "Saved-location source attempt {Attempt}/{MaximumAttempts} failed after {ElapsedMilliseconds} ms",
-                    attempt, MaximumCaptureAttempts, stopwatch.ElapsedMilliseconds);
-            }
-            if (attempt < MaximumCaptureAttempts)
-            {
-                _logger.LogInformation("Retrying saved-location source generation after incomplete capture");
-                await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt), cancellationToken).ConfigureAwait(false);
-            }
-        }
-        throw new InvalidDataException("Map source did not produce a usable image after bounded retries.", lastFailure);
-    }
-
-    private async Task<byte[]> CaptureCentredMapAsync(WebMercatorViewport viewport, MapTileSourceDefinition source,
-        bool forceTileRefresh, CancellationToken cancellationToken)
-    {
-        var captureLeft = viewport.WorldPixelLeft;
-        var captureTop = viewport.WorldPixelTop;
-        var firstTileX = (int)Math.Floor(captureLeft / TileSize);
-        var firstTileY = (int)Math.Floor(captureTop / TileSize);
-        var lastTileX = (int)Math.Floor((captureLeft + viewport.Width - 1) / TileSize);
-        var lastTileY = (int)Math.Floor((captureTop + viewport.Height - 1) / TileSize);
-        var tileCountX = lastTileX - firstTileX + 1;
-        var tileCountY = lastTileY - firstTileY + 1;
-        using var mosaic = new SKBitmap(tileCountX * TileSize, tileCountY * TileSize,
-            SKColorType.Bgra8888, SKAlphaType.Premul);
-        using var mosaicCanvas = new SKCanvas(mosaic);
-        mosaicCanvas.Clear(SKColors.Transparent);
-        var scale = 1 << viewport.Zoom;
-        for (var tileY = firstTileY; tileY <= lastTileY; tileY++)
-        {
-            if (tileY < 0 || tileY >= scale) continue;
-            for (var rawTileX = firstTileX; rawTileX <= lastTileX; rawTileX++)
-            {
-                var tileX = ((rawTileX % scale) + scale) % scale;
-                var bytes = await GetTileAsync(source, viewport.Zoom, tileX, tileY, forceTileRefresh, cancellationToken)
-                    .ConfigureAwait(false);
-                using var tile = SKBitmap.Decode(bytes) ??
-                                 throw new InvalidDataException("Map source returned an unreadable tile.");
-                mosaicCanvas.DrawBitmap(tile, (rawTileX - firstTileX) * TileSize,
-                    (tileY - firstTileY) * TileSize);
-            }
-        }
-        using var capture = new SKBitmap(viewport.Width, viewport.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
-        using var captureCanvas = new SKCanvas(capture);
-        var cropX = (float)(captureLeft - firstTileX * TileSize);
-        var cropY = (float)(captureTop - firstTileY * TileSize);
-        captureCanvas.DrawBitmap(mosaic,
-            new SKRect(cropX, cropY, cropX + viewport.Width, cropY + viewport.Height),
-            SKRect.Create(viewport.Width, viewport.Height));
-        using var image = SKImage.FromBitmap(capture);
-        using var encoded = image.Encode(SKEncodedImageFormat.Png, 96);
-        return encoded.ToArray();
-    }
-
-    private async Task<byte[]> GetTileAsync(MapTileSourceDefinition source, int zoom, int x, int y,
-        bool forceRefresh, CancellationToken cancellationToken)
-    {
-        var key = (source.ProviderId, source.MapStyleId, zoom, x, y);
-        if (!forceRefresh && _tileCache.TryGetValue(key, out var cached)) return cached;
-        await _tileRequestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (forceRefresh) _tileCache.Remove(key);
-            else if (_tileCache.TryGetValue(key, out cached)) return cached;
-            using var response = await _httpClient.GetAsync(source.TileUri(zoom, x, y),
-                HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            response.EnsureSuccessStatusCode();
-            var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken).ConfigureAwait(false);
-            if (bytes.Length < 64) throw new InvalidDataException("Map source returned an incomplete tile payload.");
-            _tileCache.Store(key, bytes);
-            return bytes;
-        }
-        finally { _tileRequestGate.Release(); }
+        var stopwatch = Stopwatch.StartNew();
+        var landscape = await _landscape.AcquireAsync(viewport, Mapping.Preview.LocationPreviewScene.MaskScale,
+            cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation(
+            "Saved-location landscape acquired in {ElapsedMilliseconds} ms from {TileCount} vector tiles ({EmptyTileCount} without data)",
+            stopwatch.ElapsedMilliseconds, landscape.TileCount, landscape.EmptyTileCount);
+        // Tiles that report no data say nothing about the ground; a blank landscape would draw land that may be sea.
+        if (landscape.HasNoData)
+            throw new MapFeatureRequestException("no_vector_data", "the vector tiles hold no data for this map frame");
+        return landscape;
     }
 
     private async Task<ExistingMapAssets?> TryLoadCompleteAsync(SavedLocation location,
@@ -1061,7 +978,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         };
     }
 
-    private static string ComputeStyledInputHash(SavedLocationThumbnailMetadata metadata)
+    internal static string ComputeStyledInputHash(SavedLocationThumbnailMetadata metadata)
     {
         var settlementIdentity = metadata.SettlementStatus == nameof(EnvironmentalDataState.Empty)
             ? $"empty:{metadata.SettlementContentHash ?? "missing"}"
@@ -1092,16 +1009,15 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         var metadata = await ReadMetadataAsync(location.Id, cancellationToken).ConfigureAwait(false);
         if (metadata is null || !CoordinatesMatch(metadata, location.Coordinate)) return null;
         var directory = LocationDirectory(location.Id);
-        var sourcePath = Path.Combine(directory, Path.GetFileName(metadata.SourceFileName ?? "source.png"));
+        var sourcePath = Path.Combine(directory, Path.GetFileName(metadata.SourceFileName ?? LegacyRasterSourceFileName));
         if (!File.Exists(sourcePath)) return null;
         var source = await File.ReadAllBytesAsync(sourcePath, cancellationToken).ConfigureAwait(false);
-        var validation = _processor.ValidateSource(source);
-        _logger.LogDebug("Saved source validation at {SourcePath}: {IsValid}; {Reason}",
-            sourcePath, validation.IsValid, validation.Reason);
-        if (!validation.IsValid || !HashMatches(source, metadata.SourceContentHash)) return null;
         var viewport = new WebMercatorViewport(metadata.SourceZoom, TileSize,
             metadata.SourceImageWidth, metadata.SourceImageHeight,
             metadata.SourceCentreLatitude, metadata.SourceCentreLongitude);
+        var issue = SourceIssue(metadata, source, viewport);
+        _logger.LogDebug("Saved source validation at {SourcePath}: {Issue}", sourcePath, issue ?? "valid");
+        if (issue is not null || !HashMatches(source, metadata.SourceContentHash)) return null;
         var features = await TryLoadFeatureDataAsync(location.Id, location.Coordinate, viewport, cancellationToken)
             .ConfigureAwait(false);
         var settlement = await TryLoadSettlementDataAsync(location.Id, viewport, metadata, cancellationToken)
@@ -1110,14 +1026,41 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             features, settlement);
     }
 
+    /// <summary>Why a saved source cannot be used, or null. Both the landscape and an earlier raster capture are read.</summary>
+    private string? SourceIssue(SavedLocationThumbnailMetadata metadata, byte[] source, WebMercatorViewport viewport)
+    {
+        if (!metadata.HasVectorLandscape)
+        {
+            var validation = _processor.ValidateSource(source);
+            return validation.IsValid ? null : validation.Reason;
+        }
+        var landscape = SavedLocationLandscapeCodec.TryDecode(source);
+        if (landscape is null) return "the landscape file is unreadable";
+        return landscape.Width == Math.Max(1, viewport.Width / Mapping.Preview.LocationPreviewScene.MaskScale) &&
+               landscape.Height == Math.Max(1, viewport.Height / Mapping.Preview.LocationPreviewScene.MaskScale) &&
+               BoundsMatch(landscape.Bounds, viewport.Bounds)
+            ? null
+            : "the landscape does not cover the saved map frame";
+    }
+
+    /// <summary>Road and water documents that can be drawn: OpenFreeMap-derived, or an earlier Overpass document.</summary>
+    internal static bool IsCompatibleFeatureDocument(int? schemaVersion, int? queryVersion) =>
+        (schemaVersion == OpenFreeMapMapFeatureDataService.FeatureSchemaVersion &&
+         queryVersion == OpenFreeMapMapFeatureDataService.FeatureQueryVersion) ||
+        (schemaVersion == LegacyOverpassFeatureSchemaVersion && queryVersion == LegacyOverpassFeatureQueryVersion);
+
+    /// <summary>The road and water documents written from the public Overpass API before schema 10. They stay
+    /// readable, so existing previews keep their line work offline, and are replaced at the next acquisition.</summary>
+    internal const int LegacyOverpassFeatureSchemaVersion = 1;
+    internal const int LegacyOverpassFeatureQueryVersion = 1;
+
     private async Task<ExistingFeatureAssets?> TryLoadFeatureDataAsync(Guid locationId, GeoCoordinate coordinate,
         WebMercatorViewport viewport, CancellationToken cancellationToken)
     {
         var metadata = await ReadMetadataAsync(locationId, cancellationToken).ConfigureAwait(false);
         if (metadata is null || !CoordinatesMatch(metadata, coordinate) ||
             string.IsNullOrWhiteSpace(metadata.FeatureFileName) ||
-            metadata.FeatureSchemaVersion != OverpassMapFeatureDataService.FeatureSchemaVersion ||
-            metadata.FeatureQueryVersion != OverpassMapFeatureDataService.FeatureQueryVersion ||
+            !IsCompatibleFeatureDocument(metadata.FeatureSchemaVersion, metadata.FeatureQueryVersion) ||
             metadata.FeatureBounds is null || !BoundsMatch(metadata.FeatureBounds, viewport.Bounds))
             return null;
         var path = Path.Combine(LocationDirectory(locationId), Path.GetFileName(metadata.FeatureFileName));
@@ -1128,19 +1071,19 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
             if (!HashMatches(bytes, metadata.FeatureContentHash)) return null;
             var data = JsonSerializer.Deserialize<MapFeatureDataDocument>(bytes, _featureJson);
             if (data is null || data.LocationId != locationId ||
-                data.SchemaVersion != OverpassMapFeatureDataService.FeatureSchemaVersion ||
-                data.Source.QueryVersion != OverpassMapFeatureDataService.FeatureQueryVersion ||
+                data.SchemaVersion != metadata.FeatureSchemaVersion ||
+                data.Source.QueryVersion != metadata.FeatureQueryVersion ||
                 !BoundsMatch(data.Source.Bounds, viewport.Bounds))
                 return null;
             _logger.LogDebug(
-                "OSM feature cache hit for {LocationId}; {FeatureCount} features, query {QueryVersion}, overlay {OverlayVersion}",
-                locationId, data.FeatureCount, data.Source.QueryVersion,
+                "Map feature cache hit for {LocationId}; {FeatureCount} features from {ProviderId}, query {QueryVersion}, overlay {OverlayVersion}",
+                locationId, data.FeatureCount, data.Source.ProviderId, data.Source.QueryVersion,
                 SavedLocationMapImageProcessor.FeatureOverlayStyleVersion);
             return new ExistingFeatureAssets(data, bytes);
         }
         catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException)
         {
-            _logger.LogWarning(ex, "Could not load OSM feature cache for {LocationId}", locationId);
+            _logger.LogWarning(ex, "Could not load map feature cache for {LocationId}", locationId);
             return null;
         }
     }
@@ -1189,7 +1132,7 @@ public sealed class LocationMapThumbnailService : ILocationMapThumbnailService
         if (metadata.LegacyArtworkSkipped)
         {
             // No artwork by design; the previous assets are usable while their source data is intact.
-            var source = Path.Combine(directory, Path.GetFileName(metadata.SourceFileName ?? "source.png"));
+            var source = Path.Combine(directory, Path.GetFileName(metadata.SourceFileName ?? LegacyRasterSourceFileName));
             if (!File.Exists(source) ||
                 !HashMatches(await File.ReadAllBytesAsync(source, cancellationToken).ConfigureAwait(false),
                     metadata.SourceContentHash))

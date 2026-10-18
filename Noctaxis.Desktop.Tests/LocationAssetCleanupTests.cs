@@ -35,7 +35,7 @@ public sealed partial class LocationMapThumbnailServiceTests
 
         Assert.False(Directory.Exists(AssetDirectory(files, deleted.Id)));
         Assert.False(Directory.Exists(LegacyDirectory(files, deleted.Id)));
-        Assert.True(File.Exists(System.IO.Path.Combine(AssetDirectory(files, kept.Id), "source.png")));
+        Assert.True(File.Exists(System.IO.Path.Combine(AssetDirectory(files, kept.Id), SourceFile)));
         await Assert.ThrowsAsync<ArgumentException>(() => service.Value.DeleteLocationAssetsAsync(Guid.Empty, CancellationToken.None));
     }
 
@@ -147,16 +147,16 @@ public sealed partial class LocationMapThumbnailServiceTests
         return mklink.ExitCode == 0 && Directory.Exists(link);
     }
 
-    private sealed class GatedTileHandler(byte[] tile) : HttpMessageHandler
+    private sealed class GatedTileHandler(byte[] tile) : Noctaxis.Desktop.Mapping.Vector.IVectorTileFetcher
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        public async Task<byte[]?> FetchAsync(int zoom, int column, int row, CancellationToken cancellationToken)
         {
             Started.TrySetResult();
             await Release.Task.WaitAsync(cancellationToken);
-            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new ByteArrayContent(tile) };
+            return tile;
         }
     }
 }

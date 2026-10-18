@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using BruTile;
 using BruTile.Predefined;
 
@@ -25,27 +24,30 @@ public interface IVectorTileFetcher
 public sealed class ThemedVectorTileSource : ILocalTileSource
 {
     public const int MaximumDisplayZoom = 19;
-    private readonly IVectorTileFetcher _fetcher;
+    private readonly VectorTileRepository _tiles;
     private readonly BasemapTileRenderer _renderer;
-    private readonly int _decodedCapacity;
     private readonly object _gate = new();
-    private readonly Dictionary<(int, int, int), Task<VectorTile?>> _decoded = [];
-    private readonly LinkedList<(int, int, int)> _recency = [];
     private BasemapStyle _style;
     private string _labelLanguage = Noctaxis.Core.Localisation.AppLanguages.DefaultId;
     private long _styleVersion;
     private long _labelVersion;
     private long _renders;
-    private long _decodes;
 
     public ThemedVectorTileSource(IVectorTileFetcher fetcher, BasemapStyle? style = null,
         BasemapTileRenderer? renderer = null, int decodedCapacity = 96)
+        : this(new VectorTileRepository(fetcher, decodedCapacity), style, renderer) { }
+
+    /// <summary>A source over a shared repository, so its decoded tiles serve other readers too.</summary>
+    public ThemedVectorTileSource(VectorTileRepository tiles, BasemapStyle? style = null,
+        BasemapTileRenderer? renderer = null)
     {
-        _fetcher = fetcher;
+        _tiles = tiles;
         _style = style ?? BasemapStyle.Default;
         _renderer = renderer ?? new BasemapTileRenderer();
-        _decodedCapacity = Math.Max(4, decodedCapacity);
     }
+
+    /// <summary>The decoded vector tiles this source draws.</summary>
+    public VectorTileRepository Tiles => _tiles;
 
     public ITileSchema Schema { get; } =
         new GlobalSphericalMercator("png", YAxis.OSM, 0, MaximumDisplayZoom, "Noctaxis themed vector basemap");
@@ -55,7 +57,7 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
     public BasemapStyle Style { get { lock (_gate) return _style; } }
     public long StyleVersion => Interlocked.Read(ref _styleVersion);
     internal long RenderCount => Interlocked.Read(ref _renders);
-    internal long DecodeCount => Interlocked.Read(ref _decodes);
+    internal long DecodeCount => _tiles.DecodeCount;
 
     /// <summary>Adopts a style. Returns false when it is the style already in use.</summary>
     public bool SetStyle(BasemapStyle style)
@@ -103,7 +105,7 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
         var index = tileInfo.Index;
         if (index.Level < 0 || index.Level > MaximumDisplayZoom) return (null, StyleVersion, LabelVersion);
         var request = new BasemapTileRequest(index.Level, index.Col, index.Row);
-        var tile = await GetDecodedAsync(request.SourceZoom, request.SourceColumn, request.SourceRow)
+        var tile = await _tiles.GetAsync(request.SourceZoom, request.SourceColumn, request.SourceRow)
             .ConfigureAwait(false);
         if (tile is null) return (null, StyleVersion, LabelVersion);
         return await Task.Run(() =>
@@ -122,67 +124,5 @@ public sealed class ThemedVectorTileSource : ILocalTileSource
                     return ((byte[]?)bytes, version, labels);
             }
         }).ConfigureAwait(false);
-    }
-
-    private Task<VectorTile?> GetDecodedAsync(int zoom, int column, int row)
-    {
-        var key = (zoom, column, row);
-        lock (_gate)
-        {
-            if (_decoded.TryGetValue(key, out var existing))
-            {
-                _recency.Remove(key);
-                _recency.AddFirst(key);
-                return existing;
-            }
-            var registration = new StrongBox<Task<VectorTile?>>();
-            var created = LoadAsync(zoom, column, row, registration);
-            registration.Value = created;
-            _decoded[key] = created;
-            _recency.AddFirst(key);
-            while (_recency.Count > _decodedCapacity)
-            {
-                _decoded.Remove(_recency.Last!.Value);
-                _recency.RemoveLast();
-            }
-            return created;
-        }
-    }
-
-    private async Task<VectorTile?> LoadAsync(int zoom, int column, int row, StrongBox<Task<VectorTile?>> registration)
-    {
-        // Always complete after GetDecodedAsync has registered this task, so an unavailable result
-        // below removes the registration instead of racing ahead of it.
-        await Task.Yield();
-        VectorTile? tile = null;
-        try
-        {
-            var bytes = await _fetcher.FetchAsync(zoom, column, row, CancellationToken.None).ConfigureAwait(false);
-            if (bytes is not null)
-            {
-                tile = bytes.Length == 0 ? VectorTile.Empty : VectorTile.Decode(bytes);
-                Interlocked.Increment(ref _decodes);
-            }
-        }
-        catch (InvalidDataException)
-        {
-            // Malformed input, from the server or the disk cache: forget the stored bytes so a retry fetches.
-            _fetcher.Discard(zoom, column, row);
-        }
-        finally
-        {
-            // Unavailable tiles, and failures that are not malformed input (which still reach the caller), are
-            // not remembered, so a later request tries again. Only this load's own registration is removed:
-            // after an eviction the key may already belong to a newer load of the same tile.
-            if (tile is null)
-                lock (_gate)
-                    if (_decoded.TryGetValue((zoom, column, row), out var current) &&
-                        ReferenceEquals(current, registration.Value))
-                    {
-                        _decoded.Remove((zoom, column, row));
-                        _recency.Remove((zoom, column, row));
-                    }
-        }
-        return tile;
     }
 }
