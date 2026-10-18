@@ -14,7 +14,7 @@ The first public alpha brings photography and astrophotography planning together
 - Interactive map, planning pin, saved locations and place search.
 - Sun, Moon and target positions, visibility, timing and twilight information.
 - Camera and lens profiles, field-of-view framing, terrain horizon and camera-direction preview.
-- Weather, light pollution, satellite and topographic map layers, plus a secondary map.
+- Weather and light-pollution information, plus a secondary planning map.
 - Photographer-facing shot-viability guidance and portable planning-sheet images.
 - Customisable themes, colour-vision options, touch-friendly controls and optional supporter themes.
 
@@ -83,13 +83,6 @@ An incomplete or invalid camera or lens profile can prevent unrelated valid edit
 - Investigate Manufacturer/Model-only edits that may not trigger autosave.
 - Cover pending edits, removal of the last profile and closing with invalid drafts.
 
-### ⬜ Linux Settings layout test regression
-A narrow-window colour-vision radio group wraps onto two rows in Linux CI, while an existing test assumes one row at 100% text scaling.
-
-- Validate readable, unclipped controls whether or not they wrap.
-- Check platform-dependent text measurement and font setup in headless tests.
-- Treat this as a test/layout investigation, not evidence of broken settings bindings.
-
 ### ⬜ Investigate slow or noisy environment requests
 Check reports of slow environment processing when the planning pin moves offshore, along with recurring terrain/settlement data warnings.
 
@@ -137,11 +130,11 @@ Use the target, selected equipment and planning conditions to offer practical st
 - Start with suggested shutter/exposure duration.
 - Later consider aperture, ISO, star trailing and tracker-related warnings.
 
-### ⬜ Refine terrain maps
-Improve the existing terrain and topographic map views where clearer geography would help field planning.
+### ⬜ Explore topographic map layers
+Consider additional terrain and topographic map layers where they would make planning locations and sightlines easier to understand.
 
-- Explore richer hillshade, contours and elevation hierarchy.
-- Prefer improvements that make the map easier to read over decoration for its own sake.
+- Explore hillshade, contours and readable elevation information.
+- Add layers only where their value for field planning is clear.
 
 ### ⬜ Useful astronomy alerts
 Surface events worth planning for, without turning the application into a stream of notifications.
