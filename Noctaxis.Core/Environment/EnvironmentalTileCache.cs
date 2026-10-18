@@ -39,6 +39,13 @@ public interface IEnvironmentalTileCache
     Task<IDisposable?> LeaseTerrainAsync(EnvironmentalTileDescriptor descriptor, long generation,
         CancellationToken token) => Task.FromResult<IDisposable?>(null);
     void TouchTerrain(EnvironmentalTileDescriptor descriptor) { }
+
+    /// <summary>
+    /// Whether a file for <paramref name="descriptor"/> is already stored. A hint only, for skipping
+    /// work ahead of time: the file is not validated here, and every read still validates it. The
+    /// default (false) treats nothing as stored.
+    /// </summary>
+    bool Contains(EnvironmentalTileDescriptor descriptor) => false;
     string RootDirectory { get; }
     Task<EnvironmentalCacheResult> GetOrCreateAsync(
         EnvironmentalTileDescriptor descriptor,
@@ -231,6 +238,8 @@ public sealed class EnvironmentalTileCache : IEnvironmentalTileCache
             gate.Release();
         }
     }
+
+    public bool Contains(EnvironmentalTileDescriptor descriptor) => File.Exists(GetPath(descriptor));
 
     private string GetPath(EnvironmentalTileDescriptor descriptor)
     {

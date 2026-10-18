@@ -212,10 +212,12 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
             var directory = Path.Combine(RootDirectory, source);
             if (!Directory.Exists(directory)) continue;
             if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) continue;
-            // Reparse points are never traversed: scope stays within the two owned source trees.
-            foreach (var path in Directory.EnumerateFiles(directory, "*", new EnumerationOptions
+            // Reparse points are never traversed: scope stays within the two owned source trees. The
+            // enumeration's own entries carry size and time, so no file is queried again (PF-07).
+            foreach (var info in new DirectoryInfo(directory).EnumerateFiles("*", new EnumerationOptions
                 { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint }))
             {
+                var path = info.FullName;
                 if (path.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
                 {
                     // An abandoned staging file that cannot be removed now is retried on the next scan;
@@ -224,7 +226,6 @@ public sealed class TerrainDiskCache(IUserDataPathProvider paths, ILogger<Terrai
                     continue;
                 }
                 found.Add(path);
-                var info = new FileInfo(path);
                 var pieces = Path.GetRelativePath(RootDirectory, path).Split(Path.DirectorySeparatorChar);
                 var bounds = pieces.Length == 4 ? Footprint(new(pieces[0], pieces[1], pieces[2],
                     Path.GetFileNameWithoutExtension(pieces[3]), info.Extension)) : null;

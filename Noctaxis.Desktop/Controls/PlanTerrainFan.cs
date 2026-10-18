@@ -53,7 +53,7 @@ public sealed record PlanTerrainFan(ImmutableArray<PlanTerrainRay> Rays, bool Gr
             var bands = ImmutableArray.CreateBuilder<PlanTerrainBand>();
             var highest = 0d;
             if (!ground)
-            foreach (var point in terrain.SightlineAt(depth.Bearings[column]))
+            foreach (var point in terrain.SightlineViewAt(depth.Bearings[column]))
             {
                 inspected++;
                 if (!double.IsFinite(point.DistanceMetres) || point.DistanceMetres <= 0 ||

@@ -614,37 +614,47 @@ public sealed record TerrainHorizonProfile(
 
     public IReadOnlyList<TerrainSightlineSample> SightlineAt(double bearingDegrees)
     {
-        if (Samples.Count == 0) return [];
+        var view = SightlineViewAt(bearingDegrees);
+        if (view.Count == 0) return [];
+        if (view.InPlace is { } exact) return exact;
+        var result = new TerrainSightlineSample[view.Count];
+        for (var index = 0; index < result.Length; index++) result[index] = view[index];
+        return result;
+    }
+
+    /// <summary>
+    /// <see cref="SightlineAt"/> read in place: the same samples, interpolated as they are read rather than
+    /// copied into a new line. For callers that walk a sightline once per bearing (camera framing, plan-view
+    /// obstruction), where copying every probe's line dominated their allocation (PF-03).
+    /// </summary>
+    public TerrainSightlineView SightlineViewAt(double bearingDegrees)
+    {
+        if (Samples.Count == 0) return default;
         var (lower, upper, fraction) = BearingNeighbours(bearingDegrees);
         var lowerSightline = Samples[lower].Sightline;
         var upperSightline = Samples[upper].Sightline;
         if (lowerSightline is null || upperSightline is null ||
-            lowerSightline.Count == 0 || lowerSightline.Count != upperSightline.Count) return [];
-        if (fraction <= 1e-12) return lowerSightline;
-        var result = new TerrainSightlineSample[lowerSightline.Count];
-        for (var index = 0; index < result.Length; index++)
-        {
-            var left = lowerSightline[index];
-            var right = upperSightline[index];
-            result[index] = TerrainSightlineSample.FromSlope(
-                left.DistanceMetres + (right.DistanceMetres - left.DistanceMetres) * fraction,
-                InterpolateNullable(left.TerrainElevationMetres, right.TerrainElevationMetres, fraction),
-                left.CurvatureDropMetres + (right.CurvatureDropMetres - left.CurvatureDropMetres) * fraction,
-                InterpolateNullable(left.TerrainElevationSlope, right.TerrainElevationSlope, fraction),
-                left.Status == right.Status ? left.Status : TerrainSampleStatus.Valid,
-                InterpolateNullable(left.RawTerrainElevationMetres, right.RawTerrainElevationMetres, fraction),
-                left.Classification == right.Classification ? left.Classification : null,
-                left.SurfaceWasAdjusted || right.SurfaceWasAdjusted,
-                left.SurfaceResolutionReason == right.SurfaceResolutionReason
-                    ? left.SurfaceResolutionReason : null);
-        }
-        return result;
+            lowerSightline.Count == 0 || lowerSightline.Count != upperSightline.Count) return default;
+        return fraction <= 1e-12 ? new(lowerSightline, null, 0) : new(lowerSightline, upperSightline, fraction);
     }
+
+    internal static TerrainSightlineSample InterpolateSightlineSample(TerrainSightlineSample left,
+        TerrainSightlineSample right, double fraction) => TerrainSightlineSample.FromSlope(
+        left.DistanceMetres + (right.DistanceMetres - left.DistanceMetres) * fraction,
+        InterpolateNullable(left.TerrainElevationMetres, right.TerrainElevationMetres, fraction),
+        left.CurvatureDropMetres + (right.CurvatureDropMetres - left.CurvatureDropMetres) * fraction,
+        InterpolateNullable(left.TerrainElevationSlope, right.TerrainElevationSlope, fraction),
+        left.Status == right.Status ? left.Status : TerrainSampleStatus.Valid,
+        InterpolateNullable(left.RawTerrainElevationMetres, right.RawTerrainElevationMetres, fraction),
+        left.Classification == right.Classification ? left.Classification : null,
+        left.SurfaceWasAdjusted || right.SurfaceWasAdjusted,
+        left.SurfaceResolutionReason == right.SurfaceResolutionReason
+            ? left.SurfaceResolutionReason : null);
 
     private HorizonObstruction FindObstructionAtAngle(double bearingDegrees, double sightlineElevationDegrees)
     {
         if (Samples.Count == 0 || !double.IsFinite(sightlineElevationDegrees)) return default;
-        var sightline = SightlineAt(bearingDegrees);
+        var sightline = SightlineViewAt(bearingDegrees);
         if (sightline.Count == 0) return default;
 
         var available = false;
@@ -698,6 +708,44 @@ public sealed record TerrainHorizonProfile(
         var fraction = Math.Clamp((targetRadians - previousRadians) /
                                   (currentRadians - previousRadians), 0, 1);
         return previousDistance + (distance - previousDistance) * fraction;
+    }
+}
+
+/// <summary>
+/// The sightline at one bearing, interpolated between its two neighbouring bearings as it is read (see
+/// <see cref="TerrainHorizonProfile.SightlineViewAt"/>). Sample <c>i</c> is exactly
+/// <see cref="TerrainHorizonProfile.SightlineAt"/>'s sample <c>i</c>. The default view is empty.
+/// </summary>
+public readonly struct TerrainSightlineView
+{
+    private readonly IReadOnlyList<TerrainSightlineSample>? _lower;
+    private readonly IReadOnlyList<TerrainSightlineSample>? _upper;
+    private readonly double _fraction;
+
+    internal TerrainSightlineView(IReadOnlyList<TerrainSightlineSample> lower,
+        IReadOnlyList<TerrainSightlineSample>? upper, double fraction)
+    {
+        _lower = lower;
+        _upper = upper;
+        _fraction = fraction;
+    }
+
+    public int Count => _lower?.Count ?? 0;
+
+    /// <summary>The stored line itself when the bearing falls on a profile bearing, otherwise null.</summary>
+    public IReadOnlyList<TerrainSightlineSample>? InPlace => _upper is null ? _lower : null;
+
+    public TerrainSightlineSample this[int index] => _upper is null
+        ? _lower![index]
+        : TerrainHorizonProfile.InterpolateSightlineSample(_lower![index], _upper[index], _fraction);
+
+    public Enumerator GetEnumerator() => new(this);
+
+    public struct Enumerator(TerrainSightlineView view)
+    {
+        private int _index = -1;
+        public readonly TerrainSightlineSample Current => view[_index];
+        public bool MoveNext() => ++_index < view.Count;
     }
 }
 

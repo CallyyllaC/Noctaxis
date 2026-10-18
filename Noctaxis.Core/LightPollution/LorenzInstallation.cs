@@ -42,10 +42,18 @@ public sealed class LorenzInstallation(IUserDataPathProvider paths, HttpClient h
                     if (manifest is { Complete: true, ProviderId: LorenzAtlas.ProviderId, Year: 2025, ImportVersion: 1,
                         SourceFormat: "signed-int8-delta-v1", ExpectedTiles: LorenzAtlas.TileCount, ResolutionDegrees: 1d / 120, South: -65, North: 75 } &&
                         manifest.Tiles is { Count: LorenzAtlas.TileCount } &&
-                        new FileInfo(Path.Combine(directory, "overview.f32")).Length == (long)LorenzAtlas.OverviewWidth * LorenzAtlas.OverviewHeight * 4 &&
-                        ExpectedTiles().All(tile => manifest.Tiles.TryGetValue(LorenzAtlas.FileName(tile.X, tile.Y), out var size) && size > 0 &&
-                            new FileInfo(Path.Combine(directory, "binary", LorenzAtlas.FileName(tile.X, tile.Y))) is { Exists: true } file && file.Length == size))
-                        valid = directory;
+                        new FileInfo(Path.Combine(directory, "overview.f32")).Length == (long)LorenzAtlas.OverviewWidth * LorenzAtlas.OverviewHeight * 4)
+                    {
+                        // One listing of the tile folder rather than a query per tile (PF-09). Names compare
+                        // as the platform's file system usually does, as opening each file by name did.
+                        var stored = new Dictionary<string, long>(OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+                            ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+                        foreach (var file in new DirectoryInfo(Path.Combine(directory, "binary")).EnumerateFiles())
+                            stored.TryAdd(file.Name, file.Length);
+                        if (ExpectedTiles().All(tile => manifest.Tiles.TryGetValue(LorenzAtlas.FileName(tile.X, tile.Y), out var size) && size > 0 &&
+                                stored.TryGetValue(LorenzAtlas.FileName(tile.X, tile.Y), out var length) && length == size))
+                            valid = directory;
+                    }
                 }
             }
             catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { }

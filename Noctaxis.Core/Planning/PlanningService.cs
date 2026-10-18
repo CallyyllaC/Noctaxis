@@ -206,10 +206,12 @@ public sealed class PlanningService(
         var localDate = timeZones.InZone(session.Instant, session.TimeZoneId).Date;
         var primaryTarget = catalogue.Get(session.TargetId);
         var targets = Targets(session);
+        // The Sun's and Moon's rise/set and twilight searches run off the caller's thread like everything
+        // else here: the Planner starts this on its UI thread (PF-04).
         var positionTasks = targets.ToDictionary(target => target.Id,
             target => target.HasEquatorialCoordinates
                 ? astronomy.CalculateCatalogueAsync(target, session.Observer, session.Instant, localDate, session.TimeZoneId, cancellationToken)
-                : Task.FromResult(astronomy.Calculate(target, session.Observer, session.Instant, localDate, session.TimeZoneId)),
+                : Task.Run(() => astronomy.Calculate(target, session.Observer, session.Instant, localDate, session.TimeZoneId), cancellationToken),
             StringComparer.OrdinalIgnoreCase);
         var pathTasks = targets.ToDictionary(target => target.Id,
             target => astronomy.CalculatePathAsync(target, session.Observer, localDate, session.TimeZoneId,
